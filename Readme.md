@@ -1,6 +1,7 @@
 # up-cli
 
-![img](https://img.iami.xyz/images/ai-futures/543426914-37655a9f-e661-4ab5-b994-e4e11f97dd95.png)
+<img width="3498" height="2182" alt="543426914-37655a9f-e661-4ab5-b994-e4e11f97dd95" src="https://github.com/user-attachments/assets/7cbc2614-af8e-41cb-be2f-df2b6cd43b07" />
+
 
 An AI-powered CLI tool for scaffolding projects with built-in documentation, learning systems, and product-loop workflows designed for use with Claude Code and Cursor AI.
 
@@ -9,7 +10,7 @@ An AI-powered CLI tool for scaffolding projects with built-in documentation, lea
 ## Installation
 
 ```bash
-pip install -e .
+pip install up-cli
 ```
 
 ## Quick Start
