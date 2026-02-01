@@ -1,0 +1,72 @@
+{
+  "version": "1.0",
+  "updated": "2026-01-28",
+  "projects": [
+    {
+      "name": "semgrep",
+      "repo": "semgrep/semgrep",
+      "category": "static_analysis",
+      "topics": ["pattern-matching", "multi-language", "rules-engine"],
+      "docs_url": "https://semgrep.dev/docs/"
+    },
+    {
+      "name": "codeql",
+      "repo": "github/codeql",
+      "category": "query_analysis",
+      "topics": ["dataflow", "taint-tracking", "query-language"],
+      "docs_url": "https://codeql.github.com/docs/"
+    },
+    {
+      "name": "joern",
+      "repo": "joernio/joern",
+      "category": "cpg_analysis",
+      "topics": ["code-property-graph", "interprocedural", "scala"],
+      "docs_url": "https://docs.joern.io/"
+    },
+    {
+      "name": "angr",
+      "repo": "angr/angr",
+      "category": "symbolic_execution",
+      "topics": ["binary-analysis", "constraint-solving", "emulation"],
+      "docs_url": "https://docs.angr.io/"
+    },
+    {
+      "name": "nuclei",
+      "repo": "projectdiscovery/nuclei",
+      "category": "vulnerability_scanner",
+      "topics": ["templates", "fast-scanning", "yaml-dsl"],
+      "docs_url": "https://docs.projectdiscovery.io/tools/nuclei/"
+    },
+    {
+      "name": "bandit",
+      "repo": "PyCQA/bandit",
+      "category": "python_security",
+      "topics": ["ast-analysis", "security-linting", "plugins"],
+      "docs_url": "https://bandit.readthedocs.io/"
+    }
+  ],
+  "blogs": [
+    {
+      "name": "Project Zero",
+      "url": "https://googleprojectzero.blogspot.com/",
+      "topics": ["vulnerability-research", "exploit-development", "browser-security"]
+    },
+    {
+      "name": "Trail of Bits",
+      "url": "https://blog.trailofbits.com/",
+      "topics": ["program-analysis", "fuzzing", "smart-contracts"]
+    },
+    {
+      "name": "PortSwigger Research",
+      "url": "https://portswigger.net/research",
+      "topics": ["web-security", "novel-attacks", "methodology"]
+    }
+  ],
+  "research_topics": [
+    "LLM-assisted vulnerability detection",
+    "Hybrid static-dynamic analysis",
+    "Automated exploit generation",
+    "Taint analysis optimization",
+    "Code property graph applications"
+  ]
+}

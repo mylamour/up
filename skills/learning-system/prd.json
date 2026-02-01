@@ -1,0 +1,280 @@
+{
+  "project": "Learning-Driven Improvements",
+  "branchName": "feature/learning-improvements",
+  "description": "Improvements based on research from CodeQL, Semgrep, and Joern best practices. Addresses remaining gaps in taint analysis architecture.",
+  "generatedAt": "2026-01-28",
+  "sourceAnalysis": "gap-analysis.md",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Persistent Call Graph Cache",
+      "priority": "high",
+      "effort": "medium",
+      "description": "As a security analyst, I want call graphs to be cached persistently between runs so that repeated analyses of the same codebase are faster.",
+      "acceptanceCriteria": [
+        "Call graphs are serialized to disk after first build",
+        "Cache is invalidated when source files change (based on file hash)",
+        "Subsequent runs load cached graphs instead of rebuilding",
+        "Cache location is configurable via settings",
+        "At least 50% speedup on repeated analysis of unchanged code"
+      ],
+      "technicalNotes": [
+        "Extend taint_cache.py with persistent storage (pickle or JSON)",
+        "Add file hash tracking to detect changes",
+        "Integrate with call_graph.py build_call_graph() function"
+      ],
+      "files": [
+        "src/code_auditor/hunter/taint_cache.py",
+        "src/code_auditor/hunter/call_graph.py"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Offline Preprocessing Phase",
+      "priority": "high",
+      "effort": "high",
+      "description": "As a security analyst, I want to run an offline preprocessing phase that builds all analysis artifacts once, so that online queries are fast.",
+      "acceptanceCriteria": [
+        "New CLI command: code-auditor preprocess ./target",
+        "Preprocessing builds call graph, def-use chains, and taint summaries",
+        "Artifacts stored in .code-auditor/ directory",
+        "Hunt command detects and uses preprocessed artifacts",
+        "Preprocessing can run in CI/CD pipelines"
+      ],
+      "technicalNotes": [
+        "Add preprocess command to main.py CLI",
+        "Create PreprocessingCoordinator in hunter/",
+        "Store artifacts as versioned JSON/pickle files",
+        "Add artifact version checking for compatibility"
+      ],
+      "files": [
+        "src/code_auditor/main.py",
+        "src/code_auditor/hunter/coordinator.py",
+        "src/code_auditor/hunter/preprocessing.py"
+      ],
+      "dependsOn": ["US-001"]
+    },
+    {
+      "id": "US-003",
+      "title": "Control Flow Graph Construction",
+      "priority": "high",
+      "effort": "high",
+      "description": "As a security analyst, I want control flow graphs (CFG) built from source code so that I can analyze execution paths and detect unreachable code.",
+      "acceptanceCriteria": [
+        "CFG construction for Python functions",
+        "CFG construction for JavaScript functions",
+        "Basic blocks identified with entry/exit points",
+        "Conditional branches (if/else, switch) represented as edges",
+        "Loop structures (for, while) represented correctly",
+        "CFG queryable for path analysis"
+      ],
+      "technicalNotes": [
+        "Use tree-sitter AST to identify control flow statements",
+        "Create CFGNode and CFGEdge dataclasses",
+        "Build CFG per function, link at call sites",
+        "Consider using networkx for graph operations"
+      ],
+      "files": [
+        "src/code_auditor/hunter/cfg.py",
+        "src/code_auditor/hunter/call_graph.py"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Lightweight Code Property Graph",
+      "priority": "high",
+      "effort": "high",
+      "description": "As a security analyst, I want a unified Code Property Graph combining AST, CFG, and data dependencies so that I can run complex cross-cutting queries.",
+      "acceptanceCriteria": [
+        "CPG combines AST nodes, CFG edges, and data flow edges",
+        "Unified node representation with type, properties, and edges",
+        "Query interface for finding paths between node types",
+        "Support for Python and JavaScript",
+        "Memory-efficient representation for large codebases"
+      ],
+      "technicalNotes": [
+        "Create CPG class that wraps AST, CFG, and call graph",
+        "Use node IDs to link across representations",
+        "Implement basic query methods: find_nodes(), find_paths()",
+        "Consider lazy loading for large codebases"
+      ],
+      "files": [
+        "src/code_auditor/hunter/cpg.py",
+        "src/code_auditor/hunter/cfg.py",
+        "src/code_auditor/hunter/call_graph.py"
+      ],
+      "dependsOn": ["US-003"]
+    },
+    {
+      "id": "US-005",
+      "title": "Context-Aware Sanitizer Verification",
+      "priority": "medium",
+      "effort": "medium",
+      "description": "As a security analyst, I want sanitizers verified in context so that HTML escaping is only considered valid for XSS, not SQL injection.",
+      "acceptanceCriteria": [
+        "Sanitizers tagged with vulnerability types they protect against",
+        "Taint analysis checks sanitizer-to-sink compatibility",
+        "html_escape only clears XSS taint, not SQLi taint",
+        "parameterized_query only clears SQLi taint",
+        "LLM verification considers context when validating sanitizers"
+      ],
+      "technicalNotes": [
+        "Extend SanitizerPattern with 'protects_against' field",
+        "Update taint_tracer.py to check sanitizer compatibility",
+        "Add context to semantic_sanitizer_check.py prompts"
+      ],
+      "files": [
+        "src/code_auditor/hunter/taint_config.py",
+        "src/code_auditor/hunter/nodes/taint_tracer.py",
+        "src/code_auditor/hunter/nodes/semantic_sanitizer_check.py"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "YAML Query Interface for Custom Patterns",
+      "priority": "medium",
+      "effort": "high",
+      "description": "As a security analyst, I want to define custom vulnerability patterns in YAML so that I can detect organization-specific security issues.",
+      "acceptanceCriteria": [
+        "YAML schema for defining source-to-sink queries",
+        "Support for specifying source types, sink types, and sanitizers",
+        "Queries loaded from .code-auditor/queries/ directory",
+        "Query results included in findings with custom severity",
+        "Documentation for query syntax"
+      ],
+      "technicalNotes": [
+        "Create QueryConfig class similar to TaintConfig",
+        "Parse YAML queries into executable taint checks",
+        "Integrate with taint_tracer.py analysis loop"
+      ],
+      "files": [
+        "src/code_auditor/hunter/query_config.py",
+        "src/code_auditor/hunter/nodes/taint_tracer.py",
+        "docs/CUSTOM_QUERIES.md"
+      ],
+      "dependsOn": ["US-005"]
+    },
+    {
+      "id": "WH-001",
+      "title": "Basic Web Hunt Command",
+      "priority": "high",
+      "effort": "medium",
+      "description": "As a security researcher, I want to scan a web URL for vulnerabilities using dynamic analysis.",
+      "acceptanceCriteria": [
+        "CLI command code-auditor web-hunt <url> works",
+        "Launches headless browser via Playwright",
+        "Routes traffic through mitmproxy",
+        "Crawls discoverable pages",
+        "Returns list of found endpoints"
+      ],
+      "technicalNotes": [
+        "Create WebHuntCoordinator class",
+        "Use mitmproxy Python API for traffic interception",
+        "Use Playwright for browser automation"
+      ],
+      "files": [
+        "src/code_auditor/main.py",
+        "src/code_auditor/web_hunter/coordinator.py",
+        "src/code_auditor/web_hunter/proxy.py",
+        "src/code_auditor/web_hunter/browser.py"
+      ]
+    },
+    {
+      "id": "WH-002",
+      "title": "Cookie and Header Authentication",
+      "priority": "high",
+      "effort": "low",
+      "description": "As a user, I want to scan authenticated areas using cookies or headers.",
+      "acceptanceCriteria": [
+        "Support --cookie flag for session cookies",
+        "Support --header flag for custom headers",
+        "Bearer token shorthand: --token <value>",
+        "Cookies injected into browser context"
+      ],
+      "files": [
+        "src/code_auditor/web_hunter/auth.py"
+      ],
+      "dependsOn": ["WH-001"]
+    },
+    {
+      "id": "WH-003",
+      "title": "Login-based Authentication",
+      "priority": "medium",
+      "effort": "medium",
+      "description": "As a user, I want to authenticate via login form automatically.",
+      "acceptanceCriteria": [
+        "Support --login-url, --username, --password flags",
+        "Auto-detect common login form fields",
+        "Session cookies captured after login"
+      ],
+      "files": [
+        "src/code_auditor/web_hunter/auth.py",
+        "src/code_auditor/web_hunter/browser.py"
+      ],
+      "dependsOn": ["WH-001"]
+    },
+    {
+      "id": "WH-004",
+      "title": "XSS and SQLi Detection",
+      "priority": "high",
+      "effort": "medium",
+      "description": "As a security researcher, I want to detect XSS and SQL injection vulnerabilities.",
+      "acceptanceCriteria": [
+        "Inject XSS payloads into parameters",
+        "Detect reflected and DOM-based XSS",
+        "Inject SQLi payloads into parameters",
+        "Detect error-based and time-based SQLi",
+        "Generate POC for confirmed vulnerabilities"
+      ],
+      "files": [
+        "src/code_auditor/web_hunter/scanner.py",
+        "src/code_auditor/web_hunter/payloads/xss.py",
+        "src/code_auditor/web_hunter/payloads/sqli.py"
+      ],
+      "dependsOn": ["WH-001"]
+    },
+    {
+      "id": "WH-005",
+      "title": "OpenAPI Integration",
+      "priority": "medium",
+      "effort": "medium",
+      "description": "As a user, I want to scan all API endpoints from OpenAPI spec.",
+      "acceptanceCriteria": [
+        "Support --openapi flag with spec URL or path",
+        "Parse OpenAPI 3.x and Swagger 2.x",
+        "Generate requests for all endpoints"
+      ],
+      "files": [
+        "src/code_auditor/web_hunter/openapi.py"
+      ],
+      "dependsOn": ["WH-001"]
+    }
+  ],
+  "milestones": [
+    {
+      "name": "M1: Persistent Caching",
+      "stories": ["US-001"],
+      "description": "Enable persistent call graph caching for faster repeated analysis"
+    },
+    {
+      "name": "M2: Offline Preprocessing",
+      "stories": ["US-002"],
+      "description": "Add offline preprocessing command for CI/CD integration"
+    },
+    {
+      "name": "M3: Code Property Graph",
+      "stories": ["US-003", "US-004"],
+      "description": "Build CFG and unified CPG for advanced queries"
+    },
+    {
+      "name": "M4: Enhanced Analysis",
+      "stories": ["US-005", "US-006"],
+      "description": "Context-aware sanitizers and custom query interface"
+    },
+    {
+      "name": "M5: Web Hunt DAST",
+      "stories": ["WH-001", "WH-002", "WH-003", "WH-004", "WH-005"],
+      "description": "Dynamic web vulnerability hunting with mitmproxy + Playwright"
+    }
+  ]
+}
