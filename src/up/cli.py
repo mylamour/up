@@ -42,7 +42,9 @@ def main():
     Memory & Learning:
       up memory search <q>    Semantic search
       up memory record        Record learnings/decisions
-      up learn auto           Analyze project
+      up learn                Auto-improve (requires vision map)
+      up learn "topic"        Learn about specific topic
+      up learn "path"         Learn from another project
     
     \b
     Automation:

@@ -1,8 +1,11 @@
 """up learn - Learning system CLI commands."""
 
 import json
+import os
+import re
 import sys
 from pathlib import Path
+from datetime import date
 
 import click
 from rich.console import Console
@@ -12,13 +15,540 @@ from rich.table import Table
 console = Console()
 
 
-@click.group()
-def learn_cmd():
-    """Learning system commands.
+def check_vision_map_exists(workspace: Path) -> tuple[bool, Path]:
+    """Check if vision map is set up (not just template).
     
-    Research best practices, analyze code, and generate improvement plans.
+    Returns:
+        (exists_and_configured, vision_path)
     """
-    pass
+    vision_path = workspace / "docs/roadmap/vision/PRODUCT_VISION.md"
+    
+    if not vision_path.exists():
+        return False, vision_path
+    
+    # Check if it's still just the template (not configured)
+    content = vision_path.read_text()
+    template_indicators = [
+        "One-line vision statement here",
+        "Problem 1 | Description",
+        "Metric 1 | Value",
+    ]
+    
+    # If any template placeholder still exists, it's not properly configured
+    for indicator in template_indicators:
+        if indicator in content:
+            return False, vision_path
+    
+    return True, vision_path
+
+
+def is_valid_path(s: str) -> bool:
+    """Check if string looks like a path."""
+    # Check if it's an existing path
+    if Path(s).exists():
+        return True
+    
+    # Check if it looks like a path pattern
+    path_indicators = ['/', '\\', './', '../', '~/', ':', 'C:\\']
+    return any(s.startswith(ind) or ind in s for ind in path_indicators)
+
+
+def learn_self_improvement(workspace: Path) -> dict:
+    """Analyze current project for self-improvement opportunities.
+    
+    This is called when `up learn` is used without arguments.
+    """
+    console.print(Panel.fit(
+        "[bold blue]Learning System[/] - Self-Improvement Analysis",
+        border_style="blue"
+    ))
+    
+    # First, analyze current state
+    profile = analyze_project(workspace)
+    if not profile:
+        return {}
+    
+    # Load existing profile if any to track improvements
+    skill_dir = find_skill_dir(workspace, "learning-system")
+    profile_file = skill_dir / "project_profile.json"
+    old_profile = {}
+    if profile_file.exists():
+        try:
+            old_profile = json.loads(profile_file.read_text())
+        except json.JSONDecodeError:
+            pass
+    
+    # Identify what changed since last analysis
+    improvements = {
+        "new_patterns": [],
+        "new_frameworks": [],
+        "addressed_improvements": [],
+        "remaining_improvements": [],
+    }
+    
+    # Check for new patterns
+    old_patterns = set(old_profile.get("patterns_detected", []))
+    new_patterns = set(profile.get("patterns_detected", []))
+    improvements["new_patterns"] = list(new_patterns - old_patterns)
+    
+    # Check for new frameworks
+    old_frameworks = set(old_profile.get("frameworks", []))
+    new_frameworks = set(profile.get("frameworks", []))
+    improvements["new_frameworks"] = list(new_frameworks - old_frameworks)
+    
+    # Check addressed improvements
+    old_areas = set(old_profile.get("improvement_areas", []))
+    new_areas = set(profile.get("improvement_areas", []))
+    improvements["addressed_improvements"] = list(old_areas - new_areas)
+    improvements["remaining_improvements"] = list(new_areas)
+    
+    # Display results
+    display_profile(profile)
+    
+    if improvements["new_patterns"]:
+        console.print("\n[green]✓ New Patterns Adopted:[/]")
+        for p in improvements["new_patterns"]:
+            console.print(f"  • {p}")
+    
+    if improvements["addressed_improvements"]:
+        console.print("\n[green]✓ Improvements Addressed:[/]")
+        for a in improvements["addressed_improvements"]:
+            console.print(f"  • {a}")
+    
+    if improvements["remaining_improvements"]:
+        console.print("\n[yellow]○ Areas for Improvement:[/]")
+        for r in improvements["remaining_improvements"]:
+            console.print(f"  • {r}")
+    
+    # Save updated profile
+    save_path = save_profile(workspace, profile)
+    console.print(f"\n[green]✓[/] Profile updated: [cyan]{save_path}[/]")
+    
+    # Record learnings to memory
+    _record_learning_to_memory(workspace, profile, improvements)
+    
+    return improvements
+
+
+def learn_from_topic(workspace: Path, topic: str) -> dict:
+    """Learn in a specific direction provided by the user.
+    
+    This is called when `up learn "topic"` is used.
+    """
+    console.print(Panel.fit(
+        f"[bold blue]Learning System[/] - Focused Learning: {topic}",
+        border_style="blue"
+    ))
+    
+    # Check current project profile
+    profile = analyze_project(workspace)
+    
+    # Generate learning plan for the topic
+    learning = {
+        "topic": topic,
+        "project_context": {
+            "languages": profile.get("languages", []),
+            "frameworks": profile.get("frameworks", []),
+        },
+        "learning_areas": [],
+        "action_items": [],
+    }
+    
+    # Map topic to relevant areas
+    topic_lower = topic.lower()
+    
+    # Categorize the topic
+    categories = {
+        "testing": ["test", "testing", "unit test", "integration", "coverage", "pytest", "jest"],
+        "architecture": ["architecture", "pattern", "design", "structure", "clean", "solid", "ddd"],
+        "performance": ["performance", "speed", "fast", "optimize", "cache", "caching"],
+        "security": ["security", "auth", "authentication", "authorization", "jwt", "oauth"],
+        "api": ["api", "rest", "graphql", "endpoint", "route"],
+        "database": ["database", "db", "sql", "orm", "migration", "query"],
+        "documentation": ["doc", "documentation", "readme", "comment"],
+        "ci_cd": ["ci", "cd", "deploy", "pipeline", "github actions", "jenkins"],
+        "error_handling": ["error", "exception", "handling", "logging", "monitoring"],
+    }
+    
+    matched_categories = []
+    for cat, keywords in categories.items():
+        if any(kw in topic_lower for kw in keywords):
+            matched_categories.append(cat)
+    
+    # Generate learning areas based on categories and frameworks
+    if matched_categories:
+        for cat in matched_categories:
+            for fw in profile.get("frameworks", []):
+                learning["learning_areas"].append(f"{fw} {cat} best practices")
+        learning["learning_areas"].append(f"{topic} patterns")
+    else:
+        # General topic
+        learning["learning_areas"].append(f"{topic} implementation")
+        for fw in profile.get("frameworks", []):
+            learning["learning_areas"].append(f"{topic} in {fw}")
+    
+    # Generate action items
+    learning["action_items"] = [
+        f"Research {topic} best practices",
+        f"Review current codebase for {topic} patterns",
+        f"Identify gaps in {topic} implementation",
+        f"Create improvement plan for {topic}",
+    ]
+    
+    # Display
+    console.print("\n[bold]Learning Focus:[/]")
+    console.print(f"  Topic: [cyan]{topic}[/]")
+    
+    console.print("\n[bold]Areas to Research:[/]")
+    for area in learning["learning_areas"][:5]:
+        console.print(f"  • {area}")
+    
+    console.print("\n[bold]Action Items:[/]")
+    for item in learning["action_items"]:
+        console.print(f"  □ {item}")
+    
+    # Save learning plan
+    skill_dir = find_skill_dir(workspace, "learning-system")
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    research_dir = skill_dir / "research"
+    research_dir.mkdir(exist_ok=True)
+    
+    # Create research file
+    safe_topic = re.sub(r'[^\w\s-]', '', topic).strip().replace(' ', '_').lower()
+    research_file = research_dir / f"{date.today().isoformat()}_{safe_topic}.md"
+    
+    research_content = f"""# Learning: {topic}
+
+**Created**: {date.today().isoformat()}
+**Status**: 📋 In Progress
+
+## Context
+
+Project languages: {', '.join(profile.get('languages', ['N/A']))}
+Project frameworks: {', '.join(profile.get('frameworks', ['N/A']))}
+
+## Learning Areas
+
+{chr(10).join(f'- [ ] {area}' for area in learning['learning_areas'])}
+
+## Research Notes
+
+*Add your research notes here*
+
+## Action Items
+
+{chr(10).join(f'- [ ] {item}' for item in learning['action_items'])}
+
+## Learnings
+
+*Document what you learn*
+
+## Applied Changes
+
+*Track changes made based on learnings*
+"""
+    
+    research_file.write_text(research_content)
+    console.print(f"\n[green]✓[/] Research file created: [cyan]{research_file}[/]")
+    
+    # Record to memory
+    _record_topic_learning(workspace, learning)
+    
+    console.print("\n[bold]Next Steps:[/]")
+    console.print(f"  1. Edit [cyan]{research_file}[/] to add your research")
+    console.print("  2. Run [cyan]up learn analyze[/] to extract patterns")
+    console.print("  3. Run [cyan]up learn plan[/] to generate improvement PRD")
+    
+    return learning
+
+
+def learn_from_project(workspace: Path, project_path: str) -> dict:
+    """Analyze external project for good design patterns.
+    
+    This is called when `up learn "project/path"` is used.
+    """
+    external_project = Path(project_path).expanduser().resolve()
+    
+    if not external_project.exists():
+        console.print(f"[red]Error: Project path not found: {project_path}[/]")
+        return {}
+    
+    if not external_project.is_dir():
+        console.print(f"[red]Error: Path is not a directory: {project_path}[/]")
+        return {}
+    
+    console.print(Panel.fit(
+        f"[bold blue]Learning System[/] - Learn from Project: {external_project.name}",
+        border_style="blue"
+    ))
+    
+    # Analyze the external project
+    console.print("\n[bold]Analyzing External Project...[/]")
+    external_profile = analyze_project(external_project)
+    
+    # Analyze current project
+    console.print("\n[bold]Analyzing Current Project...[/]")
+    current_profile = analyze_project(workspace)
+    
+    # Compare and find learnable patterns
+    learnings = {
+        "source_project": external_project.name,
+        "source_path": str(external_project),
+        "patterns_to_adopt": [],
+        "frameworks_to_consider": [],
+        "structure_insights": [],
+        "file_organization": [],
+    }
+    
+    # Find patterns in external project that current project doesn't have
+    current_patterns = set(current_profile.get("patterns_detected", []))
+    external_patterns = set(external_profile.get("patterns_detected", []))
+    new_patterns = external_patterns - current_patterns
+    learnings["patterns_to_adopt"] = list(new_patterns)
+    
+    # Find frameworks to consider
+    current_frameworks = set(current_profile.get("frameworks", []))
+    external_frameworks = set(external_profile.get("frameworks", []))
+    
+    # Only suggest frameworks for same languages
+    common_languages = set(current_profile.get("languages", [])) & set(external_profile.get("languages", []))
+    if common_languages:
+        new_frameworks = external_frameworks - current_frameworks
+        learnings["frameworks_to_consider"] = list(new_frameworks)
+    
+    # Analyze file structure
+    structure_insights = _analyze_project_structure(external_project)
+    learnings["structure_insights"] = structure_insights
+    
+    # Display external project profile
+    console.print("\n[bold]External Project Profile:[/]")
+    display_profile(external_profile)
+    
+    # Display comparison
+    console.print("\n[bold]Comparison with Current Project:[/]")
+    
+    table = Table()
+    table.add_column("Aspect", style="cyan")
+    table.add_column("Current Project")
+    table.add_column("External Project")
+    
+    table.add_row(
+        "Languages",
+        ", ".join(current_profile.get("languages", [])) or "None",
+        ", ".join(external_profile.get("languages", [])) or "None"
+    )
+    table.add_row(
+        "Frameworks",
+        ", ".join(current_profile.get("frameworks", [])) or "None",
+        ", ".join(external_profile.get("frameworks", [])) or "None"
+    )
+    table.add_row(
+        "Patterns",
+        ", ".join(current_profile.get("patterns_detected", [])) or "None",
+        ", ".join(external_profile.get("patterns_detected", [])) or "None"
+    )
+    
+    console.print(table)
+    
+    # Display learnings
+    if learnings["patterns_to_adopt"]:
+        console.print("\n[green]✓ Patterns to Consider Adopting:[/]")
+        for p in learnings["patterns_to_adopt"]:
+            console.print(f"  • {p}")
+    
+    if learnings["frameworks_to_consider"]:
+        console.print("\n[yellow]○ Frameworks to Consider:[/]")
+        for f in learnings["frameworks_to_consider"]:
+            console.print(f"  • {f}")
+    
+    if learnings["structure_insights"]:
+        console.print("\n[blue]📁 Structure Insights:[/]")
+        for s in learnings["structure_insights"]:
+            console.print(f"  • {s}")
+    
+    # Save learnings
+    skill_dir = find_skill_dir(workspace, "learning-system")
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    learnings_dir = skill_dir / "external_learnings"
+    learnings_dir.mkdir(exist_ok=True)
+    
+    safe_name = re.sub(r'[^\w\s-]', '', external_project.name).strip().replace(' ', '_').lower()
+    learning_file = learnings_dir / f"{date.today().isoformat()}_{safe_name}.json"
+    learning_file.write_text(json.dumps(learnings, indent=2))
+    
+    # Also create a markdown summary
+    summary_file = learnings_dir / f"{date.today().isoformat()}_{safe_name}.md"
+    summary_content = f"""# Learnings from: {external_project.name}
+
+**Analyzed**: {date.today().isoformat()}
+**Source**: `{external_project}`
+
+## Patterns to Adopt
+
+{chr(10).join(f'- [ ] {p}' for p in learnings['patterns_to_adopt']) or '- None identified'}
+
+## Frameworks to Consider
+
+{chr(10).join(f'- [ ] {f}' for f in learnings['frameworks_to_consider']) or '- None identified'}
+
+## Structure Insights
+
+{chr(10).join(f'- {s}' for s in learnings['structure_insights']) or '- None identified'}
+
+## Action Items
+
+- [ ] Review patterns and decide which to adopt
+- [ ] Create implementation plan for chosen patterns
+- [ ] Apply learnings to current project
+"""
+    summary_file.write_text(summary_content)
+    
+    console.print(f"\n[green]✓[/] Learnings saved to: [cyan]{summary_file}[/]")
+    
+    # Record to memory
+    _record_external_learning(workspace, learnings)
+    
+    console.print("\n[bold]Next Steps:[/]")
+    console.print(f"  1. Review [cyan]{summary_file}[/]")
+    console.print("  2. Select patterns to implement")
+    console.print("  3. Run [cyan]up learn plan[/] to create improvement PRD")
+    
+    return learnings
+
+
+def _analyze_project_structure(project_path: Path) -> list:
+    """Analyze project directory structure for insights."""
+    insights = []
+    
+    # Check for common good practices
+    good_patterns = {
+        "src": "Source code organization in src/ directory",
+        "tests": "Dedicated tests/ directory",
+        "docs": "Documentation directory present",
+        ".github": "GitHub workflows/CI present",
+        "scripts": "Automation scripts directory",
+        "__init__.py": "Proper Python package structure",
+        "pyproject.toml": "Modern Python packaging (PEP 517)",
+        "Makefile": "Make-based automation",
+        "docker-compose": "Docker containerization",
+    }
+    
+    for pattern, description in good_patterns.items():
+        if (project_path / pattern).exists() or any(project_path.glob(f"**/{pattern}")):
+            insights.append(description)
+    
+    return insights[:5]  # Limit to top 5
+
+
+def _record_learning_to_memory(workspace: Path, profile: dict, improvements: dict) -> None:
+    """Record self-improvement learnings to memory system."""
+    try:
+        from up.memory import MemoryManager
+        
+        manager = MemoryManager(workspace, use_vectors=False)  # Fast mode
+        
+        content = f"Self-improvement analysis: Found {len(profile.get('patterns_detected', []))} patterns, "
+        content += f"{len(improvements.get('new_patterns', []))} new patterns adopted, "
+        content += f"{len(improvements.get('remaining_improvements', []))} areas for improvement"
+        
+        if improvements.get('new_patterns'):
+            content += f". New patterns: {', '.join(improvements['new_patterns'])}"
+        
+        manager.record_learning(content)
+    except Exception:
+        pass  # Memory recording is optional
+
+
+def _record_topic_learning(workspace: Path, learning: dict) -> None:
+    """Record topic learning to memory system."""
+    try:
+        from up.memory import MemoryManager
+        
+        manager = MemoryManager(workspace, use_vectors=False)
+        content = f"Started learning about: {learning['topic']}. "
+        content += f"Research areas: {', '.join(learning['learning_areas'][:3])}"
+        manager.record_learning(content)
+    except Exception:
+        pass
+
+
+def _record_external_learning(workspace: Path, learnings: dict) -> None:
+    """Record external project learning to memory system."""
+    try:
+        from up.memory import MemoryManager
+        
+        manager = MemoryManager(workspace, use_vectors=False)
+        content = f"Learned from external project: {learnings['source_project']}. "
+        if learnings['patterns_to_adopt']:
+            content += f"Patterns to adopt: {', '.join(learnings['patterns_to_adopt'][:3])}"
+        manager.record_learning(content)
+    except Exception:
+        pass
+
+
+@click.group(invoke_without_command=True)
+@click.argument("topic_or_path", required=False)
+@click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
+@click.pass_context
+def learn_cmd(ctx, topic_or_path: str, workspace: str):
+    """Learning system - analyze, research, and improve.
+    
+    \b
+    Usage:
+      up learn                    Auto-analyze and improve (requires vision map)
+      up learn "topic"            Learn about a specific topic/feature
+      up learn "project/path"     Learn from another project's design
+    
+    \b
+    Subcommands:
+      up learn auto               Analyze project (same as 'up learn' without vision check)
+      up learn analyze            Analyze research files
+      up learn plan               Generate improvement PRD
+      up learn status             Show learning system status
+    
+    \b
+    Examples:
+      up learn                    # Self-improvement analysis
+      up learn "caching"          # Learn about caching
+      up learn "../other-project" # Learn from other project
+    """
+    # If subcommand invoked, skip main logic
+    if ctx.invoked_subcommand is not None:
+        return
+    
+    ws = Path(workspace) if workspace else Path.cwd()
+    
+    # No argument: self-improvement mode
+    if not topic_or_path:
+        # Check if vision map is set up
+        vision_exists, vision_path = check_vision_map_exists(ws)
+        
+        if not vision_exists:
+            console.print(Panel.fit(
+                "[yellow]Vision Map Not Configured[/]",
+                border_style="yellow"
+            ))
+            console.print("\nThe learning system requires a configured vision map to guide improvements.")
+            console.print(f"\nPlease configure: [cyan]{vision_path}[/]")
+            console.print("\nThe vision map should include:")
+            console.print("  • Your product vision statement")
+            console.print("  • Problem statement and pain points")
+            console.print("  • Success metrics")
+            console.print("\n[bold]Alternatives:[/]")
+            console.print("  • [cyan]up learn auto[/] - Analyze without vision map")
+            console.print("  • [cyan]up learn \"topic\"[/] - Learn about specific topic")
+            console.print("  • [cyan]up learn \"path\"[/] - Learn from another project")
+            return
+        
+        # Vision exists, run self-improvement
+        learn_self_improvement(ws)
+        return
+    
+    # Has argument: determine if topic or path
+    if is_valid_path(topic_or_path):
+        learn_from_project(ws, topic_or_path)
+    else:
+        learn_from_topic(ws, topic_or_path)
 
 
 @learn_cmd.command("auto")

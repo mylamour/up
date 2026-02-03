@@ -47,7 +47,10 @@ up dashboard
 | `up dashboard` | Live interactive health dashboard |
 | `up sync` | Sync all systems (memory, docs) |
 | `up hooks` | Install/manage git hooks for auto-sync |
-| `up learn auto` | Auto-analyze project for improvements |
+| `up learn` | Auto-improve project (requires vision map) |
+| `up learn "topic"` | Learn about specific topic/feature |
+| `up learn "path"` | Learn from another project's design |
+| `up learn auto` | Analyze project (no vision check) |
 | `up learn plan` | Generate improvement PRD |
 | `up memory search <query>` | Semantic search in memory |
 | `up memory sync` | Index git commits and files |
@@ -128,7 +131,19 @@ up status --json
 ### Using the Learn System
 
 ```bash
-# Auto-analyze your project and generate insights
+# Self-improvement analysis (requires configured vision map)
+up learn
+
+# Learn about a specific topic
+up learn "caching strategies"
+up learn "authentication"
+up learn "testing best practices"
+
+# Learn from another project's design
+up learn "../other-project"
+up learn "~/projects/reference-app"
+
+# Auto-analyze without vision map requirement
 up learn auto
 
 # Check learning system status
@@ -137,6 +152,11 @@ up learn status
 # Generate a PRD from analysis
 up learn plan
 ```
+
+The learn system has three modes:
+- **Self-improvement** (`up learn`): Analyzes current project and tracks improvements over time. Requires a configured `docs/roadmap/vision/PRODUCT_VISION.md`.
+- **Topic learning** (`up learn "topic"`): Creates research files for specific topics based on your project's tech stack.
+- **External learning** (`up learn "path"`): Analyzes another project to extract patterns, frameworks, and structure insights.
 
 ### Using the Product Loop
 
@@ -199,9 +219,29 @@ Research and improvement pipeline:
 RESEARCH → ANALYZE → COMPARE → PLAN → IMPLEMENT
 ```
 
-- `/learn auto` - Auto-analyze project
-- `/learn research [topic]` - Research topic
-- `/learn plan` - Generate improvement PRD
+Three learning modes:
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| Self-improvement | `up learn` | Analyze and improve current project (requires vision map) |
+| Topic learning | `up learn "topic"` | Create research file for specific topic |
+| External learning | `up learn "path"` | Learn from another project's design |
+
+Additional commands:
+- `up learn auto` - Analyze without vision map requirement
+- `up learn analyze` - Extract patterns from research files
+- `up learn plan` - Generate improvement PRD
+- `up learn status` - Show learning system status
+
+Storage:
+```
+.claude/skills/learning-system/
+├── project_profile.json    # Current project analysis
+├── research/               # Topic research files
+├── external_learnings/     # Learnings from other projects
+├── insights/               # Extracted patterns
+└── prd.json               # Generated improvement plan
+```
 
 ### 3. Product Loop (SESRC)
 
