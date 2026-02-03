@@ -1,5 +1,4 @@
 data/*
-docs/
 examples/docs/*
 test-project/*
 .vscode/*
@@ -16,3 +15,11 @@ scripts/publish.sh
 dist/*
 build/*
 *.egg-info/
+.up/*
+
+# User project files (not tracked)
+.loop_state.json
+.cursor/
+.claude/
+AI_PROGRAMMING_BEHAVIORAL_ANALYSIS.md
+AI_VIBING_CODING_APPROACH.md

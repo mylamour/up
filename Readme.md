@@ -36,7 +36,7 @@ up dashboard
 |---------|-------------|
 | `up new <name>` | Create a new project with full scaffolding |
 | `up new <name> --template <type>` | Create project from specific template |
-| `up init` | Initialize up systems in current directory |
+| `up init` | Initialize up systems (auto-installs git hooks, builds memory) |
 | `up init --ai claude` | Initialize for Claude Code only |
 | `up init --ai cursor` | Initialize for Cursor AI only |
 | `up init --systems docs,learn` | Initialize specific systems only |
@@ -45,8 +45,14 @@ up dashboard
 | `up start --dry-run` | Preview mode without changes |
 | `up status` | Show health of all systems |
 | `up dashboard` | Live interactive health dashboard |
+| `up sync` | Sync all systems (memory, docs) |
+| `up hooks` | Install/manage git hooks for auto-sync |
 | `up learn auto` | Auto-analyze project for improvements |
 | `up learn plan` | Generate improvement PRD |
+| `up memory search <query>` | Semantic search in memory |
+| `up memory sync` | Index git commits and files |
+| `up memory branch` | Show branch-specific knowledge |
+| `up memory record` | Record learnings/decisions/errors |
 | `up summarize` | Summarize AI conversation history |
 
 ## Project Templates
@@ -224,7 +230,40 @@ Tracks AI context window usage:
 - Suggests handoff at 90%
 - Persists across sessions
 
-### 5. MCP Server Support
+### 5. Long-Term Memory System
+
+Persistent knowledge that survives across sessions:
+
+```bash
+# Search for relevant knowledge
+up memory search "authentication"
+
+# Sync git commits and files to memory
+up memory sync
+
+# Record learnings and decisions
+up memory record --learning "Use dataclasses for configs"
+up memory record --decision "Chose PostgreSQL for ACID compliance"
+
+# View branch-specific knowledge
+up memory branch
+up memory branch feature-x --compare main
+```
+
+Features:
+- **Semantic search** using ChromaDB (local embeddings, no API required)
+- **Branch/commit-aware** - knowledge tagged with git context
+- **Auto-indexing** - git hooks sync commits automatically
+- **Cross-session persistence** - remembers learnings, decisions, errors
+
+Storage:
+```
+.up/
+└── memory/
+    └── chroma/     # ChromaDB vector database
+```
+
+### 6. MCP Server Support
 
 Model Context Protocol integration:
 
@@ -237,6 +276,22 @@ Model Context Protocol integration:
 
 ## AI Integration
 
+### Automatic Memory Sync
+
+When you run `up init`, git hooks are automatically installed:
+
+```bash
+# Git hooks auto-installed by up init
+.git/hooks/
+├── post-commit      # Auto-indexes commits to memory
+└── post-checkout    # Updates context on branch switch
+```
+
+This means your knowledge is captured automatically:
+- Every `git commit` is indexed to memory
+- Branch switches update context
+- No manual sync required for commits
+
 ### Generated Files
 
 | File | Purpose |
@@ -245,6 +300,7 @@ Model Context Protocol integration:
 | `.cursorrules` | Cursor AI rules |
 | `.cursor/rules/*.md` | File-specific rules |
 | `.claude/context_budget.json` | Context tracking |
+| `.up/memory/` | Long-term memory storage |
 
 ### Cursor Rules
 
@@ -317,14 +373,19 @@ up-cli/
 ├── src/up/
 │   ├── cli.py              # Main CLI
 │   ├── context.py          # Context budget management
+│   ├── memory.py           # Long-term memory (ChromaDB)
+│   ├── events.py           # Event-driven integration
 │   ├── summarizer.py       # Conversation analysis
 │   ├── commands/           # CLI commands
-│   │   ├── init.py
-│   │   ├── new.py
-│   │   ├── status.py
-│   │   ├── dashboard.py
-│   │   ├── learn.py
-│   │   └── summarize.py
+│   │   ├── init.py         # Initialize project
+│   │   ├── new.py          # Create new project
+│   │   ├── status.py       # System health
+│   │   ├── dashboard.py    # Live monitoring
+│   │   ├── learn.py        # Learning system
+│   │   ├── memory.py       # Memory commands
+│   │   ├── sync.py         # Sync & hooks
+│   │   ├── start.py        # Product loop
+│   │   └── summarize.py    # Conversation summary
 │   └── templates/          # Scaffolding templates
 │       ├── config/         # CLAUDE.md, .cursor/rules
 │       ├── docs/           # Documentation system
@@ -335,6 +396,9 @@ up-cli/
 ├── scripts/                # Utility scripts
 │   ├── export_claude_history.py
 │   └── export_cursor_history.py
+├── docs/                   # Documentation
+│   ├── architecture/       # System architecture
+│   └── guides/             # Usage guides
 └── skills/                 # Reference skills
 ```
 

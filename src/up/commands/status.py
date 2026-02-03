@@ -48,15 +48,37 @@ def collect_status(workspace: Path) -> dict:
         "loop_state": None,
         "circuit_breaker": None,
         "skills": [],
+        "hooks": None,
+        "memory": None,
     }
     
     # Check if initialized
     claude_dir = workspace / ".claude"
     cursor_dir = workspace / ".cursor"
-    status["initialized"] = claude_dir.exists() or cursor_dir.exists()
+    up_dir = workspace / ".up"
+    status["initialized"] = claude_dir.exists() or cursor_dir.exists() or up_dir.exists()
     
     if not status["initialized"]:
         return status
+    
+    # Git hooks status
+    from up.commands.sync import check_hooks_installed
+    status["hooks"] = check_hooks_installed(workspace)
+    
+    # Memory status
+    memory_dir = workspace / ".up" / "memory"
+    if memory_dir.exists():
+        try:
+            from up.memory import MemoryManager
+            manager = MemoryManager(workspace, use_vectors=False)  # Fast - JSON only
+            stats = manager.get_stats()
+            status["memory"] = {
+                "total": stats.get("total", 0),
+                "branch": stats.get("current_branch", "unknown"),
+                "commit": stats.get("current_commit", "unknown"),
+            }
+        except Exception:
+            status["memory"] = {"total": 0}
     
     # Context budget
     context_file = workspace / ".claude/context_budget.json"
@@ -191,6 +213,37 @@ def display_status(status: dict) -> None:
             console.print(f"  Success Rate: {success_rate * 100:.0f}%")
     else:
         console.print("  [dim]Not active[/]")
+    
+    # Memory
+    console.print("\n[bold]Memory[/]")
+    if status["memory"]:
+        mem = status["memory"]
+        total = mem.get("total", 0)
+        branch = mem.get("branch", "unknown")
+        commit = mem.get("commit", "unknown")
+        console.print(f"  📚 {total} entries | Branch: [cyan]{branch}[/] @ {commit}")
+    else:
+        console.print("  [dim]Not initialized - run [cyan]up memory sync[/][/]")
+    
+    # Git Hooks
+    console.print("\n[bold]Auto-Sync (Git Hooks)[/]")
+    hooks = status.get("hooks", {})
+    if hooks.get("git"):
+        post_commit = hooks.get("post_commit", False)
+        post_checkout = hooks.get("post_checkout", False)
+        
+        if post_commit and post_checkout:
+            console.print("  [green]✓ Enabled[/] - commits auto-indexed to memory")
+        else:
+            console.print("  [yellow]⚠ Partially installed[/]")
+            if not post_commit:
+                console.print("    • Missing: post-commit hook")
+            if not post_checkout:
+                console.print("    • Missing: post-checkout hook")
+            console.print("\n  [dim]Run [cyan]up hooks[/] to install missing hooks[/]")
+    else:
+        console.print("  [yellow]✗ Not installed[/]")
+        console.print("  [dim]Run [cyan]up hooks[/] to enable auto-sync on commits[/]")
     
     # Skills
     console.print("\n[bold]Skills[/]")

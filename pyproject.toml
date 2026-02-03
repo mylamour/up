@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "up-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "AI-powered project scaffolding with docs, learn, and product-loop systems"
 readme = "Readme.md"
 license = "MIT"
@@ -29,6 +29,7 @@ dependencies = [
     "rich>=13.0",
     "pyyaml>=6.0",
     "tqdm>=4.65.0",
+    "chromadb>=0.4.0",
 ]
 
 [project.optional-dependencies]
