@@ -861,15 +861,36 @@ def _record_external_learning(workspace: Path, learnings: dict) -> None:
         pass
 
 
-def check_claude_cli() -> bool:
-    """Check if Claude CLI is available."""
+def check_ai_cli() -> tuple[str, bool]:
+    """Check which AI CLI is available.
+    
+    Returns:
+        (cli_name, available) - e.g., ("claude", True) or ("agent", True)
+    """
     import shutil
-    return shutil.which("claude") is not None
+    
+    # Check for Claude CLI first
+    if shutil.which("claude"):
+        return "claude", True
+    
+    # Check for Cursor Agent CLI
+    if shutil.which("agent"):
+        return "agent", True
+    
+    return "", False
 
 
-def run_claude_analysis(workspace: Path, content_file: Path, source_name: str) -> str:
-    """Run Claude CLI to analyze the file and return the analysis."""
+def run_ai_analysis(workspace: Path, content_file: Path, source_name: str) -> tuple[str, str]:
+    """Run AI CLI (Claude or Cursor Agent) to analyze the file.
+    
+    Returns:
+        (analysis_text, cli_used)
+    """
     import subprocess
+    
+    cli_name, available = check_ai_cli()
+    if not available:
+        return "Error: No AI CLI found. Install Claude CLI or Cursor Agent.", ""
     
     # Read content and truncate if too large
     content = content_file.read_text()
@@ -899,9 +920,14 @@ Document ({source_name}):
 """
     
     try:
-        # Run claude CLI with the prompt
+        # Build command based on CLI
+        if cli_name == "claude":
+            cmd = ["claude", "-p", prompt]
+        else:  # agent (Cursor)
+            cmd = ["agent", "-p", prompt]
+        
         result = subprocess.run(
-            ["claude", "-p", prompt],
+            cmd,
             capture_output=True,
             text=True,
             timeout=180,  # 3 minute timeout
@@ -909,13 +935,13 @@ Document ({source_name}):
         )
         
         if result.returncode == 0:
-            return result.stdout
+            return result.stdout, cli_name
         else:
-            return f"Error running Claude CLI: {result.stderr}"
+            return f"Error running {cli_name}: {result.stderr}", cli_name
     except subprocess.TimeoutExpired:
-        return "Error: Claude CLI timed out after 3 minutes. Try with a smaller file or use -d flag for manual analysis."
+        return f"Error: {cli_name} timed out after 3 minutes. Try with a smaller file or use -d flag.", cli_name
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error: {e}", cli_name
 
 
 def learn_from_file_deep(workspace: Path, file_path: str, auto_run: bool = False) -> dict:
@@ -1016,18 +1042,21 @@ Please do a deep analysis of this document and extract key concepts and patterns
     
     console.print(f"\n[green]✓[/] Content saved to: [cyan]{content_file.relative_to(workspace)}[/]")
     
-    # Auto-run with Claude CLI if requested
+    # Auto-run with AI CLI if requested
     if auto_run:
-        if not check_claude_cli():
-            console.print("\n[red]Error: Claude CLI not found.[/]")
-            console.print("Install with: [cyan]npm install -g @anthropic-ai/claude-code[/]")
-            console.print("Or use [cyan]up learn -d \"file\"[/] to get a prompt for manual analysis.")
+        cli_name, cli_available = check_ai_cli()
+        if not cli_available:
+            console.print("\n[red]Error: No AI CLI found.[/]")
+            console.print("Install one of:")
+            console.print("  • Claude CLI: [cyan]npm install -g @anthropic-ai/claude-code[/]")
+            console.print("  • Cursor Agent: (comes with Cursor IDE)")
+            console.print("\nOr use [cyan]up learn -d \"file\"[/] for manual analysis.")
             return {}
         
-        console.print("\n[yellow]Running Claude CLI for analysis...[/]")
+        console.print(f"\n[yellow]Running {cli_name} for analysis...[/]")
         console.print("[dim](This may take 30-60 seconds)[/]")
         
-        analysis = run_claude_analysis(workspace, content_file, source_file.name)
+        analysis, cli_used = run_ai_analysis(workspace, content_file, source_file.name)
         
         # Save analysis result
         analysis_file = deep_dir / f"{safe_name}_analysis.md"
@@ -1035,11 +1064,20 @@ Please do a deep analysis of this document and extract key concepts and patterns
 
 **Analyzed**: {date.today().isoformat()}
 **Source**: `{source_file}`
-**Method**: Claude CLI (automatic)
+**Method**: {cli_used} CLI (automatic)
 
 ---
 
 {analysis}
+
+---
+
+## What's Next?
+
+1. **Review the analysis** - Check the key concepts and patterns above
+2. **Apply learnings** - Use insights to improve your project
+3. **Track progress** - Run `up learn` to see improvements over time
+4. **Generate PRD** - Run `up learn plan` to create improvement tasks
 """
         analysis_file.write_text(analysis_content)
         
@@ -1047,16 +1085,23 @@ Please do a deep analysis of this document and extract key concepts and patterns
         
         # Display the analysis
         console.print("\n" + "─" * 60)
-        console.print("[bold green]📊 Analysis Result:[/]")
+        console.print(f"[bold green]📊 Analysis Result (via {cli_used}):[/]")
         console.print("─" * 60)
         console.print(analysis)
         console.print("─" * 60)
+        
+        # Show what's next
+        console.print("\n[bold]What's Next?[/]")
+        console.print(f"  1. Review: [cyan]@{analysis_file.relative_to(workspace)}[/] in chat")
+        console.print("  2. Apply: Use insights to improve your project")
+        console.print("  3. Track: Run [cyan]up learn[/] to measure improvements")
+        console.print("  4. Plan: Run [cyan]up learn plan[/] to create improvement tasks")
         
         # Record to memory
         try:
             from up.memory import MemoryManager
             manager = MemoryManager(workspace, use_vectors=False)
-            manager.record_learning(f"Deep analysis completed for: {source_file.name}")
+            manager.record_learning(f"Deep analysis completed for: {source_file.name} via {cli_used}")
         except Exception:
             pass
         
@@ -1065,6 +1110,7 @@ Please do a deep analysis of this document and extract key concepts and patterns
             "content_file": str(content_file),
             "analysis_file": str(analysis_file),
             "analysis": analysis,
+            "cli_used": cli_used,
         }
     
     # Manual mode: show prompt to copy
@@ -1111,7 +1157,7 @@ Format as a structured summary I can reference later."""
 @click.argument("topic_or_path", required=False)
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
 @click.option("--deep", "-d", is_flag=True, help="Prepare for deep AI analysis in chat")
-@click.option("--run", "-r", is_flag=True, help="Auto-run analysis with Claude CLI")
+@click.option("--run", "-r", is_flag=True, help="Auto-run analysis with Claude/Cursor CLI")
 @click.pass_context
 def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
     """Learning system - analyze, research, and improve.
@@ -1122,7 +1168,7 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
       up learn "topic"            Learn about a specific topic/feature
       up learn "file.md"          Quick extraction from file
       up learn -d "file.md"       Prepare for deep AI analysis in chat
-      up learn -r "file.md"       Auto-analyze with Claude CLI
+      up learn -r "file.md"       Auto-analyze with Claude/Cursor CLI
     
     \b
     Subcommands:
@@ -1137,7 +1183,7 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
       up learn "caching"          # Learn about caching
       up learn "guide.md"         # Quick extraction
       up learn -d "guide.md"      # Deep AI analysis (copy prompt to chat)
-      up learn -r "guide.md"      # Auto-analyze with Claude CLI
+      up learn -r "guide.md"      # Auto-analyze with Claude/Cursor CLI
     """
     # If subcommand invoked, skip main logic
     if ctx.invoked_subcommand is not None:

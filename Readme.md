@@ -51,7 +51,7 @@ up dashboard
 | `up learn "topic"` | Learn about specific topic/feature |
 | `up learn "path"` | Learn from project or file (quick extraction) |
 | `up learn -d "file"` | Deep AI analysis (prepare prompt for chat) |
-| `up learn -r "file"` | Auto-analyze with Claude CLI |
+| `up learn -r "file"` | Auto-analyze with Claude/Cursor CLI |
 | `up learn auto` | Analyze project (no vision check) |
 | `up learn plan` | Generate improvement PRD |
 | `up memory search <query>` | Semantic search in memory |
@@ -154,9 +154,9 @@ up learn "package.json"
 up learn -d "docs/guide.md"
 # Then copy the prompt to chat for AI to analyze deeply
 
-# Auto-analyze with Claude CLI (requires claude command)
+# Auto-analyze with Claude CLI or Cursor Agent
 up learn -r "docs/guide.md"
-# Runs Claude CLI automatically and saves analysis
+# Runs claude or agent CLI automatically and saves analysis
 
 # Auto-analyze without vision map requirement
 up learn auto
