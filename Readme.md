@@ -49,7 +49,8 @@ up dashboard
 | `up hooks` | Install/manage git hooks for auto-sync |
 | `up learn` | Auto-improve project (requires vision map) |
 | `up learn "topic"` | Learn about specific topic/feature |
-| `up learn "path"` | Learn from project or file (md, py, js, etc.) |
+| `up learn "path"` | Learn from project or file (quick extraction) |
+| `up learn -d "file"` | Deep AI analysis (prepare prompt for chat) |
 | `up learn auto` | Analyze project (no vision check) |
 | `up learn plan` | Generate improvement PRD |
 | `up memory search <query>` | Semantic search in memory |
@@ -148,6 +149,10 @@ up learn "docs/architecture.md"
 up learn "src/utils.py"
 up learn "package.json"
 
+# Deep AI analysis (prepare for chat)
+up learn -d "docs/guide.md"
+# Then copy the prompt to chat for AI to analyze deeply
+
 # Auto-analyze without vision map requirement
 up learn auto
 
@@ -158,10 +163,11 @@ up learn status
 up learn plan
 ```
 
-The learn system has three modes:
+The learn system has four modes:
 - **Self-improvement** (`up learn`): Analyzes current project and tracks improvements over time. Requires a configured `docs/roadmap/vision/PRODUCT_VISION.md`.
 - **Topic learning** (`up learn "topic"`): Creates research files for specific topics based on your project's tech stack.
-- **External learning** (`up learn "path"`): Analyzes another project to extract patterns, frameworks, and structure insights.
+- **File learning** (`up learn "path"`): Quick extraction from files or projects using regex patterns.
+- **Deep analysis** (`up learn -d "file"`): Prepares file for deep AI analysis - generates a prompt to copy into chat for comprehensive understanding.
 
 ### Using the Product Loop
 

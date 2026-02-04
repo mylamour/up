@@ -861,23 +861,156 @@ def _record_external_learning(workspace: Path, learnings: dict) -> None:
         pass
 
 
+def learn_from_file_deep(workspace: Path, file_path: str) -> dict:
+    """Prepare file for deep AI analysis in chat.
+    
+    This saves the full file content and creates an analysis request
+    that can be processed by Claude/Cursor in chat.
+    """
+    source_file = Path(file_path).expanduser().resolve()
+    
+    if not source_file.exists():
+        console.print(f"[red]Error: File not found: {file_path}[/]")
+        return {}
+    
+    console.print(Panel.fit(
+        f"[bold blue]Learning System[/] - Deep Analysis: {source_file.name}",
+        border_style="blue"
+    ))
+    
+    # Read file content
+    try:
+        content = source_file.read_text()
+    except Exception as e:
+        console.print(f"[red]Error reading file: {e}[/]")
+        return {}
+    
+    # Create deep learning directory
+    skill_dir = find_skill_dir(workspace, "learning-system")
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    deep_dir = skill_dir / "deep_analysis"
+    deep_dir.mkdir(exist_ok=True)
+    
+    # Save the full content for AI reference
+    safe_name = re.sub(r'[^\w\s-]', '', source_file.stem).strip().replace(' ', '_').lower()
+    content_file = deep_dir / f"{safe_name}_content.md"
+    
+    # Create content file with metadata
+    content_with_meta = f"""# Source: {source_file.name}
+
+**Original Path**: `{source_file}`
+**Analyzed**: {date.today().isoformat()}
+**Size**: {len(content)} characters, {len(content.splitlines())} lines
+
+---
+
+{content}
+"""
+    content_file.write_text(content_with_meta)
+    
+    # Create analysis request file
+    request_file = deep_dir / f"{safe_name}_analysis_request.md"
+    request_content = f"""# Deep Analysis Request: {source_file.name}
+
+**Status**: 🔄 Pending AI Analysis
+**Created**: {date.today().isoformat()}
+
+## Source File
+`{content_file}`
+
+## Analysis Instructions
+
+Please analyze the source file and extract:
+
+1. **Key Concepts** - Main ideas, frameworks, and mental models
+2. **Patterns** - Design patterns, workflows, and best practices
+3. **Actionable Insights** - What can be applied to this project
+4. **Implementation Ideas** - Specific ways to use these learnings
+
+## How to Analyze
+
+In chat, use one of these approaches:
+
+### Option A: Reference the file
+```
+@{content_file.relative_to(workspace)}
+Please do a deep analysis of this document and extract key concepts and patterns.
+```
+
+### Option B: Use the learn-deep command
+```
+/learn-deep {safe_name}
+```
+
+## Analysis Output
+
+*AI will fill this section after analysis*
+
+---
+"""
+    request_file.write_text(request_content)
+    
+    # Display results
+    console.print(f"\n[bold]File:[/] {source_file.name}")
+    console.print(f"[bold]Size:[/] {len(content)} characters, {len(content.splitlines())} lines")
+    
+    console.print(f"\n[green]✓[/] Content saved to: [cyan]{content_file.relative_to(workspace)}[/]")
+    console.print(f"[green]✓[/] Request saved to: [cyan]{request_file.relative_to(workspace)}[/]")
+    
+    # Show the prompt to copy
+    relative_content = content_file.relative_to(workspace)
+    
+    console.print("\n" + "─" * 60)
+    console.print("[bold yellow]📋 Copy this to chat for deep AI analysis:[/]")
+    console.print("─" * 60)
+    
+    prompt = f"""@{relative_content}
+
+Please analyze this document deeply and extract:
+1. Key concepts and mental models
+2. Design patterns and best practices  
+3. Actionable insights for this project
+4. Specific implementation ideas
+
+Format as a structured summary I can reference later."""
+    
+    console.print(f"\n[cyan]{prompt}[/]")
+    console.print("\n" + "─" * 60)
+    
+    # Record to memory
+    try:
+        from up.memory import MemoryManager
+        manager = MemoryManager(workspace, use_vectors=False)
+        manager.record_learning(f"Queued deep analysis for: {source_file.name}")
+    except Exception:
+        pass
+    
+    return {
+        "source_file": str(source_file),
+        "content_file": str(content_file),
+        "request_file": str(request_file),
+        "prompt": prompt,
+    }
+
+
 @click.group(invoke_without_command=True)
 @click.argument("topic_or_path", required=False)
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
+@click.option("--deep", "-d", is_flag=True, help="Prepare for deep AI analysis in chat")
 @click.pass_context
-def learn_cmd(ctx, topic_or_path: str, workspace: str):
+def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool):
     """Learning system - analyze, research, and improve.
     
     \b
     Usage:
       up learn                    Auto-analyze and improve (requires vision map)
       up learn "topic"            Learn about a specific topic/feature
-      up learn "path/to/project"  Learn from another project's design
-      up learn "path/to/file.md"  Learn from a file (md, py, js, etc.)
+      up learn "file.md"          Quick extraction from file
+      up learn -d "file.md"       Prepare for deep AI analysis in chat
     
     \b
     Subcommands:
-      up learn auto               Analyze project (same as 'up learn' without vision check)
+      up learn auto               Analyze project (no vision check)
       up learn analyze            Analyze research files
       up learn plan               Generate improvement PRD
       up learn status             Show learning system status
@@ -886,9 +1019,9 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str):
     Examples:
       up learn                    # Self-improvement analysis
       up learn "caching"          # Learn about caching
-      up learn "../other-project" # Learn from other project
-      up learn "docs/guide.md"    # Learn from markdown file
-      up learn "src/utils.py"     # Learn from Python file
+      up learn "guide.md"         # Quick extraction
+      up learn -d "guide.md"      # Deep AI analysis (copy prompt to chat)
+      up learn --deep "file.txt"  # Same as -d
     """
     # If subcommand invoked, skip main logic
     if ctx.invoked_subcommand is not None:
@@ -924,7 +1057,12 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str):
     
     # Has argument: determine if topic or path
     if is_valid_path(topic_or_path):
-        learn_from_project(ws, topic_or_path)
+        # Check if it's a file and deep mode is requested
+        target_path = Path(topic_or_path).expanduser()
+        if target_path.is_file() and deep:
+            learn_from_file_deep(ws, topic_or_path)
+        else:
+            learn_from_project(ws, topic_or_path)
     else:
         learn_from_topic(ws, topic_or_path)
 
@@ -957,6 +1095,8 @@ def learn_auto(workspace: str):
     # Save profile
     save_path = save_profile(ws, profile)
     console.print(f"\n[green]✓[/] Profile saved to: [cyan]{save_path}[/]")
+
+
     
     # Suggest next steps
     console.print("\n[bold]Next Steps:[/]")
