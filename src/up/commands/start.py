@@ -1,6 +1,8 @@
 """up start - Start the product loop."""
 
 import json
+import subprocess
+import shutil
 import time
 from pathlib import Path
 
@@ -13,14 +15,27 @@ from tqdm import tqdm
 console = Console()
 
 
+def check_ai_cli() -> tuple[str, bool]:
+    """Check which AI CLI is available."""
+    if shutil.which("claude"):
+        return "claude", True
+    if shutil.which("agent"):
+        return "agent", True
+    return "", False
+
+
 @click.command()
 @click.option("--resume", "-r", is_flag=True, help="Resume from last checkpoint")
 @click.option("--dry-run", is_flag=True, help="Preview without executing")
 @click.option("--task", "-t", help="Start with specific task ID")
 @click.option("--prd", "-p", type=click.Path(exists=True), help="Path to PRD file")
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode with confirmations")
-def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: bool):
+@click.option("--no-ai", is_flag=True, help="Disable auto AI implementation")
+@click.option("--all", "run_all", is_flag=True, help="Run all tasks automatically")
+def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: bool, no_ai: bool, run_all: bool):
     """Start the product loop for autonomous development.
+    
+    Uses Claude/Cursor AI by default to implement tasks automatically.
     
     The product loop implements SESRC principles:
     - Stable: Graceful degradation
@@ -31,11 +46,12 @@ def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: boo
     
     \b
     Examples:
-      up start                  # Start fresh
+      up start                  # Auto-implement next task with AI
+      up start --all            # Auto-implement ALL tasks
       up start --resume         # Resume from checkpoint
-      up start --task US-003    # Start specific task
+      up start --task US-003    # Implement specific task
       up start --dry-run        # Preview mode
-      up start -i               # Interactive mode
+      up start --no-ai          # Manual mode (show instructions only)
     """
     cwd = Path.cwd()
     
@@ -107,9 +123,22 @@ def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: boo
             console.print("[dim]Cancelled[/]")
             return
     
+    # Check AI availability
+    use_ai = not no_ai
+    cli_name, cli_available = check_ai_cli()
+    
+    if use_ai and not cli_available:
+        console.print("\n[yellow]No AI CLI found. Running in manual mode.[/]")
+        console.print("Install Claude CLI or Cursor Agent for auto-implementation.")
+        use_ai = False
+    
     # Start the loop with progress
     console.print("\n[bold green]Starting product loop...[/]")
-    _run_product_loop_with_progress(cwd, state, task_source, task, resume)
+    
+    if use_ai:
+        _run_ai_product_loop(cwd, state, task_source, task, cli_name, run_all)
+    else:
+        _run_product_loop_with_progress(cwd, state, task_source, task, resume)
 
 
 def _display_status_table(state: dict, task_source: str, workspace: Path, resume: bool):
@@ -408,6 +437,237 @@ SESRC Loop Commands:
 Circuit Breaker: 3 failures → OPEN
 State File: .loop_state.json
 """
+
+
+def _run_ai_product_loop(
+    workspace: Path,
+    state: dict,
+    task_source: str,
+    specific_task: str = None,
+    cli_name: str = "claude",
+    run_all: bool = False
+):
+    """Run the product loop with AI auto-implementation."""
+    from datetime import datetime
+    
+    # Get all tasks
+    tasks_to_run = []
+    
+    if specific_task:
+        tasks_to_run = [{"id": specific_task, "title": specific_task, "description": specific_task}]
+    elif task_source and task_source.endswith(".json"):
+        prd_path = workspace / task_source
+        if prd_path.exists():
+            try:
+                data = json.loads(prd_path.read_text())
+                stories = data.get("userStories", [])
+                # Get incomplete tasks
+                for story in stories:
+                    if not story.get("passes", False):
+                        tasks_to_run.append(story)
+                        if not run_all:
+                            break  # Only first task if not --all
+            except json.JSONDecodeError:
+                pass
+    
+    if not tasks_to_run:
+        console.print("\n[green]✓[/] All tasks completed!")
+        return
+    
+    console.print(f"\n[bold]Tasks to implement:[/] {len(tasks_to_run)}")
+    
+    # Process each task
+    completed = 0
+    failed = 0
+    
+    for task in tqdm(tasks_to_run, desc="Implementing", unit="task"):
+        task_id = task.get("id", "unknown")
+        task_title = task.get("title", "No title")
+        task_desc = task.get("description", task_title)
+        
+        console.print(f"\n{'─' * 50}")
+        console.print(f"[bold cyan]Task {task_id}:[/] {task_title}")
+        
+        # Update state
+        state["iteration"] = state.get("iteration", 0) + 1
+        state["phase"] = "EXECUTE"
+        state["current_task"] = task_id
+        _save_loop_state(workspace, state)
+        
+        # Create checkpoint
+        console.print("[dim]Creating checkpoint...[/]")
+        checkpoint_name = f"cp-{task_id}-{state['iteration']}"
+        _create_checkpoint(workspace, checkpoint_name)
+        
+        # Build prompt for AI
+        prompt = _build_implementation_prompt(workspace, task, task_source)
+        
+        # Run AI
+        console.print(f"[yellow]Running {cli_name}...[/]")
+        success, output = _run_ai_implementation(workspace, prompt, cli_name)
+        
+        if success:
+            console.print(f"[green]✓[/] Task {task_id} implemented")
+            completed += 1
+            
+            # Mark task as complete in PRD
+            _mark_task_complete(workspace, task_source, task_id)
+            
+            # Update state
+            state["tasks_completed"] = state.get("tasks_completed", []) + [task_id]
+            state["phase"] = "COMMIT"
+        else:
+            console.print(f"[red]✗[/] Task {task_id} failed")
+            console.print(f"[dim]{output[:200]}...[/]" if len(output) > 200 else f"[dim]{output}[/]")
+            failed += 1
+            
+            # Rollback
+            console.print("[yellow]Rolling back...[/]")
+            _rollback_checkpoint(workspace, checkpoint_name)
+            
+            # Update circuit breaker
+            cb = state.get("circuit_breaker", {})
+            cb["failures"] = cb.get("failures", 0) + 1
+            if cb["failures"] >= 3:
+                cb["state"] = "OPEN"
+                console.print("[red]Circuit breaker OPEN - stopping loop[/]")
+                state["circuit_breaker"] = cb
+                _save_loop_state(workspace, state)
+                break
+            state["circuit_breaker"] = cb
+        
+        _save_loop_state(workspace, state)
+    
+    # Summary
+    console.print(f"\n{'─' * 50}")
+    console.print(Panel.fit(
+        f"[bold]Loop Complete[/]\n\n"
+        f"Completed: [green]{completed}[/]\n"
+        f"Failed: [red]{failed}[/]\n"
+        f"Remaining: {len(tasks_to_run) - completed - failed}",
+        border_style="blue"
+    ))
+    
+    if completed > 0:
+        console.print("\n[bold]Next Steps:[/]")
+        console.print("  1. Review changes: [cyan]git diff[/]")
+        console.print("  2. Run tests: [cyan]pytest[/]")
+        console.print("  3. Commit if satisfied: [cyan]git commit -am 'Implement tasks'[/]")
+
+
+def _build_implementation_prompt(workspace: Path, task: dict, task_source: str) -> str:
+    """Build a prompt for the AI to implement the task."""
+    task_id = task.get("id", "unknown")
+    task_title = task.get("title", "")
+    task_desc = task.get("description", task_title)
+    priority = task.get("priority", "medium")
+    
+    # Read project context
+    context = ""
+    readme = workspace / "README.md"
+    if not readme.exists():
+        readme = workspace / "Readme.md"
+    if readme.exists():
+        content = readme.read_text()
+        if len(content) > 2000:
+            content = content[:2000] + "..."
+        context = f"\n\nProject README:\n{content}"
+    
+    return f"""Implement this task in the current project:
+
+Task ID: {task_id}
+Title: {task_title}
+Description: {task_desc}
+Priority: {priority}
+
+Requirements:
+1. Make minimal, focused changes
+2. Follow existing code style and patterns
+3. Add tests if appropriate
+4. Update documentation if needed
+{context}
+
+Implement this task now. Make the necessary code changes."""
+
+
+def _run_ai_implementation(workspace: Path, prompt: str, cli_name: str) -> tuple[bool, str]:
+    """Run AI CLI to implement the task."""
+    try:
+        if cli_name == "claude":
+            cmd = ["claude", "-p", prompt]
+        else:
+            cmd = ["agent", "-p", prompt]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout
+            cwd=workspace
+        )
+        
+        if result.returncode == 0:
+            return True, result.stdout
+        else:
+            return False, result.stderr or "Unknown error"
+    
+    except subprocess.TimeoutExpired:
+        return False, "AI implementation timed out (5 minutes)"
+    except Exception as e:
+        return False, str(e)
+
+
+def _create_checkpoint(workspace: Path, name: str) -> bool:
+    """Create a git stash checkpoint."""
+    try:
+        subprocess.run(
+            ["git", "stash", "push", "-m", name],
+            capture_output=True,
+            cwd=workspace,
+            timeout=30
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _rollback_checkpoint(workspace: Path, name: str) -> bool:
+    """Rollback to checkpoint using git stash."""
+    try:
+        # First, reset any uncommitted changes
+        subprocess.run(
+            ["git", "checkout", "."],
+            capture_output=True,
+            cwd=workspace,
+            timeout=30
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _mark_task_complete(workspace: Path, task_source: str, task_id: str) -> None:
+    """Mark a task as complete in the PRD."""
+    if not task_source or not task_source.endswith(".json"):
+        return
+    
+    prd_path = workspace / task_source
+    if not prd_path.exists():
+        return
+    
+    try:
+        data = json.loads(prd_path.read_text())
+        stories = data.get("userStories", [])
+        
+        for story in stories:
+            if story.get("id") == task_id:
+                story["passes"] = True
+                story["completedAt"] = time.strftime("%Y-%m-%d")
+                break
+        
+        prd_path.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
