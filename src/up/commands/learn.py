@@ -1445,16 +1445,58 @@ Focus on practical, implementable improvements. No explanation, just the JSON ar
                 console.print("[yellow]Could not parse AI response, using template[/]")
     
     if not user_stories:
-        # Fallback: generate from profile improvement areas
+        # Fallback: extract action items from insights
         console.print("[yellow]Using basic task generation...[/]")
-        for i, area in enumerate(profile.get("improvement_areas", [])[:5], 1):
+        
+        # Parse insights for action items (- [ ] checkbox items)
+        all_insights = "\n".join(insights_content)
+        action_items = []
+        
+        # Find checkbox items: - [ ] task description
+        for line in all_insights.splitlines():
+            line = line.strip()
+            if line.startswith("- [ ]"):
+                item = line[5:].strip()
+                if item and len(item) > 5:
+                    action_items.append(item)
+        
+        # Also find numbered items after "Action Items" header
+        in_action_section = False
+        for line in all_insights.splitlines():
+            if "action item" in line.lower() or "immediate" in line.lower():
+                in_action_section = True
+                continue
+            if in_action_section:
+                if line.startswith("#") or line.startswith("**") and not "- [" in line:
+                    in_action_section = False
+                elif line.strip().startswith("-") and len(line.strip()) > 3:
+                    item = line.strip().lstrip("-[ ]").strip()
+                    if item and item not in action_items:
+                        action_items.append(item)
+        
+        # Fallback to improvement areas if no action items found
+        if not action_items:
+            action_items = profile.get("improvement_areas", [])
+        
+        # Generate user stories from action items
+        for i, item in enumerate(action_items[:10], 1):
+            # Determine priority based on keywords
+            priority = "medium"
+            if any(w in item.lower() for w in ["immediate", "critical", "urgent", "must"]):
+                priority = "high"
+            elif any(w in item.lower() for w in ["optional", "nice", "later", "future"]):
+                priority = "low"
+            
             user_stories.append({
                 "id": f"US-{i:03d}",
-                "title": f"Implement {area}",
-                "description": f"Add {area} based on analysis findings",
-                "priority": "medium",
+                "title": item[:60] + ("..." if len(item) > 60 else ""),
+                "description": item,
+                "priority": priority,
                 "effort": "medium"
             })
+        
+        if user_stories:
+            console.print(f"[green]✓[/] Extracted {len(user_stories)} tasks from insights")
     
     # Generate PRD
     prd = {
