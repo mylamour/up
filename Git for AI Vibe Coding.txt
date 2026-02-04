@@ -1,0 +1,283 @@
+﻿Strategic Git Architectures for Vibe Coding: A Comprehensive Field Guide to AI-Driven Development
+1. The Vibe Coding Paradigm and the Version Control Crisis
+The software engineering landscape is currently undergoing a seismic shift, precipitated by the advent of "vibe coding," a term coined by Andrej Karpathy in early 2025 to describe a new mode of development where the primary interaction shifts from manual syntax construction to high-level intent orchestration.1 In this paradigm, the developer acts less like a mason laying individual bricks and more like an architect directing a swarm of automated builders. The "vibe" represents the functional and aesthetic goals of the application—the intent—while the implementation details are delegated to Large Language Models (LLMs) and AI agents.3
+This transition offers unprecedented velocity. Prototypes that previously took weeks can now be "vibed" into existence over a weekend.4 However, this velocity introduces a profound crisis for traditional Version Control Systems (VCS), specifically Git. Git was designed for the human pace of development: incremental, logical, and linear changes derived from a clear mental model. Vibe coding, by contrast, operates at machine speed, capable of generating hundreds of lines of code, refactoring entire modules, or introducing subtle hallucinations in a single prompt.5
+1.1 The "Paint Sprayer" Effect and Code Provenance
+Erik Ralston, a thought leader in AI-assisted engineering, aptly describes this phenomenon as moving from a "fine-point pen" to a "paint sprayer".6 When a developer writes code manually, they possess a mental map of every line, variable, and dependency. The code is "white box" by default. In vibe coding, the AI generates code blocks that are effectively "black boxes" to the developer, especially in "Pure" vibe coding scenarios where the user may not even read the output before execution.4
+This "paint sprayer" effect creates significant collateral damage within a Git repository:
+* Contextual Overwrite: AI agents, lacking the infinite context of a human maintainer, may inadvertently delete critical edge-case handling, comments, or legacy logic that falls outside their context window.7
+* Semantic Drift: While the code may pass syntax checks, the underlying architectural patterns may drift, violating established conventions (e.g., switching from functional to object-oriented styles mid-module).2
+* Provenance Obscurity: When a bug arises six months later, git blame points to the user who prompted the AI, but the reasoning—the specific prompt and model context—is lost, making "why" questions nearly impossible to answer.8
+1.2 The Dichotomy of Vibe Coding: Pure vs. Responsible
+To engineer an effective Git strategy, one must first recognize the duality of the practice. Karpathy delineates two distinct modes: "Pure" vibe coding and "Responsible" AI-assisted development.4
+Pure Vibe Coding is exploratory. It is characterized by a "flow state" where the developer creates rapid prototypes, often discarding code quality for speed. In this mode, the user essentially "forgets the code exists," trusting the AI implicitly.1 The Git requirements here are minimal but critical for disaster recovery—creating "save points" before the AI hallucinates the project into a broken state.
+Responsible Vibe Coding represents the professionalization of the technique. Here, the AI acts as a sophisticated pair programmer. The developer retains full ownership, reviewing every diff, enforcing linting standards, and ensuring the code is maintainable.4 This mode requires a rigorous, almost militaristic adherence to Git discipline to prevent the repository from becoming a "house of cards".9 The "70% Problem"—where AI gets you 70% of the way there instantly, but the final 30% of integration and debugging takes exponentially longer—is the primary adversary in this mode.10
+1.3 The "Version Loop" as a Safety Mechanism
+In traditional development, the feedback loop is "Code → Test → Commit." In vibe coding, this loop must tighten to "Prompt → Generate → Visual Diff → Reset/Commit".6 Git becomes the "ripcord." The fundamental rule of professional vibe coding is to commit before every significant prompt and to git reset --hard immediately if the generation is flawed.6 Attempting to "prompt your way out" of a bad generation often leads to a "doom loop" of compounding errors, whereas a hard reset restores the clean state, allowing the developer to refine the prompt (the intent) rather than fighting the implementation.
+The following report serves as a comprehensive field guide for navigating this new terrain. It details the architectural changes required in Git workflows, the specific configurations for leading AI tools, the management of parallel agent swarms, and the forensic skills needed to debug AI-generated code.
+2. Tool-Specific Git Architectures
+Different AI coding tools impose different constraints and affordances on the Git workflow. A "one size fits all" approach fails because the interaction model of a chat-based tool like Aider differs fundamentally from the "composer" model of Cursor or the "specification" model of GitHub Copilot Workspace.
+2.1 Cursor and Windsurf: The Composer Model
+Cursor and Windsurf represent the "IDE-native" generation of tools, where the AI is embedded directly into the editor and has deep access to the file system.11 Their defining feature is the ability to edit multiple files simultaneously based on a single prompt (Cursor's "Composer" or Windsurf's "Cascade").
+2.1.1 The "Apply All" Risk and Mitigation
+The "Apply All" button in these tools is perhaps the most dangerous element in the vibe coder's interface.13 It commits changes to the working directory across potentially dozens of files. If the user accepts these changes without scrutiny, they pollute the working tree with unverified code.
+Strategic Workflow:
+1. The .cursorrules Gatekeeper: To manage this, developers must utilize the .cursorrules file (or AGENTS.md) to enforce constraints.14 This file acts as a "system prompt" that persists across sessions.
+   * Constraint Example: "Before applying changes to more than 3 files, propose a plan."
+   * Constraint Example: "Never delete comments marked // CRITICAL."
+2. Incremental Composability: Instead of prompting "Refactor the entire auth system," the efficient vibe coder breaks the request into atomic steps: "Refactor the user schema," followed by "Update the login controller to match the schema." This allows for intermediate Git commits, creating checkpoints.15
+3. Context Injection via Git: Both tools allow users to reference Git context directly. Using @Git or referencing specific commits helps the AI understand the history of a file, not just its current state, reducing the likelihood of regression.11
+Feature
+	Cursor (Composer)
+	Windsurf (Cascade)
+	Git Implication
+	Multi-file Edits
+	Yes (Apply All)
+	Yes (Vibe & Replace)
+	High risk of broad regression; requires git reset readiness.
+	Context Awareness
+	Indexed Local Files
+	Deep Context & Tools
+	Windsurf's deeper tools may require less manual context providing but harder to debug "why" it chose a path.
+	Commit Granularity
+	Manual
+	Manual
+	User must discipline themselves to commit after every "Apply".
+	Rule Enforcement
+	.cursorrules
+	System Prompts
+	Essential for enforcing commit message standards.
+	2.1.2 Best Practice: The "Shadow Branch"
+For complex "Composer" sessions, standard practice should be to spin up a ephemeral "shadow branch" (e.g., tmp/cursor-refactor). The user allows Cursor to run wild on this branch. Once the feature works, the user squashes the messy history into a clean commit and merges it to the feature branch.16 This keeps the "trial and error" noise out of the permanent history.
+2.2 Aider: The "Chat-with-Repo" and Auto-Commit Philosophy
+Aider represents a different philosophy: it is a command-line tool that "chats" with your Git repository.17 It is arguably the most "Git-native" of the current generation.
+2.2.1 Automated Commit Hygiene
+Aider's defining feature is its auto-commit loop. After every successful code generation (where the code is applied without syntax errors), Aider automatically creates a Git commit with a descriptive message generated by the LLM.17
+* The Benefit: This creates a high-resolution "undo" stack. If the AI makes a mistake three steps deep, the user can simply run /undo (which triggers git reset HEAD~1) to revert to the exact state before the error.17
+* The Cost: This can lead to "commit explosion." A feature that takes a human 3 commits might take Aider 15 commits (e.g., "Refactor function," "Fix syntax error," "Fix import," "Optimize loop").
+* The Dirty State Guard: Aider refuses to operate on a "dirty" working directory (files with uncommitted changes). This forces the user to maintain a clean state, which is a best practice often ignored by humans but enforced by the tool.17
+2.2.2 The "Aider-Flow" Integration
+To integrate Aider into a professional workflow, one should not push Aider's commits directly to the shared branch. Instead:
+1. Develop: Let Aider commit freely to a local feature branch.
+2. Review: Use git log to review the granular steps Aider took.
+3. Squash: Perform an interactive rebase (git rebase -i) to squash the 15 "Aider" commits into one or two semantic commits before pushing.18
+2.3 GitHub Copilot Workspace: The Specification-First Approach
+GitHub Copilot Workspace introduces a structured, stage-gate process that fundamentally alters the "Vibe" loop.19
+2.3.1 Shifting the Commit Unit
+Unlike Cursor or Aider, which operate on the "code" level, Workspace operates on the "Task" level.
+1. Specification: The AI describes what it thinks you want.
+2. Plan: The AI lists the files it intends to touch and the strategy.
+3. Implementation: The code is generated.
+This workflow forces the user to verify the Plan before the code is written.20 From a Git perspective, this is revolutionary because it reduces the "paint sprayer" risk. By validating the plan (e.g., "Don't touch utils.ts, only modify auth.ts"), the user constrains the blast radius of the AI.19
+2.3.2 The Pull Request as the Artifact
+The primary output of a Workspace session is a Pull Request (PR), not a local commit. This encourages a workflow where the "Vibe" happens in the cloud, and the local Git environment is reserved for final verification and merging. This separation of "generation environment" (Cloud) and "verification environment" (Local) is a powerful pattern for enterprise teams.20
+3. Parallelism and Multi-Agent Orchestration
+One of the most transformative aspects of AI coding is the ability to parallelize development. A single developer can effectively act as an engineering manager, directing multiple AI agents to work on different features simultaneously.21 However, the standard Git workflow—based on a single working directory—is a bottleneck that prevents this scaling.
+3.1 The Single-Working-Directory Bottleneck
+In a standard Git setup, you have one set of files on your disk. If you have an agent working on feature-A, the files on disk must reflect feature-A. If you want to start a second agent on feature-B, you must git checkout feature-B, which changes the files on disk. This context switch kills the first agent's process or, worse, confuses it, leading it to write feature-A code into feature-B files.22
+3.2 The Architectural Solution: Git Worktrees
+Git Worktrees are the critical enabler for parallel vibe coding.16 They allow a repository to support multiple "working trees" (directories) attached to the same Git history (the .git folder).
+3.2.1 Setup and Workflow
+Instead of cding between branches, the developer creates a persistent directory structure for parallel agents.
+Recommended Directory Architecture:
+/Project-Root/
+├──.git/ # The shared history database
+├── main/ # The 'clean' production branch (locked)
+├──.worktrees/ # A hidden directory for active agent sessions
+│ ├── agent-frontend/ # Agent 1: Working on React components
+│ ├── agent-backend/ # Agent 2: Working on API endpoints
+│ └── agent-tests/ # Agent 3: Writing tests for the API
+└── README.md
+The "Worktrunk" Script: To manage this complexity, Vibe Engineers often use scripts (colloquially "Worktrunk") to automate the spinning up of agent environments.24
+Script Logic:
+1. Input: Feature name (e.g., login-page).
+2. Action:
+   * Create branch feat/login-page from main.
+   * Run git worktree add.worktrees/login-page feat/login-page.
+   * Copy necessary .env files or context configs to the new directory.
+   * Open a new terminal tab/pane in that directory.
+3. Output: A fresh, isolated environment where an AI agent can run indefinitely without blocking the user's other work.25
+3.2.2 The Merge Strategy
+Once the agents complete their tasks, the developer acts as the "Integrator."
+1. Verification: Enter .worktrees/agent-backend. Run tests.
+2. Commit: Ensure the agent has committed its work.
+3. Merge: Go to main (or a unification branch). git merge feat/backend.
+4. Prune: git worktree remove.worktrees/agent-backend.
+3.3 Conflict Resolution in Multi-Agent Swarms
+When multiple agents work in parallel, merge conflicts are inevitable. Traditional conflict resolution (manual editing) is too slow for the vibe coding loop.
+3.3.1 Semantic vs. Textual Merge
+Standard Git uses textual merge (line-based). If Agent A refactors a function's syntax and Agent B changes a value inside that function, Git sees a conflict.
+* Semantic Merge: Tools like Resolve.AI or research models like MergeBERT parse the Abstract Syntax Tree (AST) of the code.26 They understand that Agent A's refactor and Agent B's value change are compatible and can merge them automatically.
+* Spidersan (Conflict Avoidance): For scenarios where agents must share a workspace (less ideal), tools like Spidersan act as a traffic controller, locking files that are currently being edited by one agent to prevent overwrites by another.28
+3.3.2 The "Merge Queue" Pattern
+For high-velocity teams, a "Merge Queue" (like Graphite) becomes essential.29 Instead of merging directly, agents submit PRs to a queue. The queue attempts to merge them sequentially in a temporary environment, running tests. If a conflict arises, the AI is tasked to resolve it (Adversarial Resolution) before the human is even notified.
+4. Debugging the Black Box: Forensic Git Operations
+The "Black Box" nature of AI code means that bugs are often subtle—logic errors, hallucinations of non-existent APIs, or edge cases that were simply ignored.2 Finding the needle in the haystack of 500 AI-generated lines requires forensic tooling.
+4.1 Weaponizing git bisect
+git bisect is the most underutilized tool in the Vibe Coder's arsenal.30 It uses a binary search algorithm to traverse history and identify the exact commit that introduced a regression. While often performed manually, the sheer volume of AI commits makes manual bisection untenable. The best practice is Automated Bisection.31
+4.1.1 The Automated Bisection Workflow
+To find a bug introduced by an AI agent over the last 100 commits:
+1. Define Boundaries:
+   * git bisect start
+   * git bisect bad (Current broken state)
+   * git bisect good <commit-hash-from-yesterday>
+2. The Hunter Script: Write a small script (e.g., verify_bug.sh) that definitively tests for the bug.
+   * Exit Code 0: Bug is NOT present (Good).
+   * Exit Code 1: Bug IS present (Bad).
+   * Exit Code 125: Code doesn't build/compile (Skip).
+3. Execute: git bisect run./verify_bug.sh
+Git will now automatically checkout commits, run the script, and narrow down the 100 commits to the single offender in    steps (approx. 7 steps). This effectively turns the computer against the AI, using automation to debug automation.32
+4.2 The "Atomic Hell" and Interactive Rebase
+AI agents are notoriously bad at "Atomic Commits" (the practice of bundling one logical change per commit). They often mix formatting changes, logic updates, and unrelated bug fixes into a single "Update" commit. This breaks git bisect because a commit might be "partially bad."
+The Cleanup Workflow: Before any AI branch is merged to main, it must undergo an Interactive Rebase (git rebase -i).33
+* Squash: Combine the 20 "WIP" and "Fix typo" commits generated by the agent into coherent feature commits.
+* Fixup: Absorb minor corrections into their parent commits so the history appears linear and deliberate.34
+* Reword: Use AI (e.g., git-ai or GitKraken's AI Composer) to generate meaningful commit messages for the squashed commits, explaining why the change was made, not just what changed.18
+5. Production-Grade Vibe Engineering Best Practices
+To transition from "Weekend Prototype" to "Production System," the Vibe Coding workflow must be hardened. The "Vibe Engineer" does not just prompt; they govern the pipeline.6
+5.1 CI/CD as the "Compiler"
+In Vibe Coding, the CI/CD pipeline replaces the compiler as the primary source of truth. Since the developer isn't reading every line, the automated checks must be exhaustive.35
+The Vibe CI Pipeline:
+1. Linting & Formatting: AI code often drifts in style. Rigid enforcement (Prettier, Ruff, Black) is non-negotiable.
+2. Security Scanning: AI has a known propensity for introducing vulnerabilities (e.g., hardcoded secrets, SQL injection, hallucinated packages). Tools like Snyk or OWASP ZAP must run on every push.36
+   * Supply Chain Security: AI agents often import packages that sound correct but don't exist (hallucination) or are typosquats. An automated SBOM (Software Bill of Materials) analysis check is required to verify all new dependencies.37
+3. Mutation Testing: Since AI writes the tests too, who tests the tests? Mutation testing (changing code randomly to ensure tests fail) verifies that the AI-generated test suite is actually robust and not just "vibing" with the code.38
+5.2 Adversarial Code Review (AI vs. AI)
+Human review of massive AI-generated PRs is prone to "Review Fatigue." A best practice is to institute an Adversarial AI Review step.39
+* Mechanism: If Agent A (e.g., Claude 3.5) writes the code, Agent B (e.g., GPT-4o) reviews it.
+* Prompt Engineering for Review: The reviewer agent is prompted specifically to find security flaws, logic gaps, and adherence to the project's .cursorrules.
+* The Human Role: The human only reviews the consensus or the disputes between the two agents, significantly reducing the cognitive load while increasing the rigor.41
+5.3 Metadata and Attribution: The Git-AI Standard
+As repositories become hybrids of human and machine code, tracking provenance becomes a legal and maintenance necessity.
+* The git-ai Standard: Emerging tools and standards (like git-ai v3.0.0) allow for metadata to be embedded in Git commits.8
+   * Data Stored: The Model used (e.g., claude-3-opus), the Prompt text, and the Agent version.
+   * Storage Mechanism: Git Notes or structured commit trailers.
+   * Value: This enables "Prompt Regression Testing." If a bug is found, you can retrieve the exact prompt that caused it, refine the prompt, and add it to your regression suite.42
+6. Synthesis and Future Outlook
+The transition to Vibe Coding is not merely a change in tooling; it is a fundamental restructuring of the software development lifecycle. The developer's value proposition shifts from "typing speed" to "system orchestration."
+In this new world, Git evolves from a simple version tracker to a Context Management Engine. It serves as the file system for parallel agents (Worktrees), the safety net for probabilistic code generation (Bisect/Reset), and the immutable ledger of intent (Git-AI metadata).
+The "Vibe Engineer" of the future will spend less time in the editor and more time managing the Git graph, orchestrating swarms of agents, and refining the automated pipelines that govern them. By adopting the advanced architectures detailed in this report—parallel worktrees, automated bisection, semantic merging, and adversarial review—teams can harness the raw velocity of AI without sacrificing the stability and maintainability required for professional software engineering.
+7. Appendix: Implementation Scripts and Configs
+7.1 Automated Regression Hunter (git-bisect-run.sh)
+This script automates the detection of bugs during a git bisect session.
+
+
+Bash
+
+
+
+
+#!/bin/bash
+# Save as test_regression.sh and make executable (chmod +x)
+
+# 1. Build the project. If the build fails, we can't test.
+# We return 125 to tell git bisect to 'skip' this commit.
+npm install && npm run build
+build_status=$?
+if [ $build_status -ne 0 ]; then
+   echo "Build failed, skipping commit"
+   exit 125
+fi
+
+# 2. Run the specific test case that reproduces the bug.
+# Do NOT run the full suite; it's too slow. Focus on the regression.
+npm test -- test/specific_bug_repro.test.js
+test_status=$?
+
+# 3. Return exit code to git bisect
+# 0 = Good (Bug not present)
+# 1 = Bad (Bug present)
+if [ $test_status -eq 0 ]; then
+   echo "Bug NOT found (Good)"
+   exit 0
+else
+   echo "Bug FOUND (Bad)"
+   exit 1
+fi
+
+7.2 The .cursorrules Gatekeeper
+A sample configuration to enforce hygiene in Cursor/Windsurf.
+#.cursorrules
+Git & Commit Standards
+1. Atomic Commits: When asked to commit, never bundle unrelated changes. Split them.
+2. Conventional Commits: Always use the format feat: description, fix: description.
+3. Safety Check: Before suggesting a commit, run npm test. If tests fail, do NOT suggest committing.
+Code Style & Vibe
+1. No "Paint Spraying": Do not touch files unrelated to the specific prompt.
+2. Legacy Protection: Never remove comments marked // DO NOT DELETE.
+3. Context: Use the @Git context to understand the history of a file before refactoring it.
+7.3 Worktree Management Alias (worktrunk)
+A shell function to streamline creating isolated agent environments.
+
+
+Bash
+
+
+
+
+# Add to.zshrc or.bashrc
+function worktrunk() {
+   if [ -z "$1" ]; then
+       echo "Usage: worktrunk <feature-name>"
+       return 1
+   fi
+   
+   # Define paths
+   local branch_name="feat/ai-$1"
+   local dir_name=".worktrees/$1"
+   
+   # Create the worktree and branch
+   git worktree add -b "$branch_name" "$dir_name"
+   
+   # Optional: Copy environment config
+   cp.env "$dir_name/.env"
+   
+   echo "🚀 AI Worktree ready at: $dir_name"
+   echo "   Branch: $branch_name"
+   echo "   To enter: cd $dir_name"
+}
+
+The adoption of these strategies transforms Git from a passive storage tool into an active participant in the AI development loop, ensuring that as we move faster, we do not lose control.
+Works cited
+1. accessed February 3, 2026, https://cloud.google.com/discover/what-is-vibe-coding#:~:text=The%20term%2C%20coined%20by%20AI,through%20a%20more%20conversational%20process.
+2. Vibe coding - Wikipedia, accessed February 3, 2026, https://en.wikipedia.org/wiki/Vibe_coding
+3. What is Vibe Coding? How To Vibe Your App to Life - Replit Blog, accessed February 3, 2026, https://blog.replit.com/what-is-vibe-coding
+4. Vibe Coding Explained: Tools and Guides | Google Cloud, accessed February 3, 2026, https://cloud.google.com/discover/what-is-vibe-coding
+5. What is vibe coding? | AI coding - Cloudflare, accessed February 3, 2026, https://www.cloudflare.com/learning/ai/ai-vibe-coding/
+6. How to Become a Jedi at “Vibe Coding” So You Can Level Up to ..., accessed February 3, 2026, https://medium.com/@erikralston/how-to-become-a-jedi-at-vibe-coding-so-you-can-level-up-to-vibe-engineer-91d4c9b180f9
+7. AI workflow? : r/vibecoding - Reddit, accessed February 3, 2026, https://www.reddit.com/r/vibecoding/comments/1qj1qy2/ai_workflow/
+8. Tool for preserving authorship from AI via git | by Ilya Chubarov | Jan, 2026 - Medium, accessed February 3, 2026, https://agoalofalife.medium.com/tool-for-preserving-authorship-from-ai-via-git-773e0ac188a0
+9. The problem with vibe coding is nobody wants to talk about maintenance - Reddit, accessed February 3, 2026, https://www.reddit.com/r/vibecoding/comments/1o547xp/the_problem_with_vibe_coding_is_nobody_wants_to/
+10. Beyond Vibe Coding - A Guide To AI-Assisted Development, accessed February 3, 2026, https://beyond.addy.ie/
+11. Git | Cursor Docs, accessed February 3, 2026, https://cursor.com/docs/integrations/git
+12. Windsurf vs Cursor | AI IDE Comparison, accessed February 3, 2026, https://windsurf.com/compare/windsurf-vs-cursor
+13. Composer: Create a git commit for every "Accept all" - Cursor - Community Forum, accessed February 3, 2026, https://forum.cursor.com/t/composer-create-a-git-commit-for-every-accept-all/25923
+14. Rules | Cursor Docs, accessed February 3, 2026, https://cursor.com/docs/context/rules
+15. A Structured Workflow for "Vibe Coding" Full-Stack Apps - DEV ..., accessed February 3, 2026, https://dev.to/wasp/a-structured-workflow-for-vibe-coding-full-stack-apps-352l
+16. Git and GitHub for Vibe Coders | DeepakNess, accessed February 3, 2026, https://deepakness.com/blog/git-for-vibe-coders/
+17. Git integration | aider, accessed February 3, 2026, https://aider.chat/docs/git.html
+18. How GitKraken's AI-Powered Commit Composer Eliminates Git ..., accessed February 3, 2026, https://www.gitkraken.com/blog/how-gitkrakens-ai-powered-commit-composer-eliminates-git-cleanup-headaches
+19. 5 tips and tricks when using GitHub Copilot Workspace - The GitHub ..., accessed February 3, 2026, https://github.blog/ai-and-ml/github-copilot/5-tips-and-tricks-when-using-github-copilot-workspace/
+20. GitHub Copilot Workspace Demo | Transform issues into plans - YouTube, accessed February 3, 2026, https://www.youtube.com/watch?v=L5Xny6yehUg
+21. Multi-Agent AI Coding: 8 Parallel Developers Guide | Strike Media ..., accessed February 3, 2026, https://www.strikemedia.co/blog/multi-agent-ai-coding-workflows-parallel-development
+22. Using Git Worktrees for Multi-Feature Development with AI Agents - Nick Mitchinson, accessed February 3, 2026, https://www.nrmitchi.com/2025/10/using-git-worktrees-for-multi-feature-development-with-ai-agents/
+23. Using Git Worktree To Make Context Switching Painless | Medium, accessed February 3, 2026, https://medium.com/@raviemjala_48805/using-git-worktree-to-make-context-switching-painless-d385457b7c1b
+24. Git Worktrees are a SuperPower for Agentic Dev : r/ClaudeCode - Reddit, accessed February 3, 2026, https://www.reddit.com/r/ClaudeCode/comments/1pzczjn/git_worktrees_are_a_superpower_for_agentic_dev/
+25. Supercharge Your AI Coding Workflow: A Complete Guide to Git ..., accessed February 3, 2026, https://dev.to/bhaidar/supercharge-your-ai-coding-workflow-a-complete-guide-to-git-worktrees-with-claude-code-60m
+26. Resolve Git Merge Conflicts faster with Artificial Intelligence (AI ..., accessed February 3, 2026, https://www.arcadsoftware.com/discover/resources/blog/resolve-git-merge-conflicts-faster-with-artificial-intelligence-ai/
+27. MERGEBERT: PROGRAM MERGE CONFLICT RESOLU- TION VIA NEURAL TRANSFORMERS - OpenReview, accessed February 3, 2026, https://openreview.net/pdf?id=WXwg_9eRQ0T
+28. I got tired of my AI agents overwriting each other's code, so I built a conflict manager for them, accessed February 3, 2026, https://www.reddit.com/r/opencodeCLI/comments/1qqj0at/i_got_tired_of_my_ai_agents_overwriting_each/
+29. Report: Graphite Business Breakdown & Founding Story | Contrary Research, accessed February 3, 2026, https://research.contrary.com/company/graphite
+30. Debugging with `git bisect`: Identifying the commit that introduced a bug - Graphite, accessed February 3, 2026, https://graphite.com/guides/git-bisect-debugging-guide
+31. Automated debugging with git bisect and rspec - DEV Community, accessed February 3, 2026, https://dev.to/emilysamp/how-to-run-an-automated-git-bisect-with-rspec-3dm3
+32. Master Git Bisect to Find the Exact Commit That Broke Your Code ..., accessed February 3, 2026, https://gun.io/news/2025/05/git-bisect-debugging-guide/
+33. My Journey Refactoring Code and Rebase with Git - DEV Community, accessed February 3, 2026, https://dev.to/hsachdeva9/my-journey-refactoring-code-and-rebase-with-git-3hek
+34. Git interactive rebase, squash, amend and other ways of rewriting history - Thoughtbot, accessed February 3, 2026, https://thoughtbot.com/blog/git-interactive-rebase-squash-amend-rewriting-history
+35. Why CI/CD Is the Secret to Unlocking Vibe Coding at Scale -, accessed February 3, 2026, https://infosprint.com/blog/why-ci-cd-is-the-secret-to-unlocking-vibe-coding-at-scale/
+36. Secure Vibe Coding Guide | Become a Citizen Developer | CSA, accessed February 3, 2026, https://cloudsecurityalliance.org/blog/2025/04/09/secure-vibe-coding-guide
+37. Using AI-generated code safely (Vibe coding security), accessed February 3, 2026, https://beaglesecurity.com/blog/article/using-ai-generated-code-safely.html
+38. Vibe Coding best practices : r/vibecoding - Reddit, accessed February 3, 2026, https://www.reddit.com/r/vibecoding/comments/1o3pggr/vibe_coding_best_practices/
+39. Using an LLM in GitHub Actions - Anthony Shaw, accessed February 3, 2026, https://tonybaloney.github.io/posts/using-llm-in-github-actions.html
+40. AI Content Review for your GitHub Pull Requests - Cortex Click, accessed February 3, 2026, https://www.cortexclick.com/blog/the-cortex-click-github-app
+41. Use of LLM in PR review - good, bad and ugly : r/ExperiencedDevs - Reddit, accessed February 3, 2026, https://www.reddit.com/r/ExperiencedDevs/comments/17ajzfd/use_of_llm_in_pr_review_good_bad_and_ugly/
+42. git-ai/specs/git_ai_standard_v3.0.0.md at main - GitHub, accessed February 3, 2026, https://github.com/git-ai-project/git-ai/blob/main/specs/git_ai_standard_v3.0.0.md

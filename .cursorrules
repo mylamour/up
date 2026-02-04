@@ -1,0 +1,39 @@
+# Cursor Rules
+
+## Project Overview
+
+This project uses the up-cli scaffolding system with three integrated skills:
+- `/docs` - Documentation management
+- `/learn` - Research and PRD generation  
+- `/product-loop` - SESRC development workflow
+
+## Quick Reference
+
+| Action | Command |
+|--------|---------|
+| Analyze project | `/learn auto` |
+| Start dev loop | `/product-loop` |
+| Create docs | `/docs new [type]` |
+| Check status | `/product-loop status` |
+
+## Rules Location
+
+See `.cursor/rules/` for detailed rules:
+- `main.md` - General project rules
+- `python.md` - Python standards
+- `typescript.md` - TypeScript standards
+- `docs.md` - Documentation standards
+- `tests.md` - Testing standards
+
+## Context Files
+
+1. `docs/CONTEXT.md` - Current project state
+2. `docs/INDEX.md` - Documentation index
+3. `docs/handoff/LATEST.md` - Last session handoff
+
+## Workflow
+
+1. Read context files first
+2. Use appropriate skill commands
+3. Test changes before committing
+4. Update handoff at session end

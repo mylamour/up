@@ -53,10 +53,11 @@ def is_valid_path(s: str) -> bool:
     return any(s.startswith(ind) or ind in s for ind in path_indicators)
 
 
-def learn_self_improvement(workspace: Path) -> dict:
+def learn_self_improvement(workspace: Path, use_ai: bool = True) -> dict:
     """Analyze current project for self-improvement opportunities.
     
     This is called when `up learn` is used without arguments.
+    Uses AI by default for deeper insights, with basic analysis as fallback.
     """
     console.print(Panel.fit(
         "[bold blue]Learning System[/] - Self-Improvement Analysis",
@@ -130,10 +131,11 @@ def learn_self_improvement(workspace: Path) -> dict:
     return improvements
 
 
-def learn_from_topic(workspace: Path, topic: str) -> dict:
+def learn_from_topic(workspace: Path, topic: str, use_ai: bool = True) -> dict:
     """Learn in a specific direction provided by the user.
     
     This is called when `up learn "topic"` is used.
+    Uses AI by default for research generation, with basic analysis as fallback.
     """
     console.print(Panel.fit(
         f"[bold blue]Learning System[/] - Focused Learning: {topic}",
@@ -152,9 +154,19 @@ def learn_from_topic(workspace: Path, topic: str) -> dict:
         },
         "learning_areas": [],
         "action_items": [],
+        "ai_research": None,
     }
     
-    # Map topic to relevant areas
+    # Try AI-powered research first
+    if use_ai:
+        cli_name, cli_available = check_ai_cli()
+        if cli_available:
+            console.print(f"\n[yellow]Researching with {cli_name}...[/]")
+            ai_result = _ai_research_topic(workspace, topic, profile, cli_name)
+            if ai_result:
+                learning["ai_research"] = ai_result
+    
+    # Map topic to relevant areas (fallback or supplement)
     topic_lower = topic.lower()
     
     # Categorize the topic
@@ -195,17 +207,22 @@ def learn_from_topic(workspace: Path, topic: str) -> dict:
         f"Create improvement plan for {topic}",
     ]
     
-    # Display
-    console.print("\n[bold]Learning Focus:[/]")
-    console.print(f"  Topic: [cyan]{topic}[/]")
-    
-    console.print("\n[bold]Areas to Research:[/]")
-    for area in learning["learning_areas"][:5]:
-        console.print(f"  • {area}")
-    
-    console.print("\n[bold]Action Items:[/]")
-    for item in learning["action_items"]:
-        console.print(f"  □ {item}")
+    # Display AI research if available
+    if learning.get("ai_research"):
+        console.print("\n[green]✓ AI Research Complete[/]")
+        console.print(Panel(learning["ai_research"], title=f"Research: {topic}", border_style="green"))
+    else:
+        # Show basic analysis
+        console.print("\n[bold]Learning Focus:[/]")
+        console.print(f"  Topic: [cyan]{topic}[/]")
+        
+        console.print("\n[bold]Areas to Research:[/]")
+        for area in learning["learning_areas"][:5]:
+            console.print(f"  • {area}")
+        
+        console.print("\n[bold]Action Items:[/]")
+        for item in learning["action_items"]:
+            console.print(f"  □ {item}")
     
     # Save learning plan
     skill_dir = find_skill_dir(workspace, "learning-system")
@@ -217,31 +234,35 @@ def learn_from_topic(workspace: Path, topic: str) -> dict:
     safe_topic = re.sub(r'[^\w\s-]', '', topic).strip().replace(' ', '_').lower()
     research_file = research_dir / f"{date.today().isoformat()}_{safe_topic}.md"
     
+    # Include AI research in the file
+    ai_section = ""
+    if learning.get("ai_research"):
+        ai_section = f"""## AI Research
+
+{learning["ai_research"]}
+
+---
+
+"""
+    
     research_content = f"""# Learning: {topic}
 
 **Created**: {date.today().isoformat()}
-**Status**: 📋 In Progress
+**Status**: {"✅ Researched" if learning.get("ai_research") else "📋 In Progress"}
+**Method**: {"AI-powered" if learning.get("ai_research") else "Basic analysis"}
 
 ## Context
 
 Project languages: {', '.join(profile.get('languages', ['N/A']))}
 Project frameworks: {', '.join(profile.get('frameworks', ['N/A']))}
 
-## Learning Areas
+{ai_section}## Learning Areas
 
 {chr(10).join(f'- [ ] {area}' for area in learning['learning_areas'])}
-
-## Research Notes
-
-*Add your research notes here*
 
 ## Action Items
 
 {chr(10).join(f'- [ ] {item}' for item in learning['action_items'])}
-
-## Learnings
-
-*Document what you learn*
 
 ## Applied Changes
 
@@ -255,17 +276,17 @@ Project frameworks: {', '.join(profile.get('frameworks', ['N/A']))}
     _record_topic_learning(workspace, learning)
     
     console.print("\n[bold]Next Steps:[/]")
-    console.print(f"  1. Edit [cyan]{research_file}[/] to add your research")
-    console.print("  2. Run [cyan]up learn analyze[/] to extract patterns")
+    console.print(f"  1. Review [cyan]{research_file}[/]")
+    console.print("  2. Run [cyan]up learn analyze[/] to process all research")
     console.print("  3. Run [cyan]up learn plan[/] to generate improvement PRD")
     
     return learning
 
 
-def learn_from_file(workspace: Path, file_path: str) -> dict:
+def learn_from_file(workspace: Path, file_path: str, use_ai: bool = True) -> dict:
     """Learn from a single file (markdown, code, config, etc.).
     
-    This extracts insights, patterns, and knowledge from individual files.
+    Uses AI by default for deep analysis, with basic extraction as fallback.
     """
     source_file = Path(file_path).expanduser().resolve()
     
@@ -295,9 +316,21 @@ def learn_from_file(workspace: Path, file_path: str) -> dict:
         "best_practices": [],
         "code_snippets": [],
         "action_items": [],
+        "ai_analysis": None,
     }
     
-    # Analyze based on file type
+    # Try AI analysis first
+    ai_success = False
+    if use_ai:
+        cli_name, cli_available = check_ai_cli()
+        if cli_available:
+            console.print(f"\n[yellow]Analyzing with {cli_name}...[/]")
+            ai_result = _ai_analyze_file(workspace, content, source_file.name, cli_name)
+            if ai_result:
+                learnings["ai_analysis"] = ai_result
+                ai_success = True
+    
+    # Always do basic extraction (supplements AI or provides fallback)
     if file_ext in ['.md', '.markdown', '.txt', '.rst']:
         learnings = _analyze_documentation_file(content, learnings)
     elif file_ext in ['.py']:
@@ -314,25 +347,31 @@ def learn_from_file(workspace: Path, file_path: str) -> dict:
     console.print(f"[bold]Type:[/] {file_ext or 'unknown'}")
     console.print(f"[bold]Size:[/] {len(content)} characters, {len(content.splitlines())} lines")
     
-    if learnings["key_concepts"]:
-        console.print("\n[green]📚 Key Concepts:[/]")
-        for c in learnings["key_concepts"][:10]:
-            console.print(f"  • {c}")
-    
-    if learnings["patterns_found"]:
-        console.print("\n[blue]🔷 Patterns Found:[/]")
-        for p in learnings["patterns_found"][:10]:
-            console.print(f"  • {p}")
-    
-    if learnings["best_practices"]:
-        console.print("\n[yellow]✨ Best Practices:[/]")
-        for b in learnings["best_practices"][:10]:
-            console.print(f"  • {b}")
-    
-    if learnings["code_snippets"]:
-        console.print("\n[cyan]💻 Notable Code Patterns:[/]")
-        for s in learnings["code_snippets"][:5]:
-            console.print(f"  • {s}")
+    # Show AI analysis if available
+    if learnings.get("ai_analysis"):
+        console.print("\n[green]✓ AI Analysis Complete[/]")
+        console.print(Panel(learnings["ai_analysis"], title="AI Insights", border_style="green"))
+    else:
+        # Show basic extraction results
+        if learnings["key_concepts"]:
+            console.print("\n[green]📚 Key Concepts:[/]")
+            for c in learnings["key_concepts"][:10]:
+                console.print(f"  • {c}")
+        
+        if learnings["patterns_found"]:
+            console.print("\n[blue]🔷 Patterns Found:[/]")
+            for p in learnings["patterns_found"][:10]:
+                console.print(f"  • {p}")
+        
+        if learnings["best_practices"]:
+            console.print("\n[yellow]✨ Best Practices:[/]")
+            for b in learnings["best_practices"][:10]:
+                console.print(f"  • {b}")
+        
+        if learnings["code_snippets"]:
+            console.print("\n[cyan]💻 Notable Code Patterns:[/]")
+            for s in learnings["code_snippets"][:5]:
+                console.print(f"  • {s}")
     
     # Save learnings
     skill_dir = find_skill_dir(workspace, "learning-system")
@@ -346,13 +385,26 @@ def learn_from_file(workspace: Path, file_path: str) -> dict:
     
     # Create markdown summary
     summary_file = learnings_dir / f"{date.today().isoformat()}_{safe_name}.md"
+    
+    # Include AI analysis if available
+    ai_section = ""
+    if learnings.get("ai_analysis"):
+        ai_section = f"""## AI Analysis
+
+{learnings["ai_analysis"]}
+
+---
+
+"""
+    
     summary_content = f"""# Learnings from: {source_file.name}
 
 **Analyzed**: {date.today().isoformat()}
 **Source**: `{source_file}`
 **Type**: {file_ext or 'unknown'}
+**Method**: {"AI-powered" if learnings.get("ai_analysis") else "Basic extraction"}
 
-## Key Concepts
+{ai_section}## Key Concepts (Basic Extraction)
 
 {chr(10).join(f'- {c}' for c in learnings['key_concepts']) or '- None extracted'}
 
@@ -364,21 +416,11 @@ def learn_from_file(workspace: Path, file_path: str) -> dict:
 
 {chr(10).join(f'- [ ] {b}' for b in learnings['best_practices']) or '- None identified'}
 
-## Code Snippets / Examples
-
-{chr(10).join(f'- {s}' for s in learnings['code_snippets']) or '- None extracted'}
-
 ## Action Items
 
-- [ ] Review extracted concepts
-- [ ] Apply relevant patterns to current project
-- [ ] Document learnings in project docs
-
-## Original Content Summary
-
-```
-{content[:500]}{'...' if len(content) > 500 else ''}
-```
+- [ ] Review insights and apply to project
+- [ ] Run `up learn analyze` to process all learnings
+- [ ] Run `up learn plan` to generate improvement PRD
 """
     summary_file.write_text(summary_content)
     
@@ -389,8 +431,8 @@ def learn_from_file(workspace: Path, file_path: str) -> dict:
     
     console.print("\n[bold]Next Steps:[/]")
     console.print(f"  1. Review [cyan]{summary_file}[/]")
-    console.print("  2. Apply relevant learnings to your project")
-    console.print("  3. Run [cyan]up learn[/] to track improvements")
+    console.print("  2. Run [cyan]up learn analyze[/] to process all research")
+    console.print("  3. Run [cyan]up learn plan[/] to generate improvement PRD")
     
     return learnings
 
@@ -637,10 +679,11 @@ def _record_file_learning(workspace: Path, learnings: dict) -> None:
         pass
 
 
-def learn_from_project(workspace: Path, project_path: str) -> dict:
+def learn_from_project(workspace: Path, project_path: str, use_ai: bool = True) -> dict:
     """Analyze external project for good design patterns.
     
     This is called when `up learn "project/path"` is used.
+    Uses AI by default for deeper comparison insights.
     """
     external_project = Path(project_path).expanduser().resolve()
     
@@ -650,7 +693,7 @@ def learn_from_project(workspace: Path, project_path: str) -> dict:
     
     # If it's a file, use file learning
     if external_project.is_file():
-        return learn_from_file(workspace, project_path)
+        return learn_from_file(workspace, project_path, use_ai=use_ai)
     
     console.print(Panel.fit(
         f"[bold blue]Learning System[/] - Learn from Project: {external_project.name}",
@@ -880,321 +923,130 @@ def check_ai_cli() -> tuple[str, bool]:
     return "", False
 
 
-def run_ai_analysis(workspace: Path, content_file: Path, source_name: str) -> tuple[str, str]:
-    """Run AI CLI (Claude or Cursor Agent) to analyze the file.
+def _run_ai_prompt(workspace: Path, prompt: str, cli_name: str, timeout: int = 180) -> str | None:
+    """Run a prompt through AI CLI and return the response.
     
     Returns:
-        (analysis_text, cli_used)
+        Response text or None if failed
     """
     import subprocess
     
-    cli_name, available = check_ai_cli()
-    if not available:
-        return "Error: No AI CLI found. Install Claude CLI or Cursor Agent.", ""
-    
-    # Read content and truncate if too large
-    content = content_file.read_text()
-    max_chars = 15000  # ~4K tokens, safe for most models
-    
-    if len(content) > max_chars:
-        # Take first and last portions
-        half = max_chars // 2
-        content = content[:half] + "\n\n[... content truncated for analysis ...]\n\n" + content[-half:]
-        truncated = True
-    else:
-        truncated = False
-    
-    prompt = f"""Analyze this document and extract:
-
-1. **Key Concepts** - Main ideas, frameworks, and mental models (list 5-10)
-2. **Patterns** - Design patterns, workflows, and methodologies  
-3. **Best Practices** - Actionable guidelines and recommendations
-4. **Implementation Ideas** - Specific ways to apply these learnings
-
-Be concise. Format with markdown headers.
-
-{"[Note: Document was truncated due to size]" if truncated else ""}
-
-Document ({source_name}):
-{content}
-"""
-    
     try:
-        # Build command based on CLI
         if cli_name == "claude":
             cmd = ["claude", "-p", prompt]
-        else:  # agent (Cursor)
+        else:
             cmd = ["agent", "-p", prompt]
         
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=180,  # 3 minute timeout
+            timeout=timeout,
             cwd=workspace
         )
         
-        if result.returncode == 0:
-            return result.stdout, cli_name
-        else:
-            return f"Error running {cli_name}: {result.stderr}", cli_name
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        return None
     except subprocess.TimeoutExpired:
-        return f"Error: {cli_name} timed out after 3 minutes. Try with a smaller file or use -d flag.", cli_name
+        console.print("[yellow]AI analysis timed out, using basic analysis[/]")
+        return None
     except Exception as e:
-        return f"Error: {e}", cli_name
+        console.print(f"[yellow]AI error: {e}, using basic analysis[/]")
+        return None
 
 
-def learn_from_file_deep(workspace: Path, file_path: str, auto_run: bool = False) -> dict:
-    """Prepare file for deep AI analysis in chat.
+def _ai_research_topic(workspace: Path, topic: str, profile: dict, cli_name: str) -> str | None:
+    """Use AI to research a topic in context of the project."""
+    languages = ", ".join(profile.get("languages", [])) or "unknown"
+    frameworks = ", ".join(profile.get("frameworks", [])) or "none"
     
-    This saves the full file content and creates an analysis request
-    that can be processed by Claude/Cursor in chat.
-    
-    If auto_run=True and Claude CLI is available, runs the analysis automatically.
-    """
-    source_file = Path(file_path).expanduser().resolve()
-    
-    if not source_file.exists():
-        console.print(f"[red]Error: File not found: {file_path}[/]")
-        return {}
-    
-    mode = "Auto Analysis" if auto_run else "Deep Analysis"
-    console.print(Panel.fit(
-        f"[bold blue]Learning System[/] - {mode}: {source_file.name}",
-        border_style="blue"
-    ))
-    
-    # Read file content
-    try:
-        content = source_file.read_text()
-    except Exception as e:
-        console.print(f"[red]Error reading file: {e}[/]")
-        return {}
-    
-    # Create deep learning directory
-    skill_dir = find_skill_dir(workspace, "learning-system")
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    deep_dir = skill_dir / "deep_analysis"
-    deep_dir.mkdir(exist_ok=True)
-    
-    # Save the full content for AI reference
-    safe_name = re.sub(r'[^\w\s-]', '', source_file.stem).strip().replace(' ', '_').lower()
-    content_file = deep_dir / f"{safe_name}_content.md"
-    
-    # Create content file with metadata
-    content_with_meta = f"""# Source: {source_file.name}
+    prompt = f"""Research the topic "{topic}" for a software project with:
+- Languages: {languages}
+- Frameworks: {frameworks}
 
-**Original Path**: `{source_file}`
-**Analyzed**: {date.today().isoformat()}
-**Size**: {len(content)} characters, {len(content.splitlines())} lines
+Provide:
+1. **Key Concepts** - Main ideas to understand (3-5 items)
+2. **Best Practices** - Actionable recommendations (3-5 items)  
+3. **Implementation Steps** - How to implement in this stack (3-5 steps)
+4. **Common Pitfalls** - What to avoid (2-3 items)
 
----
+Be concise and practical. Format with markdown."""
 
+    return _run_ai_prompt(workspace, prompt, cli_name, timeout=120)
+
+
+def _ai_analyze_file(workspace: Path, content: str, filename: str, cli_name: str) -> str | None:
+    """Use AI to analyze a file and extract insights."""
+    # Truncate if too large
+    max_chars = 12000
+    if len(content) > max_chars:
+        half = max_chars // 2
+        content = content[:half] + "\n\n[... content truncated ...]\n\n" + content[-half:]
+        truncated = True
+    else:
+        truncated = False
+    
+    prompt = f"""Analyze this file and extract actionable insights:
+
+1. **Key Concepts** - Main ideas and knowledge (5-8 items)
+2. **Patterns** - Design patterns, workflows, methodologies
+3. **Best Practices** - Actionable recommendations to apply
+4. **Implementation Ideas** - How to use these learnings
+
+{"[Note: File was truncated due to size]" if truncated else ""}
+
+File ({filename}):
 {content}
-"""
-    content_file.write_text(content_with_meta)
-    
-    # Create analysis request file
-    request_file = deep_dir / f"{safe_name}_analysis_request.md"
-    request_content = f"""# Deep Analysis Request: {source_file.name}
 
-**Status**: 🔄 Pending AI Analysis
-**Created**: {date.today().isoformat()}
+Be concise. Format with markdown headers."""
 
-## Source File
-`{content_file}`
-
-## Analysis Instructions
-
-Please analyze the source file and extract:
-
-1. **Key Concepts** - Main ideas, frameworks, and mental models
-2. **Patterns** - Design patterns, workflows, and best practices
-3. **Actionable Insights** - What can be applied to this project
-4. **Implementation Ideas** - Specific ways to use these learnings
-
-## How to Analyze
-
-In chat, use one of these approaches:
-
-### Option A: Reference the file
-```
-@{content_file.relative_to(workspace)}
-Please do a deep analysis of this document and extract key concepts and patterns.
-```
-
-### Option B: Use the learn-deep command
-```
-/learn-deep {safe_name}
-```
-
-## Analysis Output
-
-*AI will fill this section after analysis*
-
----
-"""
-    request_file.write_text(request_content)
-    
-    # Display results
-    console.print(f"\n[bold]File:[/] {source_file.name}")
-    console.print(f"[bold]Size:[/] {len(content)} characters, {len(content.splitlines())} lines")
-    
-    console.print(f"\n[green]✓[/] Content saved to: [cyan]{content_file.relative_to(workspace)}[/]")
-    
-    # Auto-run with AI CLI if requested
-    if auto_run:
-        cli_name, cli_available = check_ai_cli()
-        if not cli_available:
-            console.print("\n[red]Error: No AI CLI found.[/]")
-            console.print("Install one of:")
-            console.print("  • Claude CLI: [cyan]npm install -g @anthropic-ai/claude-code[/]")
-            console.print("  • Cursor Agent: (comes with Cursor IDE)")
-            console.print("\nOr use [cyan]up learn -d \"file\"[/] for manual analysis.")
-            return {}
-        
-        console.print(f"\n[yellow]Running {cli_name} for analysis...[/]")
-        console.print("[dim](This may take 30-60 seconds)[/]")
-        
-        analysis, cli_used = run_ai_analysis(workspace, content_file, source_file.name)
-        
-        # Save analysis result
-        analysis_file = deep_dir / f"{safe_name}_analysis.md"
-        analysis_content = f"""# Analysis: {source_file.name}
-
-**Analyzed**: {date.today().isoformat()}
-**Source**: `{source_file}`
-**Method**: {cli_used} CLI (automatic)
-
----
-
-{analysis}
-
----
-
-## What's Next?
-
-1. **Review the analysis** - Check the key concepts and patterns above
-2. **Apply learnings** - Use insights to improve your project
-3. **Track progress** - Run `up learn` to see improvements over time
-4. **Generate PRD** - Run `up learn plan` to create improvement tasks
-"""
-        analysis_file.write_text(analysis_content)
-        
-        console.print(f"\n[green]✓[/] Analysis saved to: [cyan]{analysis_file.relative_to(workspace)}[/]")
-        
-        # Display the analysis
-        console.print("\n" + "─" * 60)
-        console.print(f"[bold green]📊 Analysis Result (via {cli_used}):[/]")
-        console.print("─" * 60)
-        console.print(analysis)
-        console.print("─" * 60)
-        
-        # Show what's next
-        console.print("\n[bold]What's Next?[/]")
-        console.print(f"  1. Review: [cyan]@{analysis_file.relative_to(workspace)}[/] in chat")
-        console.print("  2. Apply: Use insights to improve your project")
-        console.print("  3. Track: Run [cyan]up learn[/] to measure improvements")
-        console.print("  4. Plan: Run [cyan]up learn plan[/] to create improvement tasks")
-        
-        # Record to memory
-        try:
-            from up.memory import MemoryManager
-            manager = MemoryManager(workspace, use_vectors=False)
-            manager.record_learning(f"Deep analysis completed for: {source_file.name} via {cli_used}")
-        except Exception:
-            pass
-        
-        return {
-            "source_file": str(source_file),
-            "content_file": str(content_file),
-            "analysis_file": str(analysis_file),
-            "analysis": analysis,
-            "cli_used": cli_used,
-        }
-    
-    # Manual mode: show prompt to copy
-    console.print(f"[green]✓[/] Request saved to: [cyan]{request_file.relative_to(workspace)}[/]")
-    
-    relative_content = content_file.relative_to(workspace)
-    
-    console.print("\n" + "─" * 60)
-    console.print("[bold yellow]📋 Copy this to chat for deep AI analysis:[/]")
-    console.print("─" * 60)
-    
-    prompt = f"""@{relative_content}
-
-Please analyze this document deeply and extract:
-1. Key concepts and mental models
-2. Design patterns and best practices  
-3. Actionable insights for this project
-4. Specific implementation ideas
-
-Format as a structured summary I can reference later."""
-    
-    console.print(f"\n[cyan]{prompt}[/]")
-    console.print("\n" + "─" * 60)
-    
-    console.print("\n[dim]Tip: Use [cyan]up learn --run \"file\"[/] to auto-analyze with Claude CLI[/]")
-    
-    # Record to memory
-    try:
-        from up.memory import MemoryManager
-        manager = MemoryManager(workspace, use_vectors=False)
-        manager.record_learning(f"Queued deep analysis for: {source_file.name}")
-    except Exception:
-        pass
-    
-    return {
-        "source_file": str(source_file),
-        "content_file": str(content_file),
-        "request_file": str(request_file),
-        "prompt": prompt,
-    }
+    return _run_ai_prompt(workspace, prompt, cli_name, timeout=180)
 
 
 @click.group(invoke_without_command=True)
 @click.argument("topic_or_path", required=False)
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-@click.option("--deep", "-d", is_flag=True, help="Prepare for deep AI analysis in chat")
-@click.option("--run", "-r", is_flag=True, help="Auto-run analysis with Claude/Cursor CLI")
-@click.option("--auto", "-a", is_flag=True, help="Auto mode for analyze subcommand")
+@click.option("--no-ai", is_flag=True, help="Disable AI analysis (use basic extraction only)")
 @click.pass_context
-def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool, auto: bool):
+def learn_cmd(ctx, topic_or_path: str, workspace: str, no_ai: bool):
     """Learning system - analyze, research, and improve.
+    
+    All commands use Claude/Cursor AI by default with automatic fallback.
     
     \b
     Usage:
       up learn                    Auto-analyze and improve (requires vision map)
       up learn "topic"            Learn about a specific topic/feature
-      up learn "file.md"          Quick extraction from file
-      up learn -d "file.md"       Prepare for deep AI analysis in chat
-      up learn -r "file.md"       Auto-analyze with Claude/Cursor CLI
+      up learn "file.md"          Analyze file with AI (fallback: basic extraction)
+      up learn "project/path"     Compare and learn from another project
     
     \b
     Subcommands:
       up learn auto               Analyze project (no vision check)
-      up learn analyze            Show research files
-      up learn -a analyze         Auto-analyze with AI + progress bar
+      up learn analyze            Analyze all research files with AI
       up learn plan               Generate improvement PRD
       up learn status             Show learning system status
     
     \b
+    Options:
+      --no-ai                     Disable AI analysis (faster, basic extraction)
+    
+    \b
     Examples:
-      up learn                    # Self-improvement analysis
-      up learn "caching"          # Learn about caching
-      up learn "guide.md"         # Quick extraction
-      up learn -d "guide.md"      # Deep AI analysis (copy prompt to chat)
-      up learn -r "guide.md"      # Auto-analyze with Claude/Cursor CLI
+      up learn                    # Self-improvement with AI
+      up learn "caching"          # Learn about caching with AI research
+      up learn "guide.md"         # AI-powered file analysis
+      up learn "../other-project" # Compare projects with AI insights
     """
     # If subcommand invoked, skip main logic
     if ctx.invoked_subcommand is not None:
         return
     
-    # Store auto flag in context for subcommands
+    # Store options in context for subcommands
     ctx.ensure_object(dict)
-    ctx.obj['auto'] = auto
     ctx.obj['workspace'] = workspace
+    ctx.obj['no_ai'] = no_ai
     
     # Check if topic_or_path is actually a subcommand name
     # This happens because Click processes arguments before subcommands
@@ -1202,13 +1054,11 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool, au
     if topic_or_path in subcommands:
         # Invoke the subcommand with stored options
         subcmd = ctx.command.commands[topic_or_path]
-        if topic_or_path == "analyze":
-            ctx.invoke(subcmd, workspace=workspace, auto=auto)
-        else:
-            ctx.invoke(subcmd, workspace=workspace)
+        ctx.invoke(subcmd, workspace=workspace)
         return
     
     ws = Path(workspace) if workspace else Path.cwd()
+    use_ai = not no_ai
     
     # No argument: self-improvement mode
     if not topic_or_path:
@@ -1233,19 +1083,14 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool, au
             return
         
         # Vision exists, run self-improvement
-        learn_self_improvement(ws)
+        learn_self_improvement(ws, use_ai=use_ai)
         return
     
     # Has argument: determine if topic or path
     if is_valid_path(topic_or_path):
-        # Check if it's a file and deep/run mode is requested
-        target_path = Path(topic_or_path).expanduser()
-        if target_path.is_file() and (deep or run):
-            learn_from_file_deep(ws, topic_or_path, auto_run=run)
-        else:
-            learn_from_project(ws, topic_or_path)
+        learn_from_project(ws, topic_or_path, use_ai=use_ai)
     else:
-        learn_from_topic(ws, topic_or_path)
+        learn_from_topic(ws, topic_or_path, use_ai=use_ai)
 
 
 @learn_cmd.command("auto")
@@ -1344,14 +1189,11 @@ Research file ({file_path.name}):
 
 @learn_cmd.command("analyze")
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-@click.option("--auto", "-a", is_flag=True, help="Auto-analyze with AI CLI (shows progress)")
-def learn_analyze(workspace: str, auto: bool):
-    """Analyze all research files and extract patterns.
+def learn_analyze(workspace: str):
+    """Analyze all research files and extract patterns with AI.
     
-    \b
-    Usage:
-      up learn analyze          Show research files (manual mode)
-      up learn analyze --auto   Auto-analyze with AI CLI + progress bar
+    Uses Claude/Cursor AI by default with automatic progress bar.
+    Falls back to showing files if AI is unavailable.
     """
     from tqdm import tqdm
     
@@ -1360,6 +1202,7 @@ def learn_analyze(workspace: str, auto: bool):
     skill_dir = find_skill_dir(ws, "learning-system")
     research_dir = skill_dir / "research"
     deep_dir = skill_dir / "deep_analysis"
+    file_learnings_dir = skill_dir / "file_learnings"
     insights_dir = skill_dir / "insights"
     
     # Collect all analyzable files
@@ -1369,12 +1212,14 @@ def learn_analyze(workspace: str, auto: bool):
         files_to_analyze.extend(list(research_dir.glob("*.md")))
     
     if deep_dir.exists():
-        # Include content files from deep analysis
         files_to_analyze.extend(list(deep_dir.glob("*_content.md")))
+    
+    if file_learnings_dir.exists():
+        files_to_analyze.extend(list(file_learnings_dir.glob("*.md")))
     
     if not files_to_analyze:
         console.print("[yellow]No research or learning files found.[/]")
-        console.print("Run [cyan]up learn \"topic\"[/] or [cyan]up learn -r \"file\"[/] first.")
+        console.print("Run [cyan]up learn \"topic\"[/] or [cyan]up learn \"file.md\"[/] first.")
         return
     
     console.print(Panel.fit(
@@ -1386,20 +1231,15 @@ def learn_analyze(workspace: str, auto: bool):
     for f in files_to_analyze:
         console.print(f"  • {f.name}")
     
-    if not auto:
-        # Manual mode - just show files
-        console.print("\n[bold]To auto-analyze with AI:[/]")
-        console.print("  Run [cyan]up learn analyze --auto[/]")
-        console.print("\n[bold]Or manually analyze and update:[/]")
-        console.print(f"  • [cyan]{insights_dir}/patterns.md[/]")
-        console.print(f"  • [cyan]{insights_dir}/gap-analysis.md[/]")
-        return
-    
-    # Auto mode - analyze with AI CLI
+    # Check AI availability
     cli_name, cli_available = check_ai_cli()
     if not cli_available:
-        console.print("\n[red]Error: No AI CLI found.[/]")
-        console.print("Install Claude CLI or Cursor Agent to use --auto")
+        # Fallback mode - just show files
+        console.print("\n[yellow]No AI CLI available. Showing files for manual review.[/]")
+        console.print("\n[bold]Install Claude CLI or Cursor Agent for automatic analysis.[/]")
+        console.print("\n[bold]Manual analysis:[/]")
+        console.print(f"  Update [cyan]{insights_dir}/patterns.md[/]")
+        console.print(f"  Update [cyan]{insights_dir}/gap-analysis.md[/]")
         return
     
     console.print(f"\n[yellow]Analyzing with {cli_name}...[/]")

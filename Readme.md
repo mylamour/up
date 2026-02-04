@@ -47,13 +47,13 @@ up dashboard
 | `up dashboard` | Live interactive health dashboard |
 | `up sync` | Sync all systems (memory, docs) |
 | `up hooks` | Install/manage git hooks for auto-sync |
-| `up learn` | Auto-improve project (requires vision map) |
-| `up learn "topic"` | Learn about specific topic/feature |
-| `up learn "path"` | Learn from project or file (quick extraction) |
-| `up learn -d "file"` | Deep AI analysis (prepare prompt for chat) |
-| `up learn -r "file"` | Auto-analyze with Claude/Cursor CLI |
-| `up learn auto` | Analyze project (no vision check) |
+| `up learn` | Auto-improve project with AI (requires vision map) |
+| `up learn "topic"` | Learn about specific topic with AI research |
+| `up learn "file.md"` | Analyze file with AI (auto-fallback to basic) |
+| `up learn "path"` | Compare and learn from another project |
+| `up learn analyze` | Analyze all research files with AI + progress bar |
 | `up learn plan` | Generate improvement PRD |
+| `up learn --no-ai` | Disable AI (faster, basic extraction only) |
 | `up memory search <query>` | Semantic search in memory |
 | `up memory sync` | Index git commits and files |
 | `up memory branch` | Show branch-specific knowledge |
@@ -132,11 +132,13 @@ up status --json
 
 ### Using the Learn System
 
+All learn commands use Claude/Cursor AI by default with automatic fallback.
+
 ```bash
 # Self-improvement analysis (requires configured vision map)
 up learn
 
-# Learn about a specific topic
+# Learn about a specific topic (AI-powered research)
 up learn "caching strategies"
 up learn "authentication"
 up learn "testing best practices"
@@ -145,18 +147,12 @@ up learn "testing best practices"
 up learn "../other-project"
 up learn "~/projects/reference-app"
 
-# Learn from a file (markdown, code, config)
+# Learn from a file (AI-powered analysis)
 up learn "docs/architecture.md"
-up learn "src/utils.py"
-up learn "package.json"
+up learn "guide.txt"
 
-# Deep AI analysis (prepare for chat)
-up learn -d "docs/guide.md"
-# Then copy the prompt to chat for AI to analyze deeply
-
-# Auto-analyze with Claude CLI or Cursor Agent
-up learn -r "docs/guide.md"
-# Runs claude or agent CLI automatically and saves analysis
+# Analyze all research files with AI + progress bar
+up learn analyze
 
 # Auto-analyze without vision map requirement
 up learn auto
@@ -166,14 +162,17 @@ up learn status
 
 # Generate a PRD from analysis
 up learn plan
+
+# Disable AI for faster basic extraction
+up learn --no-ai "docs/guide.md"
 ```
 
-The learn system has five modes:
-- **Self-improvement** (`up learn`): Analyzes current project and tracks improvements over time. Requires a configured `docs/roadmap/vision/PRODUCT_VISION.md`.
-- **Topic learning** (`up learn "topic"`): Creates research files for specific topics based on your project's tech stack.
-- **File learning** (`up learn "path"`): Quick extraction from files or projects using regex patterns.
-- **Deep analysis** (`up learn -d "file"`): Prepares file for deep AI analysis - generates a prompt to copy into chat.
-- **Auto analysis** (`up learn -r "file"`): Automatically runs Claude CLI to analyze the file and saves the result.
+The learn system uses AI by default:
+- **Self-improvement** (`up learn`): Analyzes current project with AI insights. Requires a configured `docs/roadmap/vision/PRODUCT_VISION.md`.
+- **Topic learning** (`up learn "topic"`): AI-powered research for specific topics based on your project's tech stack.
+- **File learning** (`up learn "file.md"`): AI analysis of files with automatic fallback to basic extraction.
+- **Batch analysis** (`up learn analyze`): Process all research files with AI and tqdm progress bar.
+- **Basic mode** (`--no-ai`): Skip AI for faster basic regex extraction.
 
 ### Using the Product Loop
 
