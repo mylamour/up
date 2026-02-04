@@ -14,29 +14,35 @@ from rich.table import Table
 from tqdm import tqdm
 
 from up.ai_cli import check_ai_cli, run_ai_task, get_ai_cli_install_instructions
+from up.core.state import get_state_manager, StateManager
+from up.core.checkpoint import (
+    get_checkpoint_manager,
+    CheckpointManager,
+    NotAGitRepoError,
+)
 
 console = Console()
 
 # Global state for interrupt handling
-_current_state = None
+_state_manager: StateManager = None
+_checkpoint_manager: CheckpointManager = None
 _current_workspace = None
-_current_checkpoint = None
 
 
 def _handle_interrupt(signum, frame):
     """Handle Ctrl+C interrupt - save state and checkpoint info."""
     console.print("\n\n[yellow]Interrupted! Saving state...[/]")
     
-    if _current_state and _current_workspace:
-        _current_state["phase"] = "INTERRUPTED"
-        _current_state["interrupted_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-        if _current_checkpoint:
-            _current_state["last_checkpoint"] = _current_checkpoint
-        _save_loop_state(_current_workspace, _current_state)
-        console.print(f"[green]✓[/] State saved to .loop_state.json")
-        console.print(f"[dim]Checkpoint: {_current_checkpoint or 'none'}[/]")
+    if _state_manager and _current_workspace:
+        _state_manager.update_loop(
+            phase="INTERRUPTED",
+            interrupted_at=time.strftime("%Y-%m-%dT%H:%M:%S")
+        )
+        console.print(f"[green]✓[/] State saved to .up/state.json")
+        last_cp = _state_manager.state.loop.last_checkpoint
+        console.print(f"[dim]Checkpoint: {last_cp or 'none'}[/]")
         console.print("\nTo resume: [cyan]up start --resume[/]")
-        console.print("To rollback: [cyan]git checkout .[/]")
+        console.print("To rollback: [cyan]up reset[/]")
     
     sys.exit(130)  # Standard interrupt exit code
 
@@ -49,7 +55,12 @@ def _handle_interrupt(signum, frame):
 @click.option("--interactive", "-i", is_flag=True, help="Interactive mode with confirmations")
 @click.option("--no-ai", is_flag=True, help="Disable auto AI implementation")
 @click.option("--all", "run_all", is_flag=True, help="Run all tasks automatically")
-def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: bool, no_ai: bool, run_all: bool):
+@click.option("--timeout", default=600, help="AI task timeout in seconds (default: 600)")
+@click.option("--parallel", is_flag=True, help="Run tasks in parallel Git worktrees")
+@click.option("--jobs", "-j", default=3, help="Number of parallel tasks (default: 3)")
+@click.option("--auto-commit", is_flag=True, help="Auto-commit after each successful task")
+@click.option("--verify/--no-verify", default=True, help="Run tests before commit (default: True)")
+def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: bool, no_ai: bool, run_all: bool, timeout: int, parallel: bool, jobs: int, auto_commit: bool, verify: bool):
     """Start the product loop for autonomous development.
     
     Uses Claude/Cursor AI by default to implement tasks automatically.
@@ -69,6 +80,9 @@ def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: boo
       up start --task US-003    # Implement specific task
       up start --dry-run        # Preview mode
       up start --no-ai          # Manual mode (show instructions only)
+      up start --parallel       # Run 3 tasks in parallel worktrees
+      up start --parallel -j 5  # Run 5 tasks in parallel
+      up start --parallel --all # Run ALL tasks in parallel batches
     """
     cwd = Path.cwd()
     
@@ -128,17 +142,46 @@ def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: boo
         console.print("Run [cyan]up start --resume[/] after fixing the issue.")
         raise SystemExit(1)
     
-    # Dry run mode
+    # Interactive confirmation (before parallel or sequential)
+    if interactive and not dry_run:
+        if not click.confirm("\nStart the product loop?"):
+            console.print("[dim]Cancelled[/]")
+            return
+    
+    # Parallel execution mode
+    if parallel:
+        from up.parallel import run_parallel_loop
+        from up.git.worktree import is_git_repo
+        
+        if not is_git_repo(cwd):
+            console.print("\n[red]Error:[/] Parallel mode requires a Git repository.")
+            console.print("Run [cyan]git init[/] first.")
+            raise SystemExit(1)
+        
+        prd_path = cwd / (prd or task_source or "prd.json")
+        if not prd_path.exists():
+            console.print(f"\n[red]Error:[/] PRD file not found: {prd_path}")
+            console.print("Run [cyan]up learn plan[/] to generate one.")
+            raise SystemExit(1)
+        
+        console.print(f"\n[bold cyan]PARALLEL MODE[/] - {jobs} workers")
+        console.print(f"PRD: {prd_path}")
+        
+        run_parallel_loop(
+            workspace=cwd,
+            prd_path=prd_path,
+            max_workers=jobs,
+            run_all=run_all,
+            timeout=timeout,
+            dry_run=dry_run
+        )
+        return
+    
+    # Sequential dry run mode
     if dry_run:
         console.print("\n[yellow]DRY RUN MODE[/] - No changes will be made")
         _preview_loop(cwd, state, task_source, task)
         return
-    
-    # Interactive confirmation
-    if interactive:
-        if not click.confirm("\nStart the product loop?"):
-            console.print("[dim]Cancelled[/]")
-            return
     
     # Check AI availability
     use_ai = not no_ai
@@ -153,7 +196,7 @@ def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: boo
     console.print("\n[bold green]Starting product loop...[/]")
     
     if use_ai:
-        _run_ai_product_loop(cwd, state, task_source, task, cli_name, run_all)
+        _run_ai_product_loop(cwd, state, task_source, task, cli_name, run_all, timeout, auto_commit, verify, interactive)
     else:
         _run_product_loop_with_progress(cwd, state, task_source, task, resume)
 
@@ -225,31 +268,62 @@ def _find_task_source(workspace: Path, prd_path: str = None) -> str:
 
 
 def _load_loop_state(workspace: Path) -> dict:
-    """Load loop state from file."""
-    state_file = workspace / ".loop_state.json"
+    """Load loop state from unified state file.
     
-    if state_file.exists():
-        try:
-            return json.loads(state_file.read_text())
-        except json.JSONDecodeError:
-            pass
+    Returns a dict for backwards compatibility with existing code.
+    Internally uses the new StateManager.
+    """
+    manager = get_state_manager(workspace)
+    state = manager.state
     
+    # Convert to dict format for backwards compatibility
     return {
-        "version": "1.0",
-        "iteration": 0,
-        "phase": "INIT",
-        "tasks_completed": [],
-        "tasks_remaining": [],
-        "circuit_breaker": {},
-        "metrics": {"total_edits": 0, "total_rollbacks": 0, "success_rate": 1.0},
+        "version": state.version,
+        "iteration": state.loop.iteration,
+        "phase": state.loop.phase,
+        "current_task": state.loop.current_task,
+        "tasks_completed": state.loop.tasks_completed,
+        "tasks_failed": state.loop.tasks_failed,
+        "last_checkpoint": state.loop.last_checkpoint,
+        "circuit_breaker": {
+            name: {"failures": cb.failures, "state": cb.state}
+            for name, cb in state.circuit_breakers.items()
+        },
+        "metrics": {
+            "total_edits": state.metrics.total_tasks,
+            "total_rollbacks": state.metrics.total_rollbacks,
+            "success_rate": state.metrics.success_rate,
+        },
     }
 
 
 def _save_loop_state(workspace: Path, state: dict) -> None:
-    """Save loop state to file."""
-    from datetime import datetime
-    state["last_updated"] = datetime.now().isoformat()
-    (workspace / ".loop_state.json").write_text(json.dumps(state, indent=2))
+    """Save loop state to unified state file.
+    
+    Accepts dict for backwards compatibility, converts to StateManager.
+    """
+    manager = get_state_manager(workspace)
+    
+    # Update loop state from dict
+    manager.state.loop.iteration = state.get("iteration", 0)
+    manager.state.loop.phase = state.get("phase", "IDLE")
+    manager.state.loop.current_task = state.get("current_task")
+    manager.state.loop.last_checkpoint = state.get("last_checkpoint")
+    
+    if "tasks_completed" in state:
+        manager.state.loop.tasks_completed = state["tasks_completed"]
+    
+    # Update circuit breakers
+    if "circuit_breaker" in state:
+        from up.core.state import CircuitBreakerState
+        for name, cb_data in state["circuit_breaker"].items():
+            if isinstance(cb_data, dict):
+                manager.state.circuit_breakers[name] = CircuitBreakerState(
+                    failures=cb_data.get("failures", 0),
+                    state=cb_data.get("state", "CLOSED"),
+                )
+    
+    manager.save()
 
 
 def _count_tasks(workspace: Path, task_source: str) -> int:
@@ -462,16 +536,33 @@ def _run_ai_product_loop(
     task_source: str,
     specific_task: str = None,
     cli_name: str = "claude",
-    run_all: bool = False
+    run_all: bool = False,
+    timeout: int = 600,
+    auto_commit: bool = False,
+    verify: bool = True,
+    interactive: bool = False
 ):
-    """Run the product loop with AI auto-implementation."""
-    global _current_state, _current_workspace, _current_checkpoint
+    """Run the product loop with AI auto-implementation.
+    
+    Args:
+        workspace: Project root directory
+        state: Loop state dict
+        task_source: Path to PRD or task file
+        specific_task: Specific task ID to run
+        cli_name: AI CLI to use (claude, cursor)
+        run_all: Run all tasks automatically
+        timeout: AI task timeout in seconds
+        auto_commit: Commit after each successful task
+        verify: Run tests before commit
+        interactive: Ask for confirmation before commit
+    """
+    global _state_manager, _checkpoint_manager, _current_workspace
     from datetime import datetime
     
-    # Set up interrupt handler
+    # Set up state and checkpoint managers
     _current_workspace = workspace
-    _current_state = state
-    _current_checkpoint = None
+    _state_manager = get_state_manager(workspace)
+    _checkpoint_manager = get_checkpoint_manager(workspace)
     signal.signal(signal.SIGINT, _handle_interrupt)
     
     # Get all tasks
@@ -521,26 +612,67 @@ def _run_ai_product_loop(
         # Create checkpoint
         console.print("[dim]Creating checkpoint...[/]")
         checkpoint_name = f"cp-{task_id}-{state['iteration']}"
-        _current_checkpoint = checkpoint_name
-        _create_checkpoint(workspace, checkpoint_name)
+        _create_checkpoint(workspace, checkpoint_name, task_id=task_id)
         
         # Build prompt for AI
         prompt = _build_implementation_prompt(workspace, task, task_source)
         
         # Run AI
-        console.print(f"[yellow]Running {cli_name}...[/]")
-        success, output = _run_ai_implementation(workspace, prompt, cli_name)
+        console.print(f"[yellow]Running {cli_name} (timeout: {timeout}s)...[/]")
+        success, output = _run_ai_implementation(workspace, prompt, cli_name, timeout)
         
         if success:
             console.print(f"[green]✓[/] Task {task_id} implemented")
+            
+            # Phase: VERIFY
+            verification_passed = True
+            if verify:
+                console.print("\n[bold]Phase: VERIFY[/]")
+                verification_passed = _run_verification(workspace)
+                
+                if not verification_passed:
+                    console.print(f"[yellow]⚠[/] Verification failed for task {task_id}")
+                    
+                    if interactive:
+                        if not click.confirm("Continue anyway?"):
+                            console.print("[yellow]Rolling back...[/]")
+                            _rollback_checkpoint(workspace)
+                            failed += 1
+                            _state_manager.record_task_failed(task_id)
+                            continue
+                    else:
+                        console.print("[yellow]Rolling back (use --no-verify to skip)[/]")
+                        _rollback_checkpoint(workspace)
+                        failed += 1
+                        _state_manager.record_task_failed(task_id)
+                        continue
+            
             completed += 1
             
             # Mark task as complete in PRD
             _mark_task_complete(workspace, task_source, task_id)
             
-            # Update state
+            # Update state via state manager
+            _state_manager.record_task_complete(task_id)
+            
+            # Update legacy state dict for compatibility
             state["tasks_completed"] = state.get("tasks_completed", []) + [task_id]
             state["phase"] = "COMMIT"
+            
+            # Phase: COMMIT
+            if auto_commit:
+                should_commit = True
+                if interactive:
+                    console.print("\n[bold]Phase: COMMIT[/]")
+                    console.print(_get_diff_summary(workspace))
+                    should_commit = click.confirm("Commit changes?")
+                
+                if should_commit:
+                    commit_msg = f"feat({task_id}): {task_title}"
+                    _commit_changes(workspace, commit_msg)
+                    console.print(f"[green]✓[/] Committed: {commit_msg}")
+            else:
+                console.print(f"[dim]Changes staged (use --auto-commit to commit automatically)[/]")
         else:
             console.print(f"[red]✗[/] Task {task_id} failed")
             console.print(f"[dim]{output[:200]}...[/]" if len(output) > 200 else f"[dim]{output}[/]")
@@ -548,24 +680,34 @@ def _run_ai_product_loop(
             
             # Rollback
             console.print("[yellow]Rolling back...[/]")
-            _rollback_checkpoint(workspace, checkpoint_name)
+            _rollback_checkpoint(workspace)
             
-            # Update circuit breaker
-            cb = state.get("circuit_breaker", {})
-            cb["failures"] = cb.get("failures", 0) + 1
-            if cb["failures"] >= 3:
-                cb["state"] = "OPEN"
+            # Update circuit breaker and doom loop detection
+            _state_manager.record_task_failed(task_id)
+            
+            # Check for doom loop
+            is_doom, doom_msg = _state_manager.check_doom_loop()
+            if is_doom:
+                console.print(f"[red]{doom_msg}[/]")
+            
+            # Check circuit breaker
+            cb = _state_manager.state.get_circuit_breaker("task")
+            cb.record_failure()
+            if cb.is_open():
                 console.print("[red]Circuit breaker OPEN - stopping loop[/]")
-                state["circuit_breaker"] = cb
-                _save_loop_state(workspace, state)
+                _state_manager.save()
                 break
-            state["circuit_breaker"] = cb
+            
+            # Update legacy state dict for compatibility
+            state["circuit_breaker"] = {
+                "failures": cb.failures,
+                "state": cb.state
+            }
         
         _save_loop_state(workspace, state)
     
     # Reset interrupt handler
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    _current_checkpoint = None
     
     # Summary
     console.print(f"\n{'─' * 50}")
@@ -578,10 +720,19 @@ def _run_ai_product_loop(
     ))
     
     if completed > 0:
-        console.print("\n[bold]Next Steps:[/]")
-        console.print("  1. Review changes: [cyan]git diff[/]")
-        console.print("  2. Run tests: [cyan]pytest[/]")
-        console.print("  3. Commit if satisfied: [cyan]git commit -am 'Implement tasks'[/]")
+        if auto_commit:
+            console.print("\n[green]✓[/] All changes committed automatically")
+        else:
+            console.print("\n[bold]Next Steps:[/]")
+            console.print("  1. Review changes: [cyan]up diff[/] or [cyan]git diff[/]")
+            console.print("  2. Run tests: [cyan]pytest[/]")
+            console.print("  3. Commit if satisfied: [cyan]git commit -am 'Implement tasks'[/]")
+            console.print("\n  [dim]Tip: Use --auto-commit to commit automatically after each task[/]")
+    
+    if failed > 0:
+        console.print("\n[bold]Recovery Options:[/]")
+        console.print("  • Reset to last checkpoint: [cyan]up reset[/]")
+        console.print("  • View checkpoint history: [cyan]up status[/]")
 
 
 def _build_implementation_prompt(workspace: Path, task: dict, task_source: str) -> str:
@@ -619,35 +770,46 @@ Requirements:
 Implement this task now. Make the necessary code changes."""
 
 
-def _run_ai_implementation(workspace: Path, prompt: str, cli_name: str) -> tuple[bool, str]:
+def _run_ai_implementation(workspace: Path, prompt: str, cli_name: str, timeout: int = 600) -> tuple[bool, str]:
     """Run AI CLI to implement the task."""
-    return run_ai_task(workspace, prompt, cli_name, timeout=300)
+    return run_ai_task(workspace, prompt, cli_name, timeout=timeout)
 
 
-def _create_checkpoint(workspace: Path, name: str) -> bool:
-    """Create a git stash checkpoint."""
+def _create_checkpoint(workspace: Path, name: str, task_id: str = None) -> bool:
+    """Create a git checkpoint using the unified CheckpointManager.
+    
+    Args:
+        workspace: Project root directory
+        name: Checkpoint name/message
+        task_id: Associated task ID
+    
+    Returns:
+        True if checkpoint created successfully
+    """
     try:
-        subprocess.run(
-            ["git", "stash", "push", "-m", name],
-            capture_output=True,
-            cwd=workspace,
-            timeout=30
-        )
+        manager = get_checkpoint_manager(workspace)
+        manager.save(message=name, task_id=task_id)
         return True
+    except NotAGitRepoError:
+        # Not a git repo, skip checkpoint
+        return False
     except Exception:
         return False
 
 
-def _rollback_checkpoint(workspace: Path, name: str) -> bool:
-    """Rollback to checkpoint using git stash."""
+def _rollback_checkpoint(workspace: Path, checkpoint_id: str = None) -> bool:
+    """Rollback to checkpoint using the unified CheckpointManager.
+    
+    Args:
+        workspace: Project root directory
+        checkpoint_id: Specific checkpoint to restore (defaults to last)
+    
+    Returns:
+        True if rollback successful
+    """
     try:
-        # First, reset any uncommitted changes
-        subprocess.run(
-            ["git", "checkout", "."],
-            capture_output=True,
-            cwd=workspace,
-            timeout=30
-        )
+        manager = get_checkpoint_manager(workspace)
+        manager.restore(checkpoint_id=checkpoint_id)
         return True
     except Exception:
         return False
@@ -675,6 +837,95 @@ def _mark_task_complete(workspace: Path, task_source: str, task_id: str) -> None
         prd_path.write_text(json.dumps(data, indent=2))
     except Exception:
         pass
+
+
+def _run_verification(workspace: Path) -> bool:
+    """Run verification steps (tests, lint, type check).
+    
+    Returns:
+        True if all verification passes
+    """
+    import subprocess
+    
+    passed = True
+    
+    # Check if pytest exists and run tests
+    pytest_result = subprocess.run(
+        ["pytest", "--tb=no", "-q"],
+        cwd=workspace,
+        capture_output=True,
+        timeout=300
+    )
+    if pytest_result.returncode == 0:
+        console.print("  [green]✓[/] Tests passed")
+    elif pytest_result.returncode == 5:
+        # No tests collected - that's OK
+        console.print("  [dim]○[/] No tests found")
+    else:
+        console.print("  [red]✗[/] Tests failed")
+        passed = False
+    
+    # Check for lint (optional - don't fail if not installed)
+    try:
+        ruff_result = subprocess.run(
+            ["ruff", "check", ".", "--quiet"],
+            cwd=workspace,
+            capture_output=True,
+            timeout=60
+        )
+        if ruff_result.returncode == 0:
+            console.print("  [green]✓[/] Lint passed")
+        else:
+            console.print("  [yellow]⚠[/] Lint warnings")
+            # Don't fail on lint warnings
+    except FileNotFoundError:
+        pass  # ruff not installed, skip
+    except subprocess.TimeoutExpired:
+        console.print("  [yellow]⚠[/] Lint timeout")
+    
+    return passed
+
+
+def _get_diff_summary(workspace: Path) -> str:
+    """Get a summary of current changes."""
+    import subprocess
+    
+    result = subprocess.run(
+        ["git", "diff", "--stat", "HEAD"],
+        cwd=workspace,
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode == 0 and result.stdout.strip():
+        return f"[dim]{result.stdout.strip()}[/]"
+    return "[dim]No changes[/]"
+
+
+def _commit_changes(workspace: Path, message: str) -> bool:
+    """Commit all changes with given message.
+    
+    Returns:
+        True if commit successful
+    """
+    import subprocess
+    
+    # Stage all changes
+    subprocess.run(
+        ["git", "add", "-A"],
+        cwd=workspace,
+        capture_output=True
+    )
+    
+    # Commit
+    result = subprocess.run(
+        ["git", "commit", "-m", message],
+        cwd=workspace,
+        capture_output=True,
+        text=True
+    )
+    
+    return result.returncode == 0
 
 
 if __name__ == "__main__":

@@ -44,9 +44,13 @@ def collect_status(workspace: Path) -> dict:
     status = {
         "workspace": str(workspace),
         "initialized": False,
+        "state_version": None,
         "context_budget": None,
         "loop_state": None,
         "circuit_breaker": None,
+        "checkpoints": None,
+        "agents": None,
+        "doom_loop": None,
         "skills": [],
         "hooks": None,
         "memory": None,
@@ -61,6 +65,71 @@ def collect_status(workspace: Path) -> dict:
     if not status["initialized"]:
         return status
     
+    # Try to load unified state first
+    try:
+        from up.core.state import get_state_manager
+        manager = get_state_manager(workspace)
+        state = manager.state
+        status["state_version"] = state.version
+        
+        # Context budget from unified state
+        status["context_budget"] = {
+            "budget": state.context.budget,
+            "total_tokens": state.context.total_tokens,
+            "remaining_tokens": state.context.remaining_tokens,
+            "usage_percent": state.context.usage_percent,
+            "status": state.context.status,
+        }
+        
+        # Loop state from unified state
+        status["loop_state"] = {
+            "iteration": state.loop.iteration,
+            "phase": state.loop.phase,
+            "current_task": state.loop.current_task,
+            "tasks_completed": len(state.loop.tasks_completed),
+            "tasks_failed": len(state.loop.tasks_failed),
+            "success_rate": state.metrics.success_rate,
+            "last_checkpoint": state.loop.last_checkpoint,
+        }
+        
+        # Circuit breakers
+        status["circuit_breaker"] = {
+            name: {"state": cb.state, "failures": cb.failures}
+            for name, cb in state.circuit_breakers.items()
+        }
+        
+        # Checkpoints
+        status["checkpoints"] = {
+            "total": len(state.checkpoints),
+            "last": state.loop.last_checkpoint,
+            "recent": state.checkpoints[-5:] if state.checkpoints else [],
+        }
+        
+        # Agents
+        if state.agents:
+            status["agents"] = {
+                task_id: {
+                    "status": agent.status,
+                    "phase": agent.phase,
+                    "worktree": agent.worktree_path,
+                }
+                for task_id, agent in state.agents.items()
+            }
+        
+        # Doom loop detection
+        is_doom, doom_msg = manager.check_doom_loop()
+        if is_doom or state.loop.consecutive_failures > 0:
+            status["doom_loop"] = {
+                "triggered": is_doom,
+                "consecutive_failures": state.loop.consecutive_failures,
+                "threshold": state.loop.doom_loop_threshold,
+                "message": doom_msg if is_doom else None,
+            }
+            
+    except ImportError:
+        # Fallback to old state files
+        _collect_legacy_status(workspace, status)
+    
     # Git hooks status
     from up.commands.sync import check_hooks_installed
     status["hooks"] = check_hooks_installed(workspace)
@@ -70,7 +139,7 @@ def collect_status(workspace: Path) -> dict:
     if memory_dir.exists():
         try:
             from up.memory import MemoryManager
-            manager = MemoryManager(workspace, use_vectors=False)  # Fast - JSON only
+            manager = MemoryManager(workspace, use_vectors=False)
             stats = manager.get_stats()
             status["memory"] = {
                 "total": stats.get("total", 0),
@@ -80,7 +149,23 @@ def collect_status(workspace: Path) -> dict:
         except Exception:
             status["memory"] = {"total": 0}
     
-    # Context budget
+    # Skills
+    skills_dirs = [
+        workspace / ".claude/skills",
+        workspace / ".cursor/skills",
+    ]
+    for skills_dir in skills_dirs:
+        if skills_dir.exists():
+            for skill_dir in skills_dir.iterdir():
+                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                    status["skills"].append(skill_dir.name)
+    
+    return status
+
+
+def _collect_legacy_status(workspace: Path, status: dict) -> None:
+    """Collect status from legacy state files."""
+    # Context budget (old location)
     context_file = workspace / ".claude/context_budget.json"
     if context_file.exists():
         try:
@@ -88,7 +173,7 @@ def collect_status(workspace: Path) -> dict:
         except json.JSONDecodeError:
             status["context_budget"] = {"error": "Invalid JSON"}
     
-    # Loop state
+    # Loop state (old location)
     loop_file = workspace / ".loop_state.json"
     if loop_file.exists():
         try:
@@ -104,19 +189,6 @@ def collect_status(workspace: Path) -> dict:
             status["circuit_breaker"] = data.get("circuit_breaker", {})
         except json.JSONDecodeError:
             status["loop_state"] = {"error": "Invalid JSON"}
-    
-    # Skills
-    skills_dirs = [
-        workspace / ".claude/skills",
-        workspace / ".cursor/skills",
-    ]
-    for skills_dir in skills_dirs:
-        if skills_dir.exists():
-            for skill_dir in skills_dir.iterdir():
-                if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
-                    status["skills"].append(skill_dir.name)
-    
-    return status
 
 
 def display_status(status: dict) -> None:
@@ -184,7 +256,7 @@ def display_status(status: dict) -> None:
     else:
         console.print("  [dim]Not active[/]")
     
-    # Loop State
+    # Product Loop State
     console.print("\n[bold]Product Loop[/]")
     if status["loop_state"]:
         loop = status["loop_state"]
@@ -199,8 +271,9 @@ def display_status(status: dict) -> None:
                 console.print(f"  Current Task: [cyan]{current}[/]")
             
             completed = loop.get("tasks_completed", 0)
+            failed = loop.get("tasks_failed", 0)
             remaining = loop.get("tasks_remaining", 0)
-            total = completed + remaining
+            total = completed + failed + remaining if remaining else completed + failed
             
             if total > 0:
                 progress = completed / total * 100
@@ -211,8 +284,37 @@ def display_status(status: dict) -> None:
             
             success_rate = loop.get("success_rate", 1.0)
             console.print(f"  Success Rate: {success_rate * 100:.0f}%")
+            
+            last_cp = loop.get("last_checkpoint")
+            if last_cp:
+                console.print(f"  Last Checkpoint: [cyan]{last_cp}[/]")
     else:
         console.print("  [dim]Not active[/]")
+    
+    # Doom Loop Detection
+    if status.get("doom_loop"):
+        doom = status["doom_loop"]
+        console.print("\n[bold]Doom Loop Detection[/]")
+        if doom["triggered"]:
+            console.print(f"  [red]⚠ TRIGGERED[/] - {doom['consecutive_failures']}/{doom['threshold']} failures")
+            console.print(f"  [dim]{doom.get('message', '')}[/]")
+        else:
+            console.print(f"  Consecutive Failures: {doom['consecutive_failures']}/{doom['threshold']}")
+    
+    # Checkpoints
+    if status.get("checkpoints"):
+        cp = status["checkpoints"]
+        console.print("\n[bold]Checkpoints[/]")
+        console.print(f"  Total: {cp['total']}")
+        if cp.get("recent"):
+            console.print(f"  Recent: {', '.join(cp['recent'][-3:])}")
+    
+    # Active Agents
+    if status.get("agents"):
+        console.print("\n[bold]Active Agents[/]")
+        for task_id, agent in status["agents"].items():
+            status_icon = "🟢" if agent["status"] == "passed" else "🟡" if agent["status"] in ["executing", "verifying"] else "🔴"
+            console.print(f"  {status_icon} {task_id}: {agent['status']} ({agent['phase']})")
     
     # Memory
     console.print("\n[bold]Memory[/]")

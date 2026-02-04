@@ -23,6 +23,12 @@ up new my-project
 cd existing-project
 up init
 
+# Start AI-assisted development with safety rails
+up save                    # Checkpoint before AI work
+up start                   # Run AI product loop
+up diff                    # Review changes
+up review                  # AI adversarial review
+
 # Check system health
 up status
 
@@ -43,6 +49,17 @@ up dashboard
 | `up start` | Start the product loop |
 | `up start --resume` | Resume from last checkpoint |
 | `up start --dry-run` | Preview mode without changes |
+| `up start --parallel` | Parallel multi-agent execution |
+| `up save` | Create checkpoint before AI work |
+| `up reset` | Restore to checkpoint |
+| `up diff` | Review AI changes |
+| `up review` | AI adversarial code review |
+| `up agent spawn <name>` | Create agent worktree |
+| `up agent status` | List all agents |
+| `up agent merge <name>` | Squash and merge |
+| `up bisect` | Find bug-introducing commit |
+| `up provenance list` | View AI operation history |
+| `up branch status` | Show branch hierarchy |
 | `up status` | Show health of all systems |
 | `up dashboard` | Live interactive health dashboard |
 | `up sync` | Sync all systems (memory, docs) |

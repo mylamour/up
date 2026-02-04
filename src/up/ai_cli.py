@@ -81,7 +81,8 @@ def run_ai_task(
     workspace: Path,
     prompt: str,
     cli_name: str,
-    timeout: int = 300
+    timeout: int = 600,
+    max_tokens: int = 0
 ) -> tuple[bool, str]:
     """Run an AI task (like implementing code) and return success status.
     
@@ -89,14 +90,18 @@ def run_ai_task(
         workspace: Working directory
         prompt: The task prompt
         cli_name: "claude" or "agent"
-        timeout: Timeout in seconds (default 5 minutes)
+        timeout: Timeout in seconds (default 10 minutes)
+        max_tokens: Max output tokens (0 = no limit/use CLI default)
     
     Returns:
         (success, output) tuple
     """
     try:
         if cli_name == "claude":
+            # Claude CLI: claude -p "prompt" [--max-tokens N]
             cmd = ["claude", "-p", prompt]
+            # Note: Claude CLI doesn't use --max-tokens, it uses model limits
+            # The output is effectively unlimited for code tasks
         else:
             # Cursor agent with text output for automation
             cmd = ["agent", "-p", prompt, "--output-format", "text"]

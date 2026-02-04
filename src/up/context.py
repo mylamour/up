@@ -127,7 +127,11 @@ def estimate_file_tokens(path: Path) -> int:
 
 
 class ContextManager:
-    """Manages context window budget for AI sessions."""
+    """Manages context window budget for AI sessions.
+    
+    Now uses the unified StateManager for storage while maintaining
+    backwards compatibility with the existing API.
+    """
     
     def __init__(
         self,
@@ -135,19 +139,46 @@ class ContextManager:
         budget: int = DEFAULT_BUDGET
     ):
         self.workspace = workspace or Path.cwd()
-        self.state_file = self.workspace / ".claude" / "context_budget.json"
+        # Old location for migration
+        self._old_state_file = self.workspace / ".claude" / "context_budget.json"
+        # New unified state
+        self._use_unified_state = True
         self.budget = ContextBudget(budget=budget)
         self._load_state()
     
     def _load_state(self) -> None:
-        """Load state from file."""
-        if self.state_file.exists():
+        """Load state from unified state manager or migrate from old file."""
+        try:
+            from up.core.state import get_state_manager
+            manager = get_state_manager(self.workspace)
+            ctx = manager.state.context
+            
+            # Sync from unified state
+            self.budget.budget = ctx.budget
+            self.budget.total_tokens = ctx.total_tokens
+            self.budget.warning_threshold = ctx.warning_threshold
+            self.budget.critical_threshold = ctx.critical_threshold
+            self.budget.session_start = ctx.session_start
+            
+            # Convert entries
+            self.budget.entries = [
+                ContextEntry(**e) if isinstance(e, dict) else e
+                for e in ctx.entries
+            ]
+            
+        except ImportError:
+            # Fallback to old file-based storage
+            self._use_unified_state = False
+            self._load_state_legacy()
+    
+    def _load_state_legacy(self) -> None:
+        """Load state from old file location (for backwards compatibility)."""
+        if self._old_state_file.exists():
             try:
-                data = json.loads(self.state_file.read_text())
+                data = json.loads(self._old_state_file.read_text())
                 self.budget.budget = data.get("budget", DEFAULT_BUDGET)
                 self.budget.total_tokens = data.get("total_tokens", 0)
                 self.budget.session_start = data.get("session_start", datetime.now().isoformat())
-                # Reconstruct entries
                 entries_data = data.get("entries", [])
                 self.budget.entries = [
                     ContextEntry(**e) for e in entries_data
@@ -156,9 +187,31 @@ class ContextManager:
                 pass
     
     def _save_state(self) -> None:
-        """Save state to file."""
-        self.state_file.parent.mkdir(parents=True, exist_ok=True)
-        self.state_file.write_text(json.dumps(self.budget.to_dict(), indent=2))
+        """Save state to unified state manager."""
+        if self._use_unified_state:
+            try:
+                from up.core.state import get_state_manager
+                manager = get_state_manager(self.workspace)
+                
+                # Sync to unified state
+                manager.state.context.budget = self.budget.budget
+                manager.state.context.total_tokens = self.budget.total_tokens
+                manager.state.context.warning_threshold = self.budget.warning_threshold
+                manager.state.context.critical_threshold = self.budget.critical_threshold
+                manager.state.context.session_start = self.budget.session_start
+                manager.state.context.entries = [
+                    e.to_dict() if hasattr(e, 'to_dict') else e
+                    for e in self.budget.entries[-50:]  # Keep last 50
+                ]
+                
+                manager.save()
+                return
+            except ImportError:
+                pass
+        
+        # Fallback to old file-based storage
+        self._old_state_file.parent.mkdir(parents=True, exist_ok=True)
+        self._old_state_file.write_text(json.dumps(self.budget.to_dict(), indent=2))
     
     def record_file_read(self, path: Path) -> ContextEntry:
         """Record a file being read into context.

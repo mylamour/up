@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "up-cli"
-version = "0.3.0"
-description = "AI-powered project scaffolding with docs, learn, and product-loop systems"
+version = "0.4.0"
+description = "Verifiable, observable AI-assisted development for building stable, high-performance software"
 readme = "Readme.md"
 license = "MIT"
 requires-python = ">=3.10"
