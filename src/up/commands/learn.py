@@ -1333,7 +1333,10 @@ Review the individual insight files in this directory for detailed analysis.
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 def learn_plan(workspace: str, output: str):
-    """Generate improvement plan (PRD) from analysis."""
+    """Generate improvement plan (PRD) from analysis.
+    
+    Uses AI to convert insights and patterns into actionable user stories.
+    """
     ws = Path(workspace) if workspace else Path.cwd()
     
     console.print(Panel.fit(
@@ -1341,14 +1344,53 @@ def learn_plan(workspace: str, output: str):
         border_style="blue"
     ))
     
-    # Check for gap analysis
     skill_dir = find_skill_dir(ws, "learning-system")
-    gap_file = skill_dir / "insights/gap-analysis.md"
+    insights_dir = skill_dir / "insights"
     
-    if not gap_file.exists():
-        console.print("[yellow]No gap analysis found.[/]")
-        console.print("Run analysis first to identify gaps.")
+    # Collect all insights
+    insights_content = []
+    
+    # Read patterns
+    patterns_file = insights_dir / "patterns.md"
+    if patterns_file.exists():
+        content = patterns_file.read_text()
+        if len(content) > 100:  # Not just template
+            insights_content.append(f"## Patterns\n{content}")
+    
+    # Read gap analysis
+    gap_file = insights_dir / "gap-analysis.md"
+    if gap_file.exists():
+        content = gap_file.read_text()
+        if len(content) > 100:
+            insights_content.append(f"## Gap Analysis\n{content}")
+    
+    # Read individual insight files
+    for f in insights_dir.glob("*_insights.md"):
+        content = f.read_text()
+        insights_content.append(f"## {f.stem}\n{content[:2000]}")
+    
+    # Read research files
+    research_dir = skill_dir / "research"
+    if research_dir.exists():
+        for f in research_dir.glob("*.md"):
+            content = f.read_text()
+            if "AI Research" in content:  # Has AI-generated content
+                insights_content.append(f"## Research: {f.stem}\n{content[:2000]}")
+    
+    # Read file learnings
+    learnings_dir = skill_dir / "file_learnings"
+    if learnings_dir.exists():
+        for f in learnings_dir.glob("*.md"):
+            content = f.read_text()
+            if "AI Analysis" in content:
+                insights_content.append(f"## Learning: {f.stem}\n{content[:2000]}")
+    
+    if not insights_content:
+        console.print("[yellow]No insights found to generate PRD.[/]")
+        console.print("Run [cyan]up learn analyze[/] first to process research files.")
         return
+    
+    console.print(f"Found [cyan]{len(insights_content)}[/] insight sources")
     
     # Load profile if exists
     profile_file = skill_dir / "project_profile.json"
@@ -1359,14 +1401,101 @@ def learn_plan(workspace: str, output: str):
         except json.JSONDecodeError:
             pass
     
-    # Generate PRD template
-    output_path = Path(output) if output else skill_dir / "prd.json"
-    prd = generate_prd_template(profile)
+    # Try AI to generate user stories
+    cli_name, cli_available = check_ai_cli()
+    user_stories = []
     
+    if cli_available:
+        console.print(f"\n[yellow]Generating tasks with {cli_name}...[/]")
+        
+        # Truncate insights if too long
+        all_insights = "\n\n".join(insights_content)
+        if len(all_insights) > 10000:
+            all_insights = all_insights[:10000] + "\n\n[... truncated ...]"
+        
+        prompt = f"""Based on these insights and learnings, generate 5-10 actionable improvement tasks.
+
+Project context:
+- Languages: {', '.join(profile.get('languages', ['unknown']))}
+- Frameworks: {', '.join(profile.get('frameworks', ['unknown']))}
+
+Insights:
+{all_insights}
+
+Return ONLY a JSON array of user stories in this exact format:
+[
+  {{"id": "US-001", "title": "Short title", "description": "What to implement", "priority": "high|medium|low", "effort": "small|medium|large"}},
+  ...
+]
+
+Focus on practical, implementable improvements. No explanation, just the JSON array."""
+
+        result = _run_ai_prompt(ws, prompt, cli_name, timeout=120)
+        
+        if result:
+            # Try to parse JSON from response
+            try:
+                # Find JSON array in response
+                import re
+                json_match = re.search(r'\[[\s\S]*\]', result)
+                if json_match:
+                    user_stories = json.loads(json_match.group())
+                    console.print(f"[green]✓[/] Generated {len(user_stories)} user stories")
+            except json.JSONDecodeError:
+                console.print("[yellow]Could not parse AI response, using template[/]")
+    
+    if not user_stories:
+        # Fallback: generate from profile improvement areas
+        console.print("[yellow]Using basic task generation...[/]")
+        for i, area in enumerate(profile.get("improvement_areas", [])[:5], 1):
+            user_stories.append({
+                "id": f"US-{i:03d}",
+                "title": f"Implement {area}",
+                "description": f"Add {area} based on analysis findings",
+                "priority": "medium",
+                "effort": "medium"
+            })
+    
+    # Generate PRD
+    prd = {
+        "name": profile.get("name", ws.name),
+        "version": "1.0.0",
+        "generated": date.today().isoformat(),
+        "source": "up learn plan",
+        "userStories": user_stories,
+        "metadata": {
+            "insights_count": len(insights_content),
+            "ai_generated": cli_available and len(user_stories) > 0,
+        }
+    }
+    
+    output_path = Path(output) if output else skill_dir / "prd.json"
     output_path.write_text(json.dumps(prd, indent=2))
-    console.print(f"[green]✓[/] PRD template created: [cyan]{output_path}[/]")
-    console.print("\nEdit the PRD to add specific user stories based on gap analysis.")
-    console.print("Then run [cyan]/product-loop[/] to start development.")
+    
+    console.print(f"\n[green]✓[/] PRD generated: [cyan]{output_path}[/]")
+    
+    # Display user stories
+    if user_stories:
+        console.print("\n[bold]Generated User Stories:[/]")
+        table = Table()
+        table.add_column("ID", style="cyan")
+        table.add_column("Title")
+        table.add_column("Priority")
+        table.add_column("Effort")
+        
+        for story in user_stories[:10]:
+            table.add_row(
+                story.get("id", "?"),
+                story.get("title", "")[:50],
+                story.get("priority", "medium"),
+                story.get("effort", "medium")
+            )
+        console.print(table)
+    
+    console.print("\n[bold]Next Steps:[/]")
+    console.print(f"  1. Review: [cyan]{output_path}[/]")
+    console.print("  2. Edit priorities/details as needed")
+    console.print("  3. Start development: [cyan]up start[/]")
 
 
 @learn_cmd.command("status")
