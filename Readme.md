@@ -49,7 +49,7 @@ up dashboard
 | `up hooks` | Install/manage git hooks for auto-sync |
 | `up learn` | Auto-improve project (requires vision map) |
 | `up learn "topic"` | Learn about specific topic/feature |
-| `up learn "path"` | Learn from another project's design |
+| `up learn "path"` | Learn from project or file (md, py, js, etc.) |
 | `up learn auto` | Analyze project (no vision check) |
 | `up learn plan` | Generate improvement PRD |
 | `up memory search <query>` | Semantic search in memory |
@@ -143,6 +143,11 @@ up learn "testing best practices"
 up learn "../other-project"
 up learn "~/projects/reference-app"
 
+# Learn from a file (markdown, code, config)
+up learn "docs/architecture.md"
+up learn "src/utils.py"
+up learn "package.json"
+
 # Auto-analyze without vision map requirement
 up learn auto
 
@@ -225,7 +230,13 @@ Three learning modes:
 |------|---------|-------------|
 | Self-improvement | `up learn` | Analyze and improve current project (requires vision map) |
 | Topic learning | `up learn "topic"` | Create research file for specific topic |
-| External learning | `up learn "path"` | Learn from another project's design |
+| External learning | `up learn "path"` | Learn from project directory or file |
+
+Supported file types for learning:
+- **Documentation**: `.md`, `.markdown`, `.txt`, `.rst`
+- **Python**: `.py` (extracts patterns, classes, functions)
+- **JavaScript/TypeScript**: `.js`, `.ts`, `.tsx`, `.jsx`
+- **Config**: `.json`, `.yaml`, `.yml`, `.toml`
 
 Additional commands:
 - `up learn auto` - Analyze without vision map requirement
@@ -239,6 +250,7 @@ Storage:
 ├── project_profile.json    # Current project analysis
 ├── research/               # Topic research files
 ├── external_learnings/     # Learnings from other projects
+├── file_learnings/         # Learnings from individual files
 ├── insights/               # Extracted patterns
 └── prd.json               # Generated improvement plan
 ```

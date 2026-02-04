@@ -262,6 +262,381 @@ Project frameworks: {', '.join(profile.get('frameworks', ['N/A']))}
     return learning
 
 
+def learn_from_file(workspace: Path, file_path: str) -> dict:
+    """Learn from a single file (markdown, code, config, etc.).
+    
+    This extracts insights, patterns, and knowledge from individual files.
+    """
+    source_file = Path(file_path).expanduser().resolve()
+    
+    if not source_file.exists():
+        console.print(f"[red]Error: File not found: {file_path}[/]")
+        return {}
+    
+    console.print(Panel.fit(
+        f"[bold blue]Learning System[/] - Learn from File: {source_file.name}",
+        border_style="blue"
+    ))
+    
+    # Read file content
+    try:
+        content = source_file.read_text()
+    except Exception as e:
+        console.print(f"[red]Error reading file: {e}[/]")
+        return {}
+    
+    file_ext = source_file.suffix.lower()
+    learnings = {
+        "source_file": source_file.name,
+        "source_path": str(source_file),
+        "file_type": file_ext,
+        "key_concepts": [],
+        "patterns_found": [],
+        "best_practices": [],
+        "code_snippets": [],
+        "action_items": [],
+    }
+    
+    # Analyze based on file type
+    if file_ext in ['.md', '.markdown', '.txt', '.rst']:
+        learnings = _analyze_documentation_file(content, learnings)
+    elif file_ext in ['.py']:
+        learnings = _analyze_python_file(content, learnings)
+    elif file_ext in ['.js', '.ts', '.tsx', '.jsx']:
+        learnings = _analyze_javascript_file(content, learnings)
+    elif file_ext in ['.json', '.yaml', '.yml', '.toml']:
+        learnings = _analyze_config_file(content, learnings, file_ext)
+    else:
+        learnings = _analyze_generic_file(content, learnings)
+    
+    # Display results
+    console.print(f"\n[bold]File:[/] {source_file.name}")
+    console.print(f"[bold]Type:[/] {file_ext or 'unknown'}")
+    console.print(f"[bold]Size:[/] {len(content)} characters, {len(content.splitlines())} lines")
+    
+    if learnings["key_concepts"]:
+        console.print("\n[green]📚 Key Concepts:[/]")
+        for c in learnings["key_concepts"][:10]:
+            console.print(f"  • {c}")
+    
+    if learnings["patterns_found"]:
+        console.print("\n[blue]🔷 Patterns Found:[/]")
+        for p in learnings["patterns_found"][:10]:
+            console.print(f"  • {p}")
+    
+    if learnings["best_practices"]:
+        console.print("\n[yellow]✨ Best Practices:[/]")
+        for b in learnings["best_practices"][:10]:
+            console.print(f"  • {b}")
+    
+    if learnings["code_snippets"]:
+        console.print("\n[cyan]💻 Notable Code Patterns:[/]")
+        for s in learnings["code_snippets"][:5]:
+            console.print(f"  • {s}")
+    
+    # Save learnings
+    skill_dir = find_skill_dir(workspace, "learning-system")
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    learnings_dir = skill_dir / "file_learnings"
+    learnings_dir.mkdir(exist_ok=True)
+    
+    safe_name = re.sub(r'[^\w\s-]', '', source_file.stem).strip().replace(' ', '_').lower()
+    learning_file = learnings_dir / f"{date.today().isoformat()}_{safe_name}.json"
+    learning_file.write_text(json.dumps(learnings, indent=2))
+    
+    # Create markdown summary
+    summary_file = learnings_dir / f"{date.today().isoformat()}_{safe_name}.md"
+    summary_content = f"""# Learnings from: {source_file.name}
+
+**Analyzed**: {date.today().isoformat()}
+**Source**: `{source_file}`
+**Type**: {file_ext or 'unknown'}
+
+## Key Concepts
+
+{chr(10).join(f'- {c}' for c in learnings['key_concepts']) or '- None extracted'}
+
+## Patterns Found
+
+{chr(10).join(f'- [ ] {p}' for p in learnings['patterns_found']) or '- None identified'}
+
+## Best Practices
+
+{chr(10).join(f'- [ ] {b}' for b in learnings['best_practices']) or '- None identified'}
+
+## Code Snippets / Examples
+
+{chr(10).join(f'- {s}' for s in learnings['code_snippets']) or '- None extracted'}
+
+## Action Items
+
+- [ ] Review extracted concepts
+- [ ] Apply relevant patterns to current project
+- [ ] Document learnings in project docs
+
+## Original Content Summary
+
+```
+{content[:500]}{'...' if len(content) > 500 else ''}
+```
+"""
+    summary_file.write_text(summary_content)
+    
+    console.print(f"\n[green]✓[/] Learnings saved to: [cyan]{summary_file}[/]")
+    
+    # Record to memory
+    _record_file_learning(workspace, learnings)
+    
+    console.print("\n[bold]Next Steps:[/]")
+    console.print(f"  1. Review [cyan]{summary_file}[/]")
+    console.print("  2. Apply relevant learnings to your project")
+    console.print("  3. Run [cyan]up learn[/] to track improvements")
+    
+    return learnings
+
+
+def _analyze_documentation_file(content: str, learnings: dict) -> dict:
+    """Extract insights from markdown/documentation files."""
+    lines = content.splitlines()
+    
+    # Extract headers as key concepts
+    headers = []
+    for line in lines:
+        if line.startswith('#'):
+            header = line.lstrip('#').strip()
+            if header and len(header) > 2:
+                headers.append(header)
+    learnings["key_concepts"] = headers[:15]
+    
+    # Look for patterns in content
+    pattern_keywords = [
+        ('pattern', 'Design pattern mentioned'),
+        ('best practice', 'Best practice documented'),
+        ('principle', 'Principle defined'),
+        ('architecture', 'Architecture concept'),
+        ('workflow', 'Workflow described'),
+        ('convention', 'Convention defined'),
+        ('standard', 'Standard referenced'),
+        ('guideline', 'Guideline provided'),
+    ]
+    
+    content_lower = content.lower()
+    for keyword, description in pattern_keywords:
+        if keyword in content_lower:
+            learnings["patterns_found"].append(description)
+    
+    # Extract bullet points as potential best practices
+    for line in lines:
+        line = line.strip()
+        if line.startswith(('- ', '* ', '• ')) and len(line) > 10:
+            practice = line.lstrip('-*• ').strip()
+            if len(practice) > 15 and len(practice) < 200:
+                learnings["best_practices"].append(practice[:100])
+                if len(learnings["best_practices"]) >= 10:
+                    break
+    
+    # Extract code blocks
+    in_code_block = False
+    code_lang = ""
+    for line in lines:
+        if line.startswith('```'):
+            if not in_code_block:
+                in_code_block = True
+                code_lang = line[3:].strip()
+                if code_lang:
+                    learnings["code_snippets"].append(f"Code example in {code_lang}")
+            else:
+                in_code_block = False
+                code_lang = ""
+    
+    return learnings
+
+
+def _analyze_python_file(content: str, learnings: dict) -> dict:
+    """Extract patterns from Python code."""
+    lines = content.splitlines()
+    
+    # Pattern detection
+    patterns = {
+        r'class.*Repository': 'Repository Pattern',
+        r'class.*Service': 'Service Layer Pattern',
+        r'class.*Factory': 'Factory Pattern',
+        r'@dataclass': 'Dataclass usage',
+        r'@property': 'Property decorators',
+        r'async def': 'Async/Await pattern',
+        r'def test_': 'Unit test pattern',
+        r'Protocol\)': 'Protocol (interface) pattern',
+        r'@abstractmethod': 'Abstract base class',
+        r'TypeVar': 'Generic types',
+        r'Callable\[': 'Callable types',
+        r'contextmanager': 'Context manager pattern',
+        r'@staticmethod': 'Static methods',
+        r'@classmethod': 'Class methods',
+        r'__enter__': 'Context manager implementation',
+        r'yield': 'Generator pattern',
+    }
+    
+    for pattern, name in patterns.items():
+        if re.search(pattern, content, re.IGNORECASE):
+            learnings["patterns_found"].append(name)
+    
+    # Extract class and function names as concepts
+    for line in lines:
+        if line.strip().startswith('class '):
+            match = re.match(r'class\s+(\w+)', line.strip())
+            if match:
+                learnings["key_concepts"].append(f"Class: {match.group(1)}")
+        elif line.strip().startswith('def '):
+            match = re.match(r'def\s+(\w+)', line.strip())
+            if match and not match.group(1).startswith('_'):
+                learnings["key_concepts"].append(f"Function: {match.group(1)}")
+    
+    learnings["key_concepts"] = learnings["key_concepts"][:15]
+    
+    # Extract docstrings as best practices
+    docstring_pattern = r'"""([^"]+)"""'
+    docstrings = re.findall(docstring_pattern, content)
+    for doc in docstrings[:5]:
+        doc = doc.strip().split('\n')[0]  # First line only
+        if len(doc) > 20 and len(doc) < 150:
+            learnings["best_practices"].append(doc)
+    
+    # Note decorators and imports
+    imports = [line for line in lines if line.startswith(('import ', 'from '))]
+    if imports:
+        learnings["code_snippets"].append(f"Uses {len(imports)} imports")
+    
+    decorators = [line.strip() for line in lines if line.strip().startswith('@')]
+    if decorators:
+        unique_decorators = list(set(d.split('(')[0] for d in decorators))[:5]
+        learnings["code_snippets"].append(f"Decorators: {', '.join(unique_decorators)}")
+    
+    return learnings
+
+
+def _analyze_javascript_file(content: str, learnings: dict) -> dict:
+    """Extract patterns from JavaScript/TypeScript code."""
+    lines = content.splitlines()
+    
+    # Pattern detection
+    patterns = {
+        r'async\s+function': 'Async functions',
+        r'await\s+': 'Await usage',
+        r'export\s+default': 'Default exports',
+        r'export\s+const': 'Named exports',
+        r'interface\s+': 'TypeScript interfaces',
+        r'type\s+\w+\s*=': 'Type aliases',
+        r'useState': 'React useState hook',
+        r'useEffect': 'React useEffect hook',
+        r'useCallback': 'React useCallback hook',
+        r'useMemo': 'React useMemo hook',
+        r'React\.memo': 'React memoization',
+        r'class\s+\w+\s+extends': 'Class inheritance',
+        r'=>': 'Arrow functions',
+        r'Promise': 'Promise usage',
+        r'try\s*{': 'Error handling',
+    }
+    
+    for pattern, name in patterns.items():
+        if re.search(pattern, content):
+            learnings["patterns_found"].append(name)
+    
+    # Extract exports and components
+    for line in lines:
+        if 'export' in line:
+            match = re.search(r'export\s+(?:default\s+)?(?:function|const|class)\s+(\w+)', line)
+            if match:
+                learnings["key_concepts"].append(f"Export: {match.group(1)}")
+    
+    learnings["key_concepts"] = learnings["key_concepts"][:15]
+    
+    # Extract JSDoc comments
+    jsdoc_pattern = r'/\*\*([^*]+)\*/'
+    jsdocs = re.findall(jsdoc_pattern, content)
+    for doc in jsdocs[:5]:
+        doc = doc.strip().split('\n')[0].strip('* ')
+        if len(doc) > 20 and len(doc) < 150:
+            learnings["best_practices"].append(doc)
+    
+    return learnings
+
+
+def _analyze_config_file(content: str, learnings: dict, file_ext: str) -> dict:
+    """Extract insights from configuration files."""
+    learnings["key_concepts"].append(f"Configuration file ({file_ext})")
+    
+    if file_ext == '.json':
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict):
+                learnings["key_concepts"].extend([f"Config key: {k}" for k in list(data.keys())[:10]])
+        except json.JSONDecodeError:
+            pass
+    
+    elif file_ext in ['.yaml', '.yml']:
+        # Simple YAML key extraction
+        for line in content.splitlines():
+            if ':' in line and not line.strip().startswith('#'):
+                key = line.split(':')[0].strip()
+                if key and not key.startswith('-'):
+                    learnings["key_concepts"].append(f"Config: {key}")
+                    if len(learnings["key_concepts"]) >= 15:
+                        break
+    
+    elif file_ext == '.toml':
+        # Simple TOML section extraction
+        for line in content.splitlines():
+            if line.strip().startswith('['):
+                section = line.strip().strip('[]')
+                learnings["key_concepts"].append(f"Section: {section}")
+    
+    # Look for common config patterns
+    config_patterns = [
+        ('database', 'Database configuration'),
+        ('cache', 'Caching configuration'),
+        ('logging', 'Logging configuration'),
+        ('auth', 'Authentication configuration'),
+        ('api', 'API configuration'),
+        ('env', 'Environment configuration'),
+    ]
+    
+    content_lower = content.lower()
+    for keyword, description in config_patterns:
+        if keyword in content_lower:
+            learnings["patterns_found"].append(description)
+    
+    return learnings
+
+
+def _analyze_generic_file(content: str, learnings: dict) -> dict:
+    """Generic file analysis for unknown types."""
+    lines = content.splitlines()
+    
+    # Extract non-empty lines as potential concepts
+    for line in lines[:20]:
+        line = line.strip()
+        if line and len(line) > 10 and len(line) < 100:
+            learnings["key_concepts"].append(line[:80])
+    
+    learnings["key_concepts"] = learnings["key_concepts"][:10]
+    
+    return learnings
+
+
+def _record_file_learning(workspace: Path, learnings: dict) -> None:
+    """Record file learning to memory system."""
+    try:
+        from up.memory import MemoryManager
+        
+        manager = MemoryManager(workspace, use_vectors=False)
+        content = f"Learned from file: {learnings['source_file']}. "
+        if learnings['patterns_found']:
+            content += f"Patterns: {', '.join(learnings['patterns_found'][:3])}"
+        manager.record_learning(content)
+    except Exception:
+        pass
+
+
 def learn_from_project(workspace: Path, project_path: str) -> dict:
     """Analyze external project for good design patterns.
     
@@ -270,12 +645,12 @@ def learn_from_project(workspace: Path, project_path: str) -> dict:
     external_project = Path(project_path).expanduser().resolve()
     
     if not external_project.exists():
-        console.print(f"[red]Error: Project path not found: {project_path}[/]")
+        console.print(f"[red]Error: Path not found: {project_path}[/]")
         return {}
     
-    if not external_project.is_dir():
-        console.print(f"[red]Error: Path is not a directory: {project_path}[/]")
-        return {}
+    # If it's a file, use file learning
+    if external_project.is_file():
+        return learn_from_file(workspace, project_path)
     
     console.print(Panel.fit(
         f"[bold blue]Learning System[/] - Learn from Project: {external_project.name}",
@@ -497,7 +872,8 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str):
     Usage:
       up learn                    Auto-analyze and improve (requires vision map)
       up learn "topic"            Learn about a specific topic/feature
-      up learn "project/path"     Learn from another project's design
+      up learn "path/to/project"  Learn from another project's design
+      up learn "path/to/file.md"  Learn from a file (md, py, js, etc.)
     
     \b
     Subcommands:
@@ -511,6 +887,8 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str):
       up learn                    # Self-improvement analysis
       up learn "caching"          # Learn about caching
       up learn "../other-project" # Learn from other project
+      up learn "docs/guide.md"    # Learn from markdown file
+      up learn "src/utils.py"     # Learn from Python file
     """
     # If subcommand invoked, skip main logic
     if ctx.invoked_subcommand is not None:
