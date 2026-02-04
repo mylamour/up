@@ -1,8 +1,10 @@
 """up start - Start the product loop."""
 
 import json
+import signal
 import subprocess
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -13,6 +15,29 @@ from rich.table import Table
 from tqdm import tqdm
 
 console = Console()
+
+# Global state for interrupt handling
+_current_state = None
+_current_workspace = None
+_current_checkpoint = None
+
+
+def _handle_interrupt(signum, frame):
+    """Handle Ctrl+C interrupt - save state and checkpoint info."""
+    console.print("\n\n[yellow]Interrupted! Saving state...[/]")
+    
+    if _current_state and _current_workspace:
+        _current_state["phase"] = "INTERRUPTED"
+        _current_state["interrupted_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        if _current_checkpoint:
+            _current_state["last_checkpoint"] = _current_checkpoint
+        _save_loop_state(_current_workspace, _current_state)
+        console.print(f"[green]✓[/] State saved to .loop_state.json")
+        console.print(f"[dim]Checkpoint: {_current_checkpoint or 'none'}[/]")
+        console.print("\nTo resume: [cyan]up start --resume[/]")
+        console.print("To rollback: [cyan]git checkout .[/]")
+    
+    sys.exit(130)  # Standard interrupt exit code
 
 
 def check_ai_cli() -> tuple[str, bool]:
@@ -448,7 +473,14 @@ def _run_ai_product_loop(
     run_all: bool = False
 ):
     """Run the product loop with AI auto-implementation."""
+    global _current_state, _current_workspace, _current_checkpoint
     from datetime import datetime
+    
+    # Set up interrupt handler
+    _current_workspace = workspace
+    _current_state = state
+    _current_checkpoint = None
+    signal.signal(signal.SIGINT, _handle_interrupt)
     
     # Get all tasks
     tasks_to_run = []
@@ -497,6 +529,7 @@ def _run_ai_product_loop(
         # Create checkpoint
         console.print("[dim]Creating checkpoint...[/]")
         checkpoint_name = f"cp-{task_id}-{state['iteration']}"
+        _current_checkpoint = checkpoint_name
         _create_checkpoint(workspace, checkpoint_name)
         
         # Build prompt for AI
@@ -537,6 +570,10 @@ def _run_ai_product_loop(
             state["circuit_breaker"] = cb
         
         _save_loop_state(workspace, state)
+    
+    # Reset interrupt handler
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    _current_checkpoint = None
     
     # Summary
     console.print(f"\n{'─' * 50}")
