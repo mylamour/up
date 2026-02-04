@@ -1189,6 +1189,14 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
     if ctx.invoked_subcommand is not None:
         return
     
+    # Check if topic_or_path is actually a subcommand name
+    # This happens because Click processes arguments before subcommands
+    subcommands = ["auto", "analyze", "plan", "status"]
+    if topic_or_path in subcommands:
+        # Invoke the subcommand
+        ctx.invoke(ctx.command.commands[topic_or_path])
+        return
+    
     ws = Path(workspace) if workspace else Path.cwd()
     
     # No argument: self-improvement mode
