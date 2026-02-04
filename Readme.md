@@ -51,6 +51,7 @@ up dashboard
 | `up learn "topic"` | Learn about specific topic/feature |
 | `up learn "path"` | Learn from project or file (quick extraction) |
 | `up learn -d "file"` | Deep AI analysis (prepare prompt for chat) |
+| `up learn -r "file"` | Auto-analyze with Claude CLI |
 | `up learn auto` | Analyze project (no vision check) |
 | `up learn plan` | Generate improvement PRD |
 | `up memory search <query>` | Semantic search in memory |
@@ -153,6 +154,10 @@ up learn "package.json"
 up learn -d "docs/guide.md"
 # Then copy the prompt to chat for AI to analyze deeply
 
+# Auto-analyze with Claude CLI (requires claude command)
+up learn -r "docs/guide.md"
+# Runs Claude CLI automatically and saves analysis
+
 # Auto-analyze without vision map requirement
 up learn auto
 
@@ -163,11 +168,12 @@ up learn status
 up learn plan
 ```
 
-The learn system has four modes:
+The learn system has five modes:
 - **Self-improvement** (`up learn`): Analyzes current project and tracks improvements over time. Requires a configured `docs/roadmap/vision/PRODUCT_VISION.md`.
 - **Topic learning** (`up learn "topic"`): Creates research files for specific topics based on your project's tech stack.
 - **File learning** (`up learn "path"`): Quick extraction from files or projects using regex patterns.
-- **Deep analysis** (`up learn -d "file"`): Prepares file for deep AI analysis - generates a prompt to copy into chat for comprehensive understanding.
+- **Deep analysis** (`up learn -d "file"`): Prepares file for deep AI analysis - generates a prompt to copy into chat.
+- **Auto analysis** (`up learn -r "file"`): Automatically runs Claude CLI to analyze the file and saves the result.
 
 ### Using the Product Loop
 
