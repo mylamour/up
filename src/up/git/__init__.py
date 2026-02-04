@@ -7,6 +7,14 @@ from up.git.worktree import (
     merge_worktree,
     WorktreeState,
 )
+from up.git.utils import (
+    is_git_repo,
+    get_current_branch,
+    count_commits_since,
+    make_branch_name,
+    run_git,
+    BRANCH_PREFIX,
+)
 
 __all__ = [
     "create_worktree",
@@ -14,4 +22,10 @@ __all__ = [
     "list_worktrees",
     "merge_worktree",
     "WorktreeState",
+    "is_git_repo",
+    "get_current_branch",
+    "count_commits_since",
+    "make_branch_name",
+    "run_git",
+    "BRANCH_PREFIX",
 ]

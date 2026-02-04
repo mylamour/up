@@ -12,6 +12,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from up.git.utils import (
+    is_git_repo,
+    get_current_branch,
+    count_commits_since,
+    make_branch_name,
+    run_git,
+    BRANCH_PREFIX,
+)
+
 
 @dataclass
 class WorktreeState:
@@ -45,30 +54,6 @@ class WorktreeState:
             data = json.loads(state_file.read_text())
             return cls(**data)
         raise FileNotFoundError(f"No state file in {worktree_path}")
-
-
-def is_git_repo(path: Path = None) -> bool:
-    """Check if path is inside a Git repository."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=path or Path.cwd(),
-            capture_output=True,
-            text=True
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def get_current_branch() -> str:
-    """Get current Git branch name."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True,
-        text=True
-    )
-    return result.stdout.strip()
 
 
 def create_worktree(
@@ -340,17 +325,3 @@ def reset_to_checkpoint(worktree_path: Path, checkpoint: str = None):
         cwd=worktree_path,
         capture_output=True
     )
-
-
-def count_commits_since(worktree_path: Path, base: str = "main") -> int:
-    """Count commits in worktree since branching from base."""
-    result = subprocess.run(
-        ["git", "rev-list", "--count", f"{base}..HEAD"],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True
-    )
-    try:
-        return int(result.stdout.strip())
-    except ValueError:
-        return 0

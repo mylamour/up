@@ -20,43 +20,9 @@ from rich.table import Table
 
 from up.core.state import get_state_manager, AgentState
 from up.core.checkpoint import get_checkpoint_manager, NotAGitRepoError
+from up.git.utils import is_git_repo, get_current_branch, count_commits_since, make_branch_name
 
 console = Console()
-
-
-def _is_git_repo(path: Path) -> bool:
-    """Check if path is a git repository."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--git-dir"],
-        cwd=path,
-        capture_output=True
-    )
-    return result.returncode == 0
-
-
-def _get_current_branch(path: Path) -> str:
-    """Get current branch name."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        cwd=path,
-        capture_output=True,
-        text=True
-    )
-    return result.stdout.strip()
-
-
-def _count_commits_since(path: Path, base: str) -> int:
-    """Count commits since base branch."""
-    result = subprocess.run(
-        ["git", "rev-list", "--count", f"{base}..HEAD"],
-        cwd=path,
-        capture_output=True,
-        text=True
-    )
-    try:
-        return int(result.stdout.strip())
-    except ValueError:
-        return 0
 
 
 # =============================================================================
@@ -82,7 +48,7 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
     """
     cwd = Path.cwd()
     
-    if not _is_git_repo(cwd):
+    if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
     
@@ -195,7 +161,7 @@ def status_cmd(as_json: bool):
     """
     cwd = Path.cwd()
     
-    if not _is_git_repo(cwd):
+    if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
     
@@ -260,7 +226,7 @@ def status_cmd(as_json: bool):
         wt_path = Path(agent.worktree_path)
         commits = 0
         if wt_path.exists():
-            commits = _count_commits_since(wt_path, "main")
+            commits = count_commits_since(wt_path, "main")
         
         # Status icon
         status_icons = {
@@ -310,7 +276,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
     """
     cwd = Path.cwd()
     
-    if not _is_git_repo(cwd):
+    if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
     
@@ -330,7 +296,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
     agent_branch = agent.branch if agent else f"agent/{name}"
     
     # Check for commits
-    commits = _count_commits_since(worktree_path, target)
+    commits = count_commits_since(worktree_path, target)
     
     console.print(f"[bold]Merging agent:[/] {name}")
     console.print(f"  Branch: {agent_branch}")
@@ -464,7 +430,7 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
     """
     cwd = Path.cwd()
     
-    if not _is_git_repo(cwd):
+    if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
     
