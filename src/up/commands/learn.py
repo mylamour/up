@@ -1158,8 +1158,9 @@ Format as a structured summary I can reference later."""
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
 @click.option("--deep", "-d", is_flag=True, help="Prepare for deep AI analysis in chat")
 @click.option("--run", "-r", is_flag=True, help="Auto-run analysis with Claude/Cursor CLI")
+@click.option("--auto", "-a", is_flag=True, help="Auto mode for analyze subcommand")
 @click.pass_context
-def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
+def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool, auto: bool):
     """Learning system - analyze, research, and improve.
     
     \b
@@ -1173,7 +1174,8 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
     \b
     Subcommands:
       up learn auto               Analyze project (no vision check)
-      up learn analyze            Analyze research files
+      up learn analyze            Show research files
+      up learn -a analyze         Auto-analyze with AI + progress bar
       up learn plan               Generate improvement PRD
       up learn status             Show learning system status
     
@@ -1189,12 +1191,21 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, deep: bool, run: bool):
     if ctx.invoked_subcommand is not None:
         return
     
+    # Store auto flag in context for subcommands
+    ctx.ensure_object(dict)
+    ctx.obj['auto'] = auto
+    ctx.obj['workspace'] = workspace
+    
     # Check if topic_or_path is actually a subcommand name
     # This happens because Click processes arguments before subcommands
     subcommands = ["auto", "analyze", "plan", "status"]
     if topic_or_path in subcommands:
-        # Invoke the subcommand
-        ctx.invoke(ctx.command.commands[topic_or_path])
+        # Invoke the subcommand with stored options
+        subcmd = ctx.command.commands[topic_or_path]
+        if topic_or_path == "analyze":
+            ctx.invoke(subcmd, workspace=workspace, auto=auto)
+        else:
+            ctx.invoke(subcmd, workspace=workspace)
         return
     
     ws = Path(workspace) if workspace else Path.cwd()
@@ -1276,18 +1287,94 @@ def learn_auto(workspace: str):
     console.print("  3. Start development with: [cyan]/product-loop[/]")
 
 
+def analyze_research_file(file_path: Path, workspace: Path) -> dict:
+    """Analyze a single research file using AI CLI."""
+    content = file_path.read_text()
+    
+    # Truncate if too large
+    max_chars = 10000
+    if len(content) > max_chars:
+        content = content[:max_chars] + "\n\n[... truncated ...]"
+    
+    prompt = f"""Analyze this research document and extract:
+
+1. **Key Patterns** - Design patterns, methodologies, workflows mentioned
+2. **Best Practices** - Actionable guidelines and recommendations
+3. **Gaps** - What's missing or could be improved in a typical project
+4. **Action Items** - Specific things to implement
+
+Be concise. Return as structured markdown.
+
+Research file ({file_path.name}):
+{content}
+"""
+    
+    cli_name, available = check_ai_cli()
+    if not available:
+        return {"error": "No AI CLI available", "file": file_path.name}
+    
+    import subprocess
+    try:
+        if cli_name == "claude":
+            cmd = ["claude", "-p", prompt]
+        else:
+            cmd = ["agent", "-p", prompt]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout for longer files
+            cwd=workspace
+        )
+        
+        if result.returncode == 0:
+            return {
+                "file": file_path.name,
+                "analysis": result.stdout,
+                "cli": cli_name
+            }
+        else:
+            return {"error": result.stderr, "file": file_path.name}
+    except subprocess.TimeoutExpired:
+        return {"error": "Timeout", "file": file_path.name}
+    except Exception as e:
+        return {"error": str(e), "file": file_path.name}
+
+
 @learn_cmd.command("analyze")
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-def learn_analyze(workspace: str):
-    """Analyze all research files and extract patterns."""
+@click.option("--auto", "-a", is_flag=True, help="Auto-analyze with AI CLI (shows progress)")
+def learn_analyze(workspace: str, auto: bool):
+    """Analyze all research files and extract patterns.
+    
+    \b
+    Usage:
+      up learn analyze          Show research files (manual mode)
+      up learn analyze --auto   Auto-analyze with AI CLI + progress bar
+    """
+    from tqdm import tqdm
+    
     ws = Path(workspace) if workspace else Path.cwd()
     
-    research_dir = find_skill_dir(ws, "learning-system") / "research"
-    insights_dir = find_skill_dir(ws, "learning-system") / "insights"
+    skill_dir = find_skill_dir(ws, "learning-system")
+    research_dir = skill_dir / "research"
+    deep_dir = skill_dir / "deep_analysis"
+    insights_dir = skill_dir / "insights"
     
-    if not research_dir.exists():
-        console.print("[yellow]No research files found.[/]")
-        console.print("Run [cyan]up learn research \"topic\"[/] first.")
+    # Collect all analyzable files
+    files_to_analyze = []
+    
+    if research_dir.exists():
+        files_to_analyze.extend(list(research_dir.glob("*.md")))
+    
+    if deep_dir.exists():
+        # Include content files from deep analysis
+        files_to_analyze.extend(list(deep_dir.glob("*_content.md")))
+    
+    if not files_to_analyze:
+        console.print("[yellow]No research or learning files found.[/]")
+        console.print("Run [cyan]up learn \"topic\"[/] or [cyan]up learn -r \"file\"[/] first.")
         return
     
     console.print(Panel.fit(
@@ -1295,17 +1382,111 @@ def learn_analyze(workspace: str):
         border_style="blue"
     ))
     
-    # Count research files
-    research_files = list(research_dir.glob("*.md"))
-    console.print(f"Found [cyan]{len(research_files)}[/] research files")
-    
-    for f in research_files:
+    console.print(f"Found [cyan]{len(files_to_analyze)}[/] files to analyze:")
+    for f in files_to_analyze:
         console.print(f"  • {f.name}")
     
-    console.print("\n[bold]Analysis:[/]")
-    console.print("  Use Claude/Cursor to analyze research files and update:")
-    console.print(f"  • [cyan]{insights_dir}/patterns.md[/]")
-    console.print(f"  • [cyan]{insights_dir}/gap-analysis.md[/]")
+    if not auto:
+        # Manual mode - just show files
+        console.print("\n[bold]To auto-analyze with AI:[/]")
+        console.print("  Run [cyan]up learn analyze --auto[/]")
+        console.print("\n[bold]Or manually analyze and update:[/]")
+        console.print(f"  • [cyan]{insights_dir}/patterns.md[/]")
+        console.print(f"  • [cyan]{insights_dir}/gap-analysis.md[/]")
+        return
+    
+    # Auto mode - analyze with AI CLI
+    cli_name, cli_available = check_ai_cli()
+    if not cli_available:
+        console.print("\n[red]Error: No AI CLI found.[/]")
+        console.print("Install Claude CLI or Cursor Agent to use --auto")
+        return
+    
+    console.print(f"\n[yellow]Analyzing with {cli_name}...[/]")
+    
+    # Analyze each file with progress bar
+    all_patterns = []
+    all_practices = []
+    all_gaps = []
+    all_actions = []
+    
+    insights_dir.mkdir(parents=True, exist_ok=True)
+    
+    with tqdm(files_to_analyze, desc="Analyzing", unit="file") as pbar:
+        for file_path in pbar:
+            pbar.set_postfix_str(file_path.name[:30])
+            
+            result = analyze_research_file(file_path, ws)
+            
+            if "error" in result:
+                console.print(f"\n[red]Error analyzing {file_path.name}: {result['error']}[/]")
+                continue
+            
+            # Save individual analysis
+            analysis_file = insights_dir / f"{file_path.stem}_insights.md"
+            analysis_file.write_text(f"""# Insights: {file_path.name}
+
+**Analyzed**: {date.today().isoformat()}
+**Source**: `{file_path}`
+**Method**: {result.get('cli', 'unknown')} CLI
+
+---
+
+{result['analysis']}
+""")
+            
+            # Collect for combined report
+            all_patterns.append(f"### From {file_path.name}\n{result['analysis']}")
+    
+    # Generate combined insights files
+    patterns_file = insights_dir / "patterns.md"
+    patterns_content = f"""# Patterns Extracted
+
+**Generated**: {date.today().isoformat()}
+**Files Analyzed**: {len(files_to_analyze)}
+**Method**: {cli_name} CLI (automatic)
+
+---
+
+{chr(10).join(all_patterns)}
+"""
+    patterns_file.write_text(patterns_content)
+    
+    # Generate gap analysis
+    gap_file = insights_dir / "gap-analysis.md"
+    gap_content = f"""# Gap Analysis
+
+**Generated**: {date.today().isoformat()}
+**Based on**: {len(files_to_analyze)} research files
+
+---
+
+## Summary
+
+Review the individual insight files in this directory for detailed analysis.
+
+## Files Analyzed
+
+{chr(10).join(f'- {f.name}' for f in files_to_analyze)}
+
+## Next Steps
+
+1. Review patterns in `patterns.md`
+2. Identify gaps relevant to your project
+3. Run `up learn plan` to generate improvement PRD
+"""
+    gap_file.write_text(gap_content)
+    
+    console.print(f"\n[green]✓[/] Analysis complete!")
+    console.print(f"\n[bold]Generated:[/]")
+    console.print(f"  • [cyan]{patterns_file.relative_to(ws)}[/]")
+    console.print(f"  • [cyan]{gap_file.relative_to(ws)}[/]")
+    console.print(f"  • {len(files_to_analyze)} individual insight files")
+    
+    console.print("\n[bold]Next Steps:[/]")
+    console.print("  1. Review: [cyan]@" + str(patterns_file.relative_to(ws)) + "[/]")
+    console.print("  2. Generate PRD: [cyan]up learn plan[/]")
+    console.print("  3. Start development: [cyan]up start[/]")
 
 
 @learn_cmd.command("plan")
