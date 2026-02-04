@@ -12,6 +12,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from up.ai_cli import check_ai_cli, run_ai_prompt as _run_ai_prompt
+
 console = Console()
 
 
@@ -902,58 +904,6 @@ def _record_external_learning(workspace: Path, learnings: dict) -> None:
         manager.record_learning(content)
     except Exception:
         pass
-
-
-def check_ai_cli() -> tuple[str, bool]:
-    """Check which AI CLI is available.
-    
-    Returns:
-        (cli_name, available) - e.g., ("claude", True) or ("agent", True)
-    """
-    import shutil
-    
-    # Check for Claude CLI first
-    if shutil.which("claude"):
-        return "claude", True
-    
-    # Check for Cursor Agent CLI
-    if shutil.which("agent"):
-        return "agent", True
-    
-    return "", False
-
-
-def _run_ai_prompt(workspace: Path, prompt: str, cli_name: str, timeout: int = 180) -> str | None:
-    """Run a prompt through AI CLI and return the response.
-    
-    Returns:
-        Response text or None if failed
-    """
-    import subprocess
-    
-    try:
-        if cli_name == "claude":
-            cmd = ["claude", "-p", prompt]
-        else:
-            cmd = ["agent", "-p", prompt]
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=workspace
-        )
-        
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-        return None
-    except subprocess.TimeoutExpired:
-        console.print("[yellow]AI analysis timed out, using basic analysis[/]")
-        return None
-    except Exception as e:
-        console.print(f"[yellow]AI error: {e}, using basic analysis[/]")
-        return None
 
 
 def _ai_research_topic(workspace: Path, topic: str, profile: dict, cli_name: str) -> str | None:

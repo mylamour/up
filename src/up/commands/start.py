@@ -3,7 +3,6 @@
 import json
 import signal
 import subprocess
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -13,6 +12,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from tqdm import tqdm
+
+from up.ai_cli import check_ai_cli, run_ai_task, get_ai_cli_install_instructions
 
 console = Console()
 
@@ -38,15 +39,6 @@ def _handle_interrupt(signum, frame):
         console.print("To rollback: [cyan]git checkout .[/]")
     
     sys.exit(130)  # Standard interrupt exit code
-
-
-def check_ai_cli() -> tuple[str, bool]:
-    """Check which AI CLI is available."""
-    if shutil.which("claude"):
-        return "claude", True
-    if shutil.which("agent"):
-        return "agent", True
-    return "", False
 
 
 @click.command()
@@ -154,7 +146,7 @@ def start_cmd(resume: bool, dry_run: bool, task: str, prd: str, interactive: boo
     
     if use_ai and not cli_available:
         console.print("\n[yellow]No AI CLI found. Running in manual mode.[/]")
-        console.print("Install Claude CLI or Cursor Agent for auto-implementation.")
+        console.print(get_ai_cli_install_instructions())
         use_ai = False
     
     # Start the loop with progress
@@ -629,29 +621,7 @@ Implement this task now. Make the necessary code changes."""
 
 def _run_ai_implementation(workspace: Path, prompt: str, cli_name: str) -> tuple[bool, str]:
     """Run AI CLI to implement the task."""
-    try:
-        if cli_name == "claude":
-            cmd = ["claude", "-p", prompt]
-        else:
-            cmd = ["agent", "-p", prompt]
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout
-            cwd=workspace
-        )
-        
-        if result.returncode == 0:
-            return True, result.stdout
-        else:
-            return False, result.stderr or "Unknown error"
-    
-    except subprocess.TimeoutExpired:
-        return False, "AI implementation timed out (5 minutes)"
-    except Exception as e:
-        return False, str(e)
+    return run_ai_task(workspace, prompt, cli_name, timeout=300)
 
 
 def _create_checkpoint(workspace: Path, name: str) -> bool:
