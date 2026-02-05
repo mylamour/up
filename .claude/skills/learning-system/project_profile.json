@@ -1,0 +1,21 @@
+{
+  "name": "up-cli",
+  "languages": [
+    "Python"
+  ],
+  "frameworks": [
+    "pytest"
+  ],
+  "patterns_detected": [
+    "Async/Await",
+    "Dataclasses",
+    "Protocol Pattern",
+    "Repository Pattern",
+    "Service Layer",
+    "Unit Tests"
+  ],
+  "improvement_areas": [],
+  "research_topics": [
+    "pytest best practices"
+  ]
+}

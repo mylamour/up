@@ -62,12 +62,22 @@ OBSERVE → CHECKPOINT → EXECUTE → VERIFY → COMMIT
 
 ## Commands
 
+### Skill Commands (for AI)
 | Command | Description |
 |---------|-------------|
 | `/product-loop` | Start the development loop |
 | `/product-loop resume` | Resume from last checkpoint |
 | `/product-loop status` | Show current state |
-| `/product-loop rollback` | Rollback last change |
+
+### CLI Commands (for users)
+| Command | Description |
+|---------|-------------|
+| `up start` | Start the product loop |
+| `up start --resume` | Resume from checkpoint |
+| `up start --parallel` | Run tasks in parallel |
+| `up save` | Create checkpoint |
+| `up reset` | Rollback to checkpoint |
+| `up status` | Show current state |
 
 ---
 
@@ -93,16 +103,16 @@ Prevents infinite loops on persistent failures.
 ### Phase 1: OBSERVE
 
 Read task sources in priority order:
-1. `.loop_state.json` - Resume interrupted task
+1. `.up/state.json` - Resume interrupted task (unified state)
 2. `prd.json` - Structured user stories
 3. `TODO.md` - Feature backlog
 
 ### Phase 2: CHECKPOINT
 
 Before risky operations:
-- Create git stash checkpoint
+- Create git checkpoint via `up save`
 - Record modified files
-- Save state to `.loop_state.json`
+- Save state to `.up/state.json`
 
 ### Phase 3: EXECUTE
 
@@ -129,22 +139,26 @@ On success:
 
 ---
 
-## State File: `.loop_state.json`
+## State File: `.up/state.json`
+
+The unified state file stores loop state, context budget, agent state, and metrics:
 
 ```json
 {
-  "version": "1.0",
-  "iteration": 5,
-  "phase": "VERIFY",
-  "current_task": "US-003",
-  "tasks_completed": ["US-001", "US-002"],
-  "circuit_breaker": {
-    "test": {"failures": 0, "state": "CLOSED"},
-    "build": {"failures": 0, "state": "CLOSED"}
+  "version": "2.0",
+  "loop": {
+    "iteration": 5,
+    "phase": "VERIFY",
+    "current_task": "US-003",
+    "tasks_completed": ["US-001", "US-002"],
+    "tasks_failed": [],
+    "last_checkpoint": "cp-20260204-123456"
   },
-  "checkpoints": [],
+  "circuit_breakers": {
+    "task": {"failures": 0, "state": "CLOSED"}
+  },
   "metrics": {
-    "total_edits": 15,
+    "total_tasks": 15,
     "total_rollbacks": 1,
     "success_rate": 0.93
   }
@@ -178,7 +192,7 @@ timeout_per_operation: 120s
 ## Quick Start
 
 1. Ensure `prd.json` or `TODO.md` exists with tasks
-2. Run `/product-loop`
+2. Run `/product-loop` or `up start`
 3. Loop will:
    - Pick highest priority task
    - Create checkpoint
@@ -197,6 +211,17 @@ This skill respects context budget:
 
 ---
 
+## Implementation Note
+
+The actual implementation is in `src/up/core/`:
+- `state.py` - Unified state management with circuit breaker
+- `checkpoint.py` - Git checkpoint operations
+- `provenance.py` - AI operation tracking
+
+The Python files in this skill folder (`circuit_breaker.py`, `state_manager.py`) are **reference implementations** for understanding the patterns. The CLI uses the implementations in `src/up/core/`.
+
+---
+
 ## Status Output Format
 
 ```
@@ -204,7 +229,7 @@ This skill respects context budget:
  PRODUCT LOOP - Iteration #5
 ═══════════════════════════════════════════
  Health:     ✅ HEALTHY
- Circuit:    test=CLOSED build=CLOSED
+ Circuit:    task=CLOSED
  Task:       US-003 Add authentication
  Status:     ✅ COMPLETE
 ───────────────────────────────────────────
@@ -523,28 +548,63 @@ if __name__ == "__main__":
 
 
 def _create_loop_state(target_dir: Path, force: bool) -> None:
-    """Create initial loop state file."""
+    """Create initial unified state file in .up/ directory."""
     today = date.today().isoformat()
+    
+    # Create .up directory
+    up_dir = target_dir / ".up"
+    up_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Unified state file
     content = f"""{{
-  "version": "1.0",
-  "iteration": 0,
-  "phase": "INIT",
-  "current_task": null,
-  "tasks_completed": [],
-  "tasks_remaining": [],
-  "circuit_breaker": {{
-    "test": {{"failures": 0, "state": "CLOSED"}},
-    "build": {{"failures": 0, "state": "CLOSED"}},
-    "lint": {{"failures": 0, "state": "CLOSED"}}
+  "version": "2.0",
+  "loop": {{
+    "iteration": 0,
+    "phase": "INIT",
+    "current_task": null,
+    "tasks_completed": [],
+    "tasks_failed": [],
+    "last_checkpoint": null,
+    "doom_loop_threshold": 3
+  }},
+  "context": {{
+    "budget": 100000,
+    "used": 0,
+    "warning_threshold": 0.8,
+    "critical_threshold": 0.9
+  }},
+  "parallel": {{
+    "active": false,
+    "max_workers": 3,
+    "active_worktrees": []
   }},
   "checkpoints": [],
+  "circuit_breakers": {{
+    "task": {{"failures": 0, "state": "CLOSED", "last_failure": null}}
+  }},
   "metrics": {{
-    "total_edits": 0,
+    "total_tasks": 0,
     "total_rollbacks": 0,
-    "success_rate": 1.0
+    "success_rate": 1.0,
+    "session_start": "{today}"
   }},
   "created_at": "{today}",
-  "last_updated": "{today}"
+  "updated_at": "{today}"
 }}
 """
-    _write_file(target_dir / ".loop_state.json", content, force)
+    _write_file(up_dir / "state.json", content, force)
+    
+    # Also create config.json with defaults
+    config_content = """{
+  "doom_loop_threshold": 3,
+  "circuit_breaker_cooldown_minutes": 5,
+  "circuit_breaker_failure_threshold": 3,
+  "checkpoint_retention_count": 50,
+  "context_budget": 100000,
+  "context_warning_threshold": 0.8,
+  "context_critical_threshold": 0.9,
+  "ai_timeout_seconds": 600,
+  "parallel_max_workers": 3
+}
+"""
+    _write_file(up_dir / "config.json", config_content, force)

@@ -11,6 +11,45 @@ from typing import Optional, List, Tuple
 # Standard branch prefix for all agent/worktree operations
 BRANCH_PREFIX = "agent"
 
+# Default timeout for git operations (seconds)
+DEFAULT_GIT_TIMEOUT = 60
+
+
+# =============================================================================
+# Exceptions
+# =============================================================================
+
+class GitError(Exception):
+    """Base exception for Git operations."""
+    pass
+
+
+class GitNotInstalledError(GitError):
+    """Git is not installed or not in PATH."""
+    pass
+
+
+class GitTimeoutError(GitError):
+    """Git command timed out."""
+    
+    def __init__(self, message: str, timeout: int):
+        super().__init__(message)
+        self.timeout = timeout
+
+
+class GitCommandError(GitError):
+    """Git command failed with non-zero exit code."""
+    
+    def __init__(self, message: str, returncode: int, stderr: str = ""):
+        super().__init__(message)
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+# =============================================================================
+# Core Functions
+# =============================================================================
+
 
 def is_git_repo(path: Optional[Path] = None) -> bool:
     """Check if path is inside a Git repository.
@@ -20,15 +59,15 @@ def is_git_repo(path: Optional[Path] = None) -> bool:
 
     Returns:
         True if path is in a Git repository
+        
+    Note:
+        Returns False if git is not installed (does not raise).
     """
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=path or Path.cwd(),
-            capture_output=True,
-            text=True
-        )
+        result = run_git("rev-parse", "--git-dir", cwd=path, timeout=10)
         return result.returncode == 0
+    except (GitNotInstalledError, GitTimeoutError, GitError):
+        return False
     except Exception:
         return False
 
@@ -41,13 +80,12 @@ def get_current_branch(path: Optional[Path] = None) -> str:
 
     Returns:
         Current branch name
+        
+    Raises:
+        GitNotInstalledError: If git is not installed
+        GitTimeoutError: If command times out
     """
-    result = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        cwd=path or Path.cwd(),
-        capture_output=True,
-        text=True
-    )
+    result = run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=path)
     return result.stdout.strip()
 
 
@@ -59,17 +97,12 @@ def count_commits_since(path: Path, base: str = "main") -> int:
         base: Base branch to compare against
 
     Returns:
-        Number of commits since base
+        Number of commits since base (0 if error)
     """
-    result = subprocess.run(
-        ["git", "rev-list", "--count", f"{base}..HEAD"],
-        cwd=path,
-        capture_output=True,
-        text=True
-    )
     try:
+        result = run_git("rev-list", "--count", f"{base}..HEAD", cwd=path)
         return int(result.stdout.strip())
-    except ValueError:
+    except (GitError, ValueError):
         return 0
 
 
@@ -82,15 +115,13 @@ def get_repo_root(path: Optional[Path] = None) -> Optional[Path]:
     Returns:
         Repository root path or None if not in a repo
     """
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=path or Path.cwd(),
-        capture_output=True,
-        text=True
-    )
-    if result.returncode == 0:
-        return Path(result.stdout.strip())
-    return None
+    try:
+        result = run_git("rev-parse", "--show-toplevel", cwd=path)
+        if result.returncode == 0:
+            return Path(result.stdout.strip())
+        return None
+    except GitError:
+        return None
 
 
 def make_branch_name(name: str) -> str:
@@ -105,31 +136,56 @@ def make_branch_name(name: str) -> str:
     return f"{BRANCH_PREFIX}/{name}"
 
 
-def run_git(*args, cwd: Optional[Path] = None, check: bool = False) -> subprocess.CompletedProcess:
+def run_git(
+    *args, 
+    cwd: Optional[Path] = None, 
+    check: bool = False,
+    timeout: int = DEFAULT_GIT_TIMEOUT
+) -> subprocess.CompletedProcess:
     """Run a git command with standard options.
 
     Args:
         *args: Git command arguments
         cwd: Working directory
         check: Raise exception on failure
+        timeout: Command timeout in seconds
 
     Returns:
         CompletedProcess result
+        
+    Raises:
+        GitNotInstalledError: If git is not installed
+        GitTimeoutError: If command times out
+        GitCommandError: If check=True and command fails
     """
-    result = subprocess.run(
-        ["git"] + list(args),
-        cwd=cwd or Path.cwd(),
-        capture_output=True,
-        text=True
-    )
-    if check and result.returncode != 0:
-        raise subprocess.CalledProcessError(
-            result.returncode,
-            ["git"] + list(args),
-            result.stdout,
-            result.stderr
+    cmd = ["git"] + list(args)
+    cmd_str = " ".join(cmd)
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd or Path.cwd(),
+            capture_output=True,
+            text=True,
+            timeout=timeout
         )
-    return result
+        if check and result.returncode != 0:
+            raise GitCommandError(
+                f"Git command failed: {cmd_str}\n{result.stderr}",
+                returncode=result.returncode,
+                stderr=result.stderr
+            )
+        return result
+    except FileNotFoundError:
+        raise GitNotInstalledError(
+            "Git is not installed or not in PATH. "
+            "Please install git: https://git-scm.com/downloads"
+        )
+    except subprocess.TimeoutExpired:
+        raise GitTimeoutError(
+            f"Git command timed out after {timeout}s: {cmd_str}",
+            timeout=timeout
+        )
 
 
 # Legacy branch prefix for migration

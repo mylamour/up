@@ -67,17 +67,39 @@ class CheckpointManager:
         self.checkpoint_dir = self.workspace / self.CHECKPOINT_DIR
         self.state_manager = get_state_manager(workspace)
     
-    def _run_git(self, *args, check: bool = True) -> subprocess.CompletedProcess:
-        """Run a git command."""
-        result = subprocess.run(
-            ["git"] + list(args),
-            cwd=self.workspace,
-            capture_output=True,
-            text=True
-        )
-        if check and result.returncode != 0:
-            raise GitError(f"Git command failed: {result.stderr}")
-        return result
+    def _run_git(self, *args, check: bool = True, timeout: int = 60) -> subprocess.CompletedProcess:
+        """Run a git command with error handling.
+        
+        Args:
+            *args: Git command arguments
+            check: Raise GitError on failure
+            timeout: Command timeout in seconds
+        
+        Returns:
+            CompletedProcess result
+        
+        Raises:
+            GitError: If command fails and check=True
+            GitNotInstalledError: If git is not installed
+        """
+        try:
+            result = subprocess.run(
+                ["git"] + list(args),
+                cwd=self.workspace,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if check and result.returncode != 0:
+                raise GitError(f"Git command failed: git {' '.join(args)}\n{result.stderr}")
+            return result
+        except FileNotFoundError:
+            raise GitNotInstalledError(
+                "Git is not installed or not in PATH. "
+                "Please install git: https://git-scm.com/downloads"
+            )
+        except subprocess.TimeoutExpired:
+            raise GitError(f"Git command timed out after {timeout}s: git {' '.join(args)}")
     
     def _is_git_repo(self) -> bool:
         """Check if workspace is a git repository."""
@@ -399,6 +421,11 @@ class CheckpointError(Exception):
 
 class GitError(CheckpointError):
     """Git operation failed."""
+    pass
+
+
+class GitNotInstalledError(GitError):
+    """Git is not installed or not in PATH."""
     pass
 
 

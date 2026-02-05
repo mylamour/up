@@ -1,0 +1,21 @@
+{
+  "project": "Project Improvements",
+  "branchName": "feature/improvements",
+  "description": "Improvements identified by learning system",
+  "createdAt": "",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Example User Story",
+      "description": "As a developer, I want X so that Y",
+      "acceptanceCriteria": [
+        "Criterion 1",
+        "Criterion 2"
+      ],
+      "priority": 1,
+      "effort": "medium",
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

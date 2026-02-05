@@ -266,6 +266,10 @@ def merge_worktree(
     return True
 
 
+# Standard checkpoint tag prefix (matches checkpoint.py)
+CHECKPOINT_TAG_PREFIX = "up-checkpoint"
+
+
 def create_checkpoint(worktree_path: Path, name: str = None) -> str:
     """Create a checkpoint (commit + tag) in a worktree.
     
@@ -301,9 +305,9 @@ def create_checkpoint(worktree_path: Path, name: str = None) -> str:
             capture_output=True
         )
     
-    # Create lightweight tag
+    # Create lightweight tag with standard prefix
     subprocess.run(
-        ["git", "tag", f"vibe/{checkpoint_name}"],
+        ["git", "tag", f"{CHECKPOINT_TAG_PREFIX}/{checkpoint_name}"],
         cwd=worktree_path,
         capture_output=True
     )
@@ -318,7 +322,7 @@ def reset_to_checkpoint(worktree_path: Path, checkpoint: str = None):
         worktree_path: Path to worktree
         checkpoint: Checkpoint name (defaults to HEAD)
     """
-    target = f"vibe/{checkpoint}" if checkpoint else "HEAD"
+    target = f"{CHECKPOINT_TAG_PREFIX}/{checkpoint}" if checkpoint else "HEAD"
     
     subprocess.run(
         ["git", "reset", "--hard", target],

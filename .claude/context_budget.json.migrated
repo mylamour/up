@@ -1,0 +1,12 @@
+{
+  "budget": 100000,
+  "total_tokens": 0,
+  "remaining_tokens": 100000,
+  "usage_percent": 0.0,
+  "status": "OK",
+  "warning_threshold": 0.8,
+  "critical_threshold": 0.9,
+  "session_start": "2026-02-04T18:17:59.380676",
+  "entry_count": 0,
+  "entries": []
+}

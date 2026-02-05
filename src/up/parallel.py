@@ -3,6 +3,8 @@
 This module enables running multiple AI tasks simultaneously,
 each in its own isolated Git worktree. Tasks are verified
 independently and merged to main when successful.
+
+Uses the unified state system in .up/state.json for consistency.
 """
 
 import json
@@ -12,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
@@ -28,6 +30,7 @@ from up.git.worktree import (
     WorktreeState,
 )
 from up.ai_cli import check_ai_cli, run_ai_task
+from up.core.state import get_state_manager, AgentState
 
 console = Console()
 
@@ -44,38 +47,69 @@ class TaskResult:
     test_results: Optional[dict] = None
 
 
-@dataclass
-class ParallelState:
-    """State of parallel execution."""
-    mode: str = "parallel"
-    iteration: int = 0
-    parallel_limit: int = 3
-    active_worktrees: list = field(default_factory=list)
-    completed_this_run: list = field(default_factory=list)
-    failed_this_run: list = field(default_factory=list)
-    started: str = field(default_factory=lambda: datetime.now().isoformat())
+class ParallelExecutionManager:
+    """Manages parallel execution state using unified state system.
     
-    def save(self, path: Path = None):
-        """Save state to file."""
-        state_file = (path or Path.cwd()) / ".parallel_state.json"
-        state_file.write_text(json.dumps({
-            "mode": self.mode,
-            "iteration": self.iteration,
-            "parallel_limit": self.parallel_limit,
-            "active_worktrees": self.active_worktrees,
-            "completed_this_run": self.completed_this_run,
-            "failed_this_run": self.failed_this_run,
-            "started": self.started
-        }, indent=2))
+    This replaces the old ParallelState dataclass to use .up/state.json
+    instead of the legacy .parallel_state.json file.
+    """
     
-    @classmethod
-    def load(cls, path: Path = None) -> "ParallelState":
-        """Load state from file."""
-        state_file = (path or Path.cwd()) / ".parallel_state.json"
-        if state_file.exists():
-            data = json.loads(state_file.read_text())
-            return cls(**data)
-        return cls()
+    def __init__(self, workspace: Path = None):
+        self.workspace = workspace or Path.cwd()
+        self._state_manager = get_state_manager(self.workspace)
+    
+    @property
+    def state(self):
+        """Get the parallel state from unified state."""
+        return self._state_manager.state.parallel
+    
+    @property
+    def iteration(self) -> int:
+        return self.state.current_batch
+    
+    @iteration.setter
+    def iteration(self, value: int):
+        self.state.current_batch = value
+        self._state_manager.save()
+    
+    @property
+    def parallel_limit(self) -> int:
+        return self.state.max_workers
+    
+    @parallel_limit.setter
+    def parallel_limit(self, value: int):
+        self.state.max_workers = value
+        self._state_manager.save()
+    
+    @property
+    def active_worktrees(self) -> List[str]:
+        return self.state.agents
+    
+    def add_active_worktree(self, task_id: str):
+        if task_id not in self.state.agents:
+            self.state.agents.append(task_id)
+            self._state_manager.save()
+    
+    def remove_active_worktree(self, task_id: str):
+        if task_id in self.state.agents:
+            self.state.agents.remove(task_id)
+            self._state_manager.save()
+    
+    def set_active(self, active: bool):
+        self.state.active = active
+        self._state_manager.save()
+    
+    def save(self):
+        """Explicit save (for compatibility)."""
+        self._state_manager.save()
+    
+    def record_task_complete(self, task_id: str):
+        """Record a task completion in metrics."""
+        self._state_manager.record_task_complete(task_id)
+    
+    def record_task_failed(self, task_id: str):
+        """Record a task failure in metrics."""
+        self._state_manager.record_task_failed(task_id)
 
 
 def get_pending_tasks(prd_path: Path, limit: int = None) -> list[dict]:
@@ -148,9 +182,9 @@ def execute_task_in_worktree(
         state.save(worktree_path)
         
         success, output = run_ai_task(
+            workspace=worktree_path,
             prompt=prompt,
             cli_name=cli_name,
-            cwd=worktree_path,
             timeout=timeout
         )
         
@@ -333,9 +367,11 @@ def run_parallel_loop(
     Returns:
         Summary dict with results
     """
-    state = ParallelState.load(workspace)
-    state.iteration += 1
-    state.parallel_limit = max_workers
+    # Use unified state management
+    state_mgr = ParallelExecutionManager(workspace)
+    state_mgr.iteration += 1
+    state_mgr.parallel_limit = max_workers
+    state_mgr.set_active(True)
     
     summary = {
         "batches": 0,
@@ -346,127 +382,126 @@ def run_parallel_loop(
     
     start_time = time.time()
     
-    while True:
-        # Get pending tasks
-        tasks = get_pending_tasks(prd_path, limit=max_workers)
-        
-        if not tasks:
-            console.print("\n[green]✓[/] All tasks completed!")
-            break
-        
-        summary["batches"] += 1
-        console.print(f"\n[bold]Batch {summary['batches']}:[/] {len(tasks)} tasks")
-        
-        if dry_run:
+    try:
+        while True:
+            # Get pending tasks
+            tasks = get_pending_tasks(prd_path, limit=max_workers)
+            
+            if not tasks:
+                console.print("\n[green]✓[/] All tasks completed!")
+                break
+            
+            summary["batches"] += 1
+            console.print(f"\n[bold]Batch {summary['batches']}:[/] {len(tasks)} tasks")
+            
+            if dry_run:
+                for task in tasks:
+                    console.print(f"  Would execute: {task.get('id')} - {task.get('title')}")
+                if not run_all:
+                    break
+                continue
+            
+            # Phase 1: Create worktrees
+            console.print("\n[dim]Creating worktrees...[/]")
+            worktrees = []
             for task in tasks:
-                console.print(f"  Would execute: {task.get('id')} - {task.get('title')}")
+                task_id = task.get("id")
+                wt_path, wt_state = create_worktree(
+                    task_id,
+                    task.get("title", "")
+                )
+                worktrees.append({
+                    "path": wt_path,
+                    "state": wt_state,
+                    "task": task
+                })
+                console.print(f"  ✓ {wt_path}")
+                state_mgr.add_active_worktree(task_id)
+            
+            # Phase 2: Execute in parallel
+            console.print("\n[dim]Executing tasks...[/]")
+            
+            cli_name, cli_available = check_ai_cli()
+            if not cli_available:
+                console.print("[yellow]No AI CLI found. Skipping execution.[/]")
+                for wt in worktrees:
+                    remove_worktree(wt["task"].get("id"))
+                break
+            
+            results = {}
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        execute_task_in_worktree,
+                        wt["path"],
+                        wt["task"],
+                        cli_name,
+                        timeout
+                    ): wt["task"].get("id")
+                    for wt in worktrees
+                }
+                
+                for future in as_completed(futures):
+                    task_id = futures[future]
+                    try:
+                        result = future.result()
+                        results[task_id] = result
+                        status = "✓" if result.success else "✗"
+                        console.print(f"  {status} {task_id}: {result.phase}")
+                    except Exception as e:
+                        results[task_id] = TaskResult(
+                            task_id=task_id,
+                            success=False,
+                            phase="failed",
+                            duration_seconds=0,
+                            error=str(e)
+                        )
+            
+            # Phase 3: Verify
+            console.print("\n[dim]Verifying...[/]")
+            for wt in worktrees:
+                task_id = wt["task"].get("id")
+                if results.get(task_id, TaskResult("", False, "failed", 0)).success:
+                    verify_result = verify_worktree(wt["path"])
+                    results[task_id] = verify_result
+                    
+                    status = "✅" if verify_result.success else "❌"
+                    test_info = ""
+                    if verify_result.test_results:
+                        test_info = f" (tests: {verify_result.test_results.get('tests', '?')})"
+                    console.print(f"  {status} {task_id}{test_info}")
+            
+            # Phase 4: Merge passed tasks
+            console.print("\n[dim]Merging...[/]")
+            for wt in worktrees:
+                task_id = wt["task"].get("id")
+                result = results.get(task_id)
+                
+                if result and result.success:
+                    if merge_worktree(task_id):
+                        console.print(f"  ✓ {task_id} merged")
+                        summary["completed"].append(task_id)
+                        state_mgr.record_task_complete(task_id)
+                        
+                        # Mark task complete in PRD
+                        _mark_task_complete(prd_path, task_id)
+                    else:
+                        console.print(f"  ✗ {task_id} merge failed")
+                        summary["failed"].append(task_id)
+                        state_mgr.record_task_failed(task_id)
+                else:
+                    console.print(f"  - {task_id} skipped (not passed)")
+                    summary["failed"].append(task_id)
+                    state_mgr.record_task_failed(task_id)
+                
+                # Remove from active
+                state_mgr.remove_active_worktree(task_id)
+            
             if not run_all:
                 break
-            continue
-        
-        # Phase 1: Create worktrees
-        console.print("\n[dim]Creating worktrees...[/]")
-        worktrees = []
-        for task in tasks:
-            task_id = task.get("id")
-            wt_path, wt_state = create_worktree(
-                task_id,
-                task.get("title", "")
-            )
-            worktrees.append({
-                "path": wt_path,
-                "state": wt_state,
-                "task": task
-            })
-            console.print(f"  ✓ {wt_path}")
-            state.active_worktrees.append(task_id)
-        
-        state.save(workspace)
-        
-        # Phase 2: Execute in parallel
-        console.print("\n[dim]Executing tasks...[/]")
-        
-        cli_name, cli_available = check_ai_cli()
-        if not cli_available:
-            console.print("[yellow]No AI CLI found. Skipping execution.[/]")
-            for wt in worktrees:
-                remove_worktree(wt["task"].get("id"))
-            break
-        
-        results = {}
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(
-                    execute_task_in_worktree,
-                    wt["path"],
-                    wt["task"],
-                    cli_name,
-                    timeout
-                ): wt["task"].get("id")
-                for wt in worktrees
-            }
-            
-            for future in as_completed(futures):
-                task_id = futures[future]
-                try:
-                    result = future.result()
-                    results[task_id] = result
-                    status = "✓" if result.success else "✗"
-                    console.print(f"  {status} {task_id}: {result.phase}")
-                except Exception as e:
-                    results[task_id] = TaskResult(
-                        task_id=task_id,
-                        success=False,
-                        phase="failed",
-                        duration_seconds=0,
-                        error=str(e)
-                    )
-        
-        # Phase 3: Verify
-        console.print("\n[dim]Verifying...[/]")
-        for wt in worktrees:
-            task_id = wt["task"].get("id")
-            if results.get(task_id, TaskResult("", False, "failed", 0)).success:
-                verify_result = verify_worktree(wt["path"])
-                results[task_id] = verify_result
-                
-                status = "✅" if verify_result.success else "❌"
-                test_info = ""
-                if verify_result.test_results:
-                    test_info = f" (tests: {verify_result.test_results.get('tests', '?')})"
-                console.print(f"  {status} {task_id}{test_info}")
-        
-        # Phase 4: Merge passed tasks
-        console.print("\n[dim]Merging...[/]")
-        for wt in worktrees:
-            task_id = wt["task"].get("id")
-            result = results.get(task_id)
-            
-            if result and result.success:
-                if merge_worktree(task_id):
-                    console.print(f"  ✓ {task_id} merged")
-                    summary["completed"].append(task_id)
-                    state.completed_this_run.append(task_id)
-                    
-                    # Mark task complete in PRD
-                    _mark_task_complete(prd_path, task_id)
-                else:
-                    console.print(f"  ✗ {task_id} merge failed")
-                    summary["failed"].append(task_id)
-                    state.failed_this_run.append(task_id)
-            else:
-                console.print(f"  - {task_id} skipped (not passed)")
-                summary["failed"].append(task_id)
-                state.failed_this_run.append(task_id)
-            
-            # Remove from active
-            if task_id in state.active_worktrees:
-                state.active_worktrees.remove(task_id)
-        
-        state.save(workspace)
-        
-        if not run_all:
-            break
+    finally:
+        # Mark parallel execution as inactive
+        state_mgr.set_active(False)
     
     summary["total_duration"] = time.time() - start_time
     

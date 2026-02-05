@@ -20,6 +20,7 @@ from up.core.checkpoint import (
     CheckpointManager,
     NotAGitRepoError,
 )
+from up.core.provenance import get_provenance_manager, ProvenanceEntry
 
 console = Console()
 
@@ -27,6 +28,7 @@ console = Console()
 _state_manager: StateManager = None
 _checkpoint_manager: CheckpointManager = None
 _current_workspace = None
+_current_provenance_entry: ProvenanceEntry = None
 
 
 def _handle_interrupt(signum, frame):
@@ -41,6 +43,19 @@ def _handle_interrupt(signum, frame):
         console.print(f"[green]✓[/] State saved to .up/state.json")
         last_cp = _state_manager.state.loop.last_checkpoint
         console.print(f"[dim]Checkpoint: {last_cp or 'none'}[/]")
+        
+        # Mark any in-progress provenance entry as rejected
+        if _current_provenance_entry and _current_workspace:
+            try:
+                prov_mgr = get_provenance_manager(_current_workspace)
+                prov_mgr.reject_operation(
+                    _current_provenance_entry.id,
+                    reason="User interrupted operation"
+                )
+                console.print(f"[dim]Provenance entry marked as interrupted[/]")
+            except Exception:
+                pass  # Don't fail on provenance error during interrupt
+        
         console.print("\nTo resume: [cyan]up start --resume[/]")
         console.print("To rollback: [cyan]up reset[/]")
     
@@ -351,16 +366,26 @@ def _count_tasks(workspace: Path, task_source: str) -> int:
 
 
 def _check_circuit_breaker(state: dict) -> dict:
-    """Check circuit breaker status."""
+    """Check circuit breaker status.
+    
+    Now uses the can_execute() method which includes cooldown check.
+    """
     cb = state.get("circuit_breaker", {})
     
     for name, circuit in cb.items():
-        if isinstance(circuit, dict) and circuit.get("state") == "OPEN":
-            return {
-                "open": True,
-                "circuit": name,
-                "reason": f"{name} circuit opened after {circuit.get('failures', 0)} failures",
-            }
+        if isinstance(circuit, dict):
+            cb_state = circuit.get("state", "CLOSED")
+            failures = circuit.get("failures", 0)
+            
+            if cb_state == "OPEN":
+                # Check if we can try again (cooldown expired)
+                # This is done via StateManager in the actual loop
+                return {
+                    "open": True,
+                    "circuit": name,
+                    "reason": f"{name} circuit opened after {failures} failures",
+                    "can_retry": False,  # Will be checked properly in loop
+                }
     
     return {"open": False}
 
@@ -520,13 +545,13 @@ def _generate_loop_instructions(
 {task_info}
 
 SESRC Loop Commands:
-  ├─ Checkpoint: git stash push -m "cp-{state.get('iteration', 1)}"
+  ├─ Checkpoint: up save (creates git checkpoint)
   ├─ Verify: pytest && mypy src/ && ruff check src/
-  ├─ Rollback: git stash pop
-  └─ Complete: Update .loop_state.json
+  ├─ Rollback: up reset (restores last checkpoint)
+  └─ Complete: up status (view progress)
 
-Circuit Breaker: 3 failures → OPEN
-State File: .loop_state.json
+Circuit Breaker: 3 consecutive failures → OPEN
+State File: .up/state.json
 """
 
 
@@ -556,13 +581,14 @@ def _run_ai_product_loop(
         verify: Run tests before commit
         interactive: Ask for confirmation before commit
     """
-    global _state_manager, _checkpoint_manager, _current_workspace
+    global _state_manager, _checkpoint_manager, _current_workspace, _current_provenance_entry
     from datetime import datetime
     
-    # Set up state and checkpoint managers
+    # Set up state, checkpoint, and provenance managers
     _current_workspace = workspace
     _state_manager = get_state_manager(workspace)
     _checkpoint_manager = get_checkpoint_manager(workspace)
+    provenance_manager = get_provenance_manager(workspace)
     signal.signal(signal.SIGINT, _handle_interrupt)
     
     # Get all tasks
@@ -617,6 +643,20 @@ def _run_ai_product_loop(
         # Build prompt for AI
         prompt = _build_implementation_prompt(workspace, task, task_source)
         
+        # Start provenance tracking
+        try:
+            _current_provenance_entry = provenance_manager.start_operation(
+                task_id=task_id,
+                task_title=task_title,
+                prompt=prompt,
+                ai_model=cli_name,
+                context_files=[task_source] if task_source else []
+            )
+            console.print(f"[dim]Provenance: {_current_provenance_entry.id}[/]")
+        except Exception as e:
+            console.print(f"[dim]Provenance tracking unavailable: {e}[/]")
+            _current_provenance_entry = None
+        
         # Run AI
         console.print(f"[yellow]Running {cli_name} (timeout: {timeout}s)...[/]")
         success, output = _run_ai_implementation(workspace, prompt, cli_name, timeout)
@@ -626,12 +666,27 @@ def _run_ai_product_loop(
             
             # Phase: VERIFY
             verification_passed = True
+            tests_passed = None
+            lint_passed = None
+            
             if verify:
                 console.print("\n[bold]Phase: VERIFY[/]")
-                verification_passed = _run_verification(workspace)
+                tests_passed, lint_passed = _run_verification_with_results(workspace)
+                verification_passed = tests_passed is not False
                 
                 if not verification_passed:
                     console.print(f"[yellow]⚠[/] Verification failed for task {task_id}")
+                    
+                    # Mark provenance as rejected
+                    if _current_provenance_entry:
+                        try:
+                            provenance_manager.reject_operation(
+                                _current_provenance_entry.id,
+                                reason="Verification failed"
+                            )
+                        except Exception:
+                            pass
+                        _current_provenance_entry = None
                     
                     if interactive:
                         if not click.confirm("Continue anyway?"):
@@ -648,6 +703,21 @@ def _run_ai_product_loop(
                         continue
             
             completed += 1
+            
+            # Complete provenance tracking
+            if _current_provenance_entry:
+                try:
+                    modified_files = _get_modified_files(workspace)
+                    provenance_manager.complete_operation(
+                        entry_id=_current_provenance_entry.id,
+                        files_modified=modified_files,
+                        tests_passed=tests_passed,
+                        lint_passed=lint_passed,
+                        status="accepted"
+                    )
+                except Exception:
+                    pass
+                _current_provenance_entry = None
             
             # Mark task as complete in PRD
             _mark_task_complete(workspace, task_source, task_id)
@@ -678,6 +748,17 @@ def _run_ai_product_loop(
             console.print(f"[dim]{output[:200]}...[/]" if len(output) > 200 else f"[dim]{output}[/]")
             failed += 1
             
+            # Reject provenance entry
+            if _current_provenance_entry:
+                try:
+                    provenance_manager.reject_operation(
+                        _current_provenance_entry.id,
+                        reason=output[:500] if output else "AI implementation failed"
+                    )
+                except Exception:
+                    pass
+                _current_provenance_entry = None
+            
             # Rollback
             console.print("[yellow]Rolling back...[/]")
             _rollback_checkpoint(workspace)
@@ -690,12 +771,15 @@ def _run_ai_product_loop(
             if is_doom:
                 console.print(f"[red]{doom_msg}[/]")
             
-            # Check circuit breaker
-            cb = _state_manager.state.get_circuit_breaker("task")
+            # Check circuit breaker with cooldown
+            cb = _state_manager.get_circuit_breaker("task")
             cb.record_failure()
-            if cb.is_open():
-                console.print("[red]Circuit breaker OPEN - stopping loop[/]")
-                _state_manager.save()
+            _state_manager.save()
+            
+            if not cb.can_execute():
+                cooldown = _state_manager.config.circuit_breaker_cooldown_minutes
+                console.print(f"[red]Circuit breaker OPEN - stopping loop[/]")
+                console.print(f"[dim]Cooldown: {cooldown} minutes before retry allowed[/]")
                 break
             
             # Update legacy state dict for compatibility
@@ -845,25 +929,48 @@ def _run_verification(workspace: Path) -> bool:
     Returns:
         True if all verification passes
     """
+    tests_passed, _ = _run_verification_with_results(workspace)
+    return tests_passed is not False
+
+
+def _run_verification_with_results(workspace: Path) -> tuple:
+    """Run verification steps and return individual results.
+    
+    Returns:
+        Tuple of (tests_passed, lint_passed) where:
+        - True = passed
+        - False = failed
+        - None = not run or not applicable
+    """
     import subprocess
     
-    passed = True
+    tests_passed = None
+    lint_passed = None
     
     # Check if pytest exists and run tests
-    pytest_result = subprocess.run(
-        ["pytest", "--tb=no", "-q"],
-        cwd=workspace,
-        capture_output=True,
-        timeout=300
-    )
-    if pytest_result.returncode == 0:
-        console.print("  [green]✓[/] Tests passed")
-    elif pytest_result.returncode == 5:
-        # No tests collected - that's OK
-        console.print("  [dim]○[/] No tests found")
-    else:
-        console.print("  [red]✗[/] Tests failed")
-        passed = False
+    try:
+        pytest_result = subprocess.run(
+            ["pytest", "--tb=no", "-q"],
+            cwd=workspace,
+            capture_output=True,
+            timeout=300
+        )
+        if pytest_result.returncode == 0:
+            console.print("  [green]✓[/] Tests passed")
+            tests_passed = True
+        elif pytest_result.returncode == 5:
+            # No tests collected - that's OK
+            console.print("  [dim]○[/] No tests found")
+            tests_passed = None
+        else:
+            console.print("  [red]✗[/] Tests failed")
+            tests_passed = False
+    except FileNotFoundError:
+        console.print("  [dim]○[/] pytest not installed")
+        tests_passed = None
+    except subprocess.TimeoutExpired:
+        console.print("  [yellow]⚠[/] Tests timeout")
+        tests_passed = False
     
     # Check for lint (optional - don't fail if not installed)
     try:
@@ -875,15 +982,53 @@ def _run_verification(workspace: Path) -> bool:
         )
         if ruff_result.returncode == 0:
             console.print("  [green]✓[/] Lint passed")
+            lint_passed = True
         else:
             console.print("  [yellow]⚠[/] Lint warnings")
-            # Don't fail on lint warnings
+            lint_passed = False  # Track but don't fail
     except FileNotFoundError:
-        pass  # ruff not installed, skip
+        lint_passed = None  # ruff not installed, skip
     except subprocess.TimeoutExpired:
         console.print("  [yellow]⚠[/] Lint timeout")
+        lint_passed = None
     
-    return passed
+    return tests_passed, lint_passed
+
+
+def _get_modified_files(workspace: Path) -> list:
+    """Get list of files modified since HEAD (uncommitted changes).
+    
+    Returns:
+        List of modified file paths relative to workspace
+    """
+    import subprocess
+    
+    try:
+        # Get staged and unstaged changes
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().split("\n")
+        
+        # Also check for untracked files
+        result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().split("\n")
+        
+        return []
+    except Exception:
+        return []
 
 
 def _get_diff_summary(workspace: Path) -> str:

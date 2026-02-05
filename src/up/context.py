@@ -380,7 +380,8 @@ def create_context_budget_file(target_dir: Path, budget: int = DEFAULT_BUDGET) -
     """
     manager = ContextManager(workspace=target_dir, budget=budget)
     manager.reset()
-    return manager.state_file
+    # Return the unified state file path
+    return target_dir / ".up" / "state.json"
 
 
 # CLI integration

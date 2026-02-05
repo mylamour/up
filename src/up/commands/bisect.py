@@ -14,17 +14,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from up.git.utils import is_git_repo, run_git
+
 console = Console()
-
-
-def _is_git_repo(path: Path) -> bool:
-    """Check if path is a git repository."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--git-dir"],
-        cwd=path,
-        capture_output=True
-    )
-    return result.returncode == 0
 
 
 def _get_last_tag(path: Path) -> Optional[str]:
@@ -106,7 +98,7 @@ def bisect_cmd(test_cmd: str, good: str, bad: str, script: str, start: bool, res
     """
     cwd = Path.cwd()
     
-    if not _is_git_repo(cwd):
+    if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         sys.exit(1)
     
@@ -316,7 +308,7 @@ def history_cmd(limit: int, since: str, author: str, grep_pattern: str):
     """
     cwd = Path.cwd()
     
-    if not _is_git_repo(cwd):
+    if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
     

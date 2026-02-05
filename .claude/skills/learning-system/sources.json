@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "updated": "",
+  "projects": [
+    {
+      "name": "example-project",
+      "repo": "owner/repo",
+      "category": "reference",
+      "topics": ["topic1", "topic2"],
+      "docs_url": "https://docs.example.com/"
+    }
+  ],
+  "blogs": [
+    {
+      "name": "Example Blog",
+      "url": "https://blog.example.com/",
+      "topics": ["topic1", "topic2"]
+    }
+  ],
+  "research_topics": [
+    "Add topics relevant to your project"
+  ]
+}

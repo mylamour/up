@@ -117,7 +117,7 @@ This project tracks context window usage:
 - **Warning**: At 80% usage
 - **Action**: Summarize and checkpoint at 90%
 
-See `.claude/context_budget.json` for current usage.
+See `.up/state.json` for current usage (unified state file).
 
 ## Code Style
 
