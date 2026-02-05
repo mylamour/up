@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import click
 from rich.console import Console
@@ -21,18 +22,31 @@ from up.core.checkpoint import (
     NotAGitRepoError,
 )
 from up.core.provenance import get_provenance_manager, ProvenanceEntry
+from up.ui import ProductLoopDisplay, TaskStatus, THEME
+from up.ui.loop_display import LoopStatus
 
-console = Console()
+console = Console(theme=THEME)
 
 # Global state for interrupt handling
 _state_manager: StateManager = None
 _checkpoint_manager: CheckpointManager = None
 _current_workspace = None
 _current_provenance_entry: ProvenanceEntry = None
+_current_display: Optional[ProductLoopDisplay] = None
 
 
 def _handle_interrupt(signum, frame):
     """Handle Ctrl+C interrupt - save state and checkpoint info."""
+    global _current_display
+    
+    # Stop the display first if active
+    if _current_display:
+        _current_display.set_status(LoopStatus.PAUSED)
+        _current_display.log_warning("Interrupted by user")
+        time.sleep(0.3)  # Brief pause to show status
+        _current_display.stop()
+        _current_display = None
+    
     console.print("\n\n[yellow]Interrupted! Saving state...[/]")
     
     if _state_manager and _current_workspace:
@@ -581,7 +595,7 @@ def _run_ai_product_loop(
         verify: Run tests before commit
         interactive: Ask for confirmation before commit
     """
-    global _state_manager, _checkpoint_manager, _current_workspace, _current_provenance_entry
+    global _state_manager, _checkpoint_manager, _current_workspace, _current_provenance_entry, _current_display
     from datetime import datetime
     
     # Set up state, checkpoint, and provenance managers
@@ -591,17 +605,20 @@ def _run_ai_product_loop(
     provenance_manager = get_provenance_manager(workspace)
     signal.signal(signal.SIGINT, _handle_interrupt)
     
-    # Get all tasks
+    # Get all tasks (including completed for display)
+    all_tasks = []
     tasks_to_run = []
     
     if specific_task:
         tasks_to_run = [{"id": specific_task, "title": specific_task, "description": specific_task}]
+        all_tasks = tasks_to_run
     elif task_source and task_source.endswith(".json"):
         prd_path = workspace / task_source
         if prd_path.exists():
             try:
                 data = json.loads(prd_path.read_text())
                 stories = data.get("userStories", [])
+                all_tasks = stories  # All tasks for display
                 # Get incomplete tasks
                 for story in stories:
                     if not story.get("passes", False):
@@ -615,192 +632,222 @@ def _run_ai_product_loop(
         console.print("\n[green]✓[/] All tasks completed!")
         return
     
-    console.print(f"\n[bold]Tasks to implement:[/] {len(tasks_to_run)}")
+    # Initialize the display
+    display = ProductLoopDisplay(console)
+    _current_display = display  # Track for interrupt handler
+    display.set_tasks(all_tasks)
+    display.start()
+    
+    display.log(f"Starting product loop with {len(tasks_to_run)} tasks")
+    display.log(f"AI CLI: {cli_name} (timeout: {timeout}s)")
     
     # Process each task
     completed = 0
     failed = 0
     
-    for task in tqdm(tasks_to_run, desc="Implementing", unit="task"):
-        task_id = task.get("id", "unknown")
-        task_title = task.get("title", "No title")
-        task_desc = task.get("description", task_title)
-        
-        console.print(f"\n{'─' * 50}")
-        console.print(f"[bold cyan]Task {task_id}:[/] {task_title}")
-        
-        # Update state
-        state["iteration"] = state.get("iteration", 0) + 1
-        state["phase"] = "EXECUTE"
-        state["current_task"] = task_id
-        _save_loop_state(workspace, state)
-        
-        # Create checkpoint
-        console.print("[dim]Creating checkpoint...[/]")
-        checkpoint_name = f"cp-{task_id}-{state['iteration']}"
-        _create_checkpoint(workspace, checkpoint_name, task_id=task_id)
-        
-        # Build prompt for AI
-        prompt = _build_implementation_prompt(workspace, task, task_source)
-        
-        # Start provenance tracking
-        try:
-            _current_provenance_entry = provenance_manager.start_operation(
-                task_id=task_id,
-                task_title=task_title,
-                prompt=prompt,
-                ai_model=cli_name,
-                context_files=[task_source] if task_source else []
-            )
-            console.print(f"[dim]Provenance: {_current_provenance_entry.id}[/]")
-        except Exception as e:
-            console.print(f"[dim]Provenance tracking unavailable: {e}[/]")
-            _current_provenance_entry = None
-        
-        # Run AI
-        console.print(f"[yellow]Running {cli_name} (timeout: {timeout}s)...[/]")
-        success, output = _run_ai_implementation(workspace, prompt, cli_name, timeout)
-        
-        if success:
-            console.print(f"[green]✓[/] Task {task_id} implemented")
+    try:
+        for task in tasks_to_run:
+            task_id = task.get("id", "unknown")
+            task_title = task.get("title", "No title")
+            task_desc = task.get("description", task_title)
             
-            # Phase: VERIFY
-            verification_passed = True
-            tests_passed = None
-            lint_passed = None
+            # Update display
+            display.set_current_task(task_id, "CHECKPOINT")
+            display.increment_iteration()
+            display.log(f"Starting task {task_id}: {task_title[:40]}...")
             
-            if verify:
-                console.print("\n[bold]Phase: VERIFY[/]")
-                tests_passed, lint_passed = _run_verification_with_results(workspace)
-                verification_passed = tests_passed is not False
+            # Update state
+            state["iteration"] = state.get("iteration", 0) + 1
+            state["phase"] = "EXECUTE"
+            state["current_task"] = task_id
+            _save_loop_state(workspace, state)
+            
+            # Create checkpoint
+            display.log("Creating checkpoint...")
+            checkpoint_name = f"cp-{task_id}-{state['iteration']}"
+            _create_checkpoint(workspace, checkpoint_name, task_id=task_id)
+            
+            # Build prompt for AI
+            prompt = _build_implementation_prompt(workspace, task, task_source)
+            
+            # Start provenance tracking
+            try:
+                _current_provenance_entry = provenance_manager.start_operation(
+                    task_id=task_id,
+                    task_title=task_title,
+                    prompt=prompt,
+                    ai_model=cli_name,
+                    context_files=[task_source] if task_source else []
+                )
+                display.log(f"Provenance: {_current_provenance_entry.id[:8]}...")
+            except Exception as e:
+                _current_provenance_entry = None
+            
+            # Run AI
+            display.set_phase("EXECUTE")
+            display.log(f"Running {cli_name}...")
+            success, output = _run_ai_implementation(workspace, prompt, cli_name, timeout)
+        
+            if success:
+                display.log_success(f"Task {task_id} implemented")
                 
-                if not verification_passed:
-                    console.print(f"[yellow]⚠[/] Verification failed for task {task_id}")
+                # Phase: VERIFY
+                verification_passed = True
+                tests_passed = None
+                lint_passed = None
+                
+                if verify:
+                    display.set_phase("VERIFY")
+                    display.set_status(LoopStatus.VERIFYING)
+                    display.log("Running verification...")
+                    tests_passed, lint_passed = _run_verification_with_results(workspace)
+                    verification_passed = tests_passed is not False
                     
-                    # Mark provenance as rejected
-                    if _current_provenance_entry:
-                        try:
-                            provenance_manager.reject_operation(
-                                _current_provenance_entry.id,
-                                reason="Verification failed"
-                            )
-                        except Exception:
-                            pass
-                        _current_provenance_entry = None
-                    
-                    if interactive:
-                        if not click.confirm("Continue anyway?"):
-                            console.print("[yellow]Rolling back...[/]")
+                    if not verification_passed:
+                        display.log_warning(f"Verification failed for {task_id}")
+                        
+                        # Mark provenance as rejected
+                        if _current_provenance_entry:
+                            try:
+                                provenance_manager.reject_operation(
+                                    _current_provenance_entry.id,
+                                    reason="Verification failed"
+                                )
+                            except Exception:
+                                pass
+                            _current_provenance_entry = None
+                        
+                        if interactive:
+                            display.stop()  # Pause display for interaction
+                            if not click.confirm("Continue anyway?"):
+                                console.print("[yellow]Rolling back...[/]")
+                                _rollback_checkpoint(workspace)
+                                failed += 1
+                                _state_manager.record_task_failed(task_id)
+                                display.start()
+                                display.update_task_status(task_id, TaskStatus.ROLLED_BACK)
+                                continue
+                            display.start()
+                        else:
+                            display.log("Rolling back changes...")
                             _rollback_checkpoint(workspace)
                             failed += 1
                             _state_manager.record_task_failed(task_id)
+                            display.update_task_status(task_id, TaskStatus.ROLLED_BACK)
                             continue
-                    else:
-                        console.print("[yellow]Rolling back (use --no-verify to skip)[/]")
-                        _rollback_checkpoint(workspace)
-                        failed += 1
-                        _state_manager.record_task_failed(task_id)
-                        continue
-            
-            completed += 1
-            
-            # Complete provenance tracking
-            if _current_provenance_entry:
-                try:
-                    modified_files = _get_modified_files(workspace)
-                    provenance_manager.complete_operation(
-                        entry_id=_current_provenance_entry.id,
-                        files_modified=modified_files,
-                        tests_passed=tests_passed,
-                        lint_passed=lint_passed,
-                        status="accepted"
-                    )
-                except Exception:
-                    pass
-                _current_provenance_entry = None
-            
-            # Mark task as complete in PRD
-            _mark_task_complete(workspace, task_source, task_id)
-            
-            # Update state via state manager
-            _state_manager.record_task_complete(task_id)
-            
-            # Update legacy state dict for compatibility
-            state["tasks_completed"] = state.get("tasks_completed", []) + [task_id]
-            state["phase"] = "COMMIT"
-            
-            # Phase: COMMIT
-            if auto_commit:
-                should_commit = True
-                if interactive:
-                    console.print("\n[bold]Phase: COMMIT[/]")
-                    console.print(_get_diff_summary(workspace))
-                    should_commit = click.confirm("Commit changes?")
                 
-                if should_commit:
-                    commit_msg = f"feat({task_id}): {task_title}"
-                    _commit_changes(workspace, commit_msg)
-                    console.print(f"[green]✓[/] Committed: {commit_msg}")
+                completed += 1
+                
+                # Complete provenance tracking
+                if _current_provenance_entry:
+                    try:
+                        modified_files = _get_modified_files(workspace)
+                        provenance_manager.complete_operation(
+                            entry_id=_current_provenance_entry.id,
+                            files_modified=modified_files,
+                            tests_passed=tests_passed,
+                            lint_passed=lint_passed,
+                            status="accepted"
+                        )
+                    except Exception:
+                        pass
+                    _current_provenance_entry = None
+                
+                # Mark task as complete in PRD
+                _mark_task_complete(workspace, task_source, task_id)
+                
+                # Update state via state manager
+                _state_manager.record_task_complete(task_id)
+                
+                # Update display
+                display.update_task_status(task_id, TaskStatus.COMPLETE)
+                display.set_status(LoopStatus.RUNNING)
+                
+                # Update legacy state dict for compatibility
+                state["tasks_completed"] = state.get("tasks_completed", []) + [task_id]
+                state["phase"] = "COMMIT"
+                
+                # Phase: COMMIT
+                if auto_commit:
+                    should_commit = True
+                    if interactive:
+                        display.stop()
+                        console.print("\n[bold]Phase: COMMIT[/]")
+                        console.print(_get_diff_summary(workspace))
+                        should_commit = click.confirm("Commit changes?")
+                        display.start()
+                    
+                    if should_commit:
+                        commit_msg = f"feat({task_id}): {task_title}"
+                        _commit_changes(workspace, commit_msg)
+                        display.log_success(f"Committed: {commit_msg[:40]}...")
+                else:
+                    display.log("Changes staged (--auto-commit to commit)")
             else:
-                console.print(f"[dim]Changes staged (use --auto-commit to commit automatically)[/]")
-        else:
-            console.print(f"[red]✗[/] Task {task_id} failed")
-            console.print(f"[dim]{output[:200]}...[/]" if len(output) > 200 else f"[dim]{output}[/]")
-            failed += 1
+                display.log_error(f"Task {task_id} failed")
+                failed += 1
+                
+                # Reject provenance entry
+                if _current_provenance_entry:
+                    try:
+                        provenance_manager.reject_operation(
+                            _current_provenance_entry.id,
+                            reason=output[:500] if output else "AI implementation failed"
+                        )
+                    except Exception:
+                        pass
+                    _current_provenance_entry = None
+                
+                # Rollback
+                display.log("Rolling back changes...")
+                _rollback_checkpoint(workspace)
+                display.update_task_status(task_id, TaskStatus.FAILED)
+                
+                # Update circuit breaker and doom loop detection
+                _state_manager.record_task_failed(task_id)
+                
+                # Check for doom loop
+                is_doom, doom_msg = _state_manager.check_doom_loop()
+                if is_doom:
+                    display.log_error(doom_msg[:50])
+                
+                # Check circuit breaker with cooldown
+                cb = _state_manager.get_circuit_breaker("task")
+                cb.record_failure()
+                _state_manager.save()
+                
+                if not cb.can_execute():
+                    cooldown = _state_manager.config.circuit_breaker_cooldown_minutes
+                    display.log_error(f"Circuit breaker OPEN - cooldown {cooldown}m")
+                    display.set_status(LoopStatus.FAILED)
+                    break
+                
+                # Update legacy state dict for compatibility
+                state["circuit_breaker"] = {
+                    "failures": cb.failures,
+                    "state": cb.state
+                }
             
-            # Reject provenance entry
-            if _current_provenance_entry:
-                try:
-                    provenance_manager.reject_operation(
-                        _current_provenance_entry.id,
-                        reason=output[:500] if output else "AI implementation failed"
-                    )
-                except Exception:
-                    pass
-                _current_provenance_entry = None
+            _save_loop_state(workspace, state)
             
-            # Rollback
-            console.print("[yellow]Rolling back...[/]")
-            _rollback_checkpoint(workspace)
-            
-            # Update circuit breaker and doom loop detection
-            _state_manager.record_task_failed(task_id)
-            
-            # Check for doom loop
-            is_doom, doom_msg = _state_manager.check_doom_loop()
-            if is_doom:
-                console.print(f"[red]{doom_msg}[/]")
-            
-            # Check circuit breaker with cooldown
-            cb = _state_manager.get_circuit_breaker("task")
-            cb.record_failure()
-            _state_manager.save()
-            
-            if not cb.can_execute():
-                cooldown = _state_manager.config.circuit_breaker_cooldown_minutes
-                console.print(f"[red]Circuit breaker OPEN - stopping loop[/]")
-                console.print(f"[dim]Cooldown: {cooldown} minutes before retry allowed[/]")
-                break
-            
-            # Update legacy state dict for compatibility
-            state["circuit_breaker"] = {
-                "failures": cb.failures,
-                "state": cb.state
-            }
-        
-        _save_loop_state(workspace, state)
+    finally:
+        # Always stop the display
+        display.set_status(LoopStatus.COMPLETE if failed == 0 else LoopStatus.FAILED)
+        time.sleep(0.5)  # Brief pause to show final state
+        display.stop()
+        _current_display = None
     
     # Reset interrupt handler
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     
-    # Summary
+    # Summary (after display stopped)
     console.print(f"\n{'─' * 50}")
     console.print(Panel.fit(
         f"[bold]Loop Complete[/]\n\n"
         f"Completed: [green]{completed}[/]\n"
         f"Failed: [red]{failed}[/]\n"
         f"Remaining: {len(tasks_to_run) - completed - failed}",
-        border_style="blue"
+        border_style="cyan"
     ))
     
     if completed > 0:
