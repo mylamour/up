@@ -14,6 +14,7 @@ from up.git.utils import (
     make_branch_name,
     run_git,
     migrate_legacy_branch,
+    preview_merge,
     BRANCH_PREFIX,
     LEGACY_BRANCH_PREFIX,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "make_branch_name",
     "run_git",
     "migrate_legacy_branch",
+    "preview_merge",
     "BRANCH_PREFIX",
     "LEGACY_BRANCH_PREFIX",
 ]

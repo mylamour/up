@@ -162,3 +162,53 @@ def migrate_legacy_branch(name: str, cwd: Optional[Path] = None) -> bool:
     # Rename branch
     result = run_git("branch", "-m", old_branch, new_branch, cwd=cwd)
     return result.returncode == 0
+
+
+def preview_merge(
+    source_branch: str,
+    target_branch: str = "main",
+    cwd: Optional[Path] = None
+) -> Tuple[bool, List[str]]:
+    """Preview merge to check for conflicts before actual merge.
+
+    Args:
+        source_branch: Branch to merge from
+        target_branch: Branch to merge into
+        cwd: Repository path
+
+    Returns:
+        Tuple of (can_merge, conflicting_files)
+    """
+    workspace = cwd or Path.cwd()
+
+    # Save current branch
+    original_branch = get_current_branch(workspace)
+
+    # Checkout target branch
+    result = run_git("checkout", target_branch, cwd=workspace)
+    if result.returncode != 0:
+        return False, [f"Cannot checkout {target_branch}"]
+
+    # Try merge with --no-commit --no-ff
+    result = run_git(
+        "merge", "--no-commit", "--no-ff", source_branch,
+        cwd=workspace
+    )
+
+    conflicts = []
+    can_merge = result.returncode == 0
+
+    if not can_merge:
+        # Get list of conflicting files
+        status_result = run_git("status", "--porcelain", cwd=workspace)
+        for line in status_result.stdout.strip().split("\n"):
+            if line.startswith("UU ") or line.startswith("AA "):
+                conflicts.append(line[3:])
+
+    # Always abort the merge attempt
+    run_git("merge", "--abort", cwd=workspace)
+
+    # Return to original branch
+    run_git("checkout", original_branch, cwd=workspace)
+
+    return can_merge, conflicts

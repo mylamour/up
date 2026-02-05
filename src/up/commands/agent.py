@@ -20,7 +20,7 @@ from rich.table import Table
 
 from up.core.state import get_state_manager, AgentState
 from up.core.checkpoint import get_checkpoint_manager, NotAGitRepoError
-from up.git.utils import is_git_repo, get_current_branch, count_commits_since, make_branch_name
+from up.git.utils import is_git_repo, get_current_branch, count_commits_since, make_branch_name, preview_merge
 
 console = Console()
 
@@ -302,7 +302,20 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
     console.print(f"  Branch: {agent_branch}")
     console.print(f"  Commits: {commits}")
     console.print(f"  Target: {target}")
-    
+
+    # Preview merge for conflicts
+    can_merge, conflicts = preview_merge(agent_branch, target, cwd)
+    if not can_merge:
+        console.print(f"\n[red]Merge conflicts detected![/]")
+        if conflicts:
+            console.print("[yellow]Conflicting files:[/]")
+            for f in conflicts:
+                console.print(f"  • {f}")
+        console.print(f"\nResolve conflicts manually or use:")
+        console.print(f"  cd {worktree_path}")
+        console.print(f"  git merge {target}")
+        return
+
     if commits == 0:
         console.print("\n[yellow]No commits to merge[/]")
         if not keep:
