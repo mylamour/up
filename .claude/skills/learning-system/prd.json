@@ -554,7 +554,8 @@
         "Verify CLI still works: up learn --help",
         "Verify all learn subcommands work"
       ],
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-05"
     },
     {
       "id": "C-002",
