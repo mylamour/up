@@ -130,3 +130,35 @@ def run_git(*args, cwd: Optional[Path] = None, check: bool = False) -> subproces
             result.stderr
         )
     return result
+
+
+# Legacy branch prefix for migration
+LEGACY_BRANCH_PREFIX = "worktree"
+
+
+def migrate_legacy_branch(name: str, cwd: Optional[Path] = None) -> bool:
+    """Migrate a legacy worktree/ branch to agent/ prefix.
+
+    Args:
+        name: Branch name without prefix
+        cwd: Repository path
+
+    Returns:
+        True if migration successful or not needed
+    """
+    old_branch = f"{LEGACY_BRANCH_PREFIX}/{name}"
+    new_branch = make_branch_name(name)
+
+    # Check if old branch exists
+    result = run_git("branch", "--list", old_branch, cwd=cwd)
+    if not result.stdout.strip():
+        return True  # No migration needed
+
+    # Check if new branch already exists
+    result = run_git("branch", "--list", new_branch, cwd=cwd)
+    if result.stdout.strip():
+        return True  # Already migrated
+
+    # Rename branch
+    result = run_git("branch", "-m", old_branch, new_branch, cwd=cwd)
+    return result.returncode == 0

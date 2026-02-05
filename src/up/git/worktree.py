@@ -71,7 +71,7 @@ def create_worktree(
     Returns:
         Tuple of (worktree_path, state)
     """
-    branch = f"worktree/{task_id}"
+    branch = make_branch_name(task_id)
     worktree_dir = Path(".worktrees")
     worktree_path = worktree_dir / task_id
     
@@ -131,7 +131,7 @@ def remove_worktree(task_id: str, force: bool = False):
         force: Force removal even if changes exist
     """
     worktree_path = Path(f".worktrees/{task_id}")
-    branch = f"worktree/{task_id}"
+    branch = make_branch_name(task_id)
     
     # Remove worktree
     if worktree_path.exists():
@@ -211,7 +211,7 @@ def merge_worktree(
     Returns:
         True if merge successful
     """
-    branch = f"worktree/{task_id}"
+    branch = make_branch_name(task_id)
     worktree_path = Path(f".worktrees/{task_id}")
     
     # Load state for commit message

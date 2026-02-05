@@ -13,7 +13,9 @@ from up.git.utils import (
     count_commits_since,
     make_branch_name,
     run_git,
+    migrate_legacy_branch,
     BRANCH_PREFIX,
+    LEGACY_BRANCH_PREFIX,
 )
 
 __all__ = [
@@ -27,5 +29,7 @@ __all__ = [
     "count_commits_since",
     "make_branch_name",
     "run_git",
+    "migrate_legacy_branch",
     "BRANCH_PREFIX",
+    "LEGACY_BRANCH_PREFIX",
 ]

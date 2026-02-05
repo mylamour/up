@@ -55,7 +55,7 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
     # Create worktree directory
     worktree_dir = cwd / ".worktrees"
     worktree_path = worktree_dir / name
-    agent_branch = f"agent/{name}"
+    agent_branch = make_branch_name(name)
     
     if worktree_path.exists():
         console.print(f"[yellow]Warning:[/] Agent '{name}' already exists")
@@ -184,7 +184,7 @@ def status_cmd(as_json: bool):
                             agents[agent_id] = AgentState(
                                 task_id=data.get("task_id", agent_id),
                                 task_title=data.get("task_title", ""),
-                                branch=data.get("branch", f"agent/{agent_id}"),
+                                branch=data.get("branch", make_branch_name(agent_id)),
                                 worktree_path=str(wt_path),
                                 status=data.get("status", "unknown"),
                                 phase=data.get("phase", "UNKNOWN"),
@@ -293,7 +293,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
         return
     
     # Get branch name
-    agent_branch = agent.branch if agent else f"agent/{name}"
+    agent_branch = agent.branch if agent else make_branch_name(name)
     
     # Check for commits
     commits = count_commits_since(worktree_path, target)
@@ -442,7 +442,7 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
     if name:
         # Remove specific agent
         agent = agents.get(name)
-        branch = agent.branch if agent else f"agent/{name}"
+        branch = agent.branch if agent else make_branch_name(name)
         
         if not force:
             if not click.confirm(f"Remove agent '{name}'?"):
