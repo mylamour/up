@@ -516,7 +516,9 @@
         "Update agent.py to use same prefix",
         "Add migration for existing worktree/ branches"
       ],
-      "depends_on": ["R-001"],
+      "depends_on": [
+        "R-001"
+      ],
       "passes": true,
       "completedAt": "2026-02-05"
     },
@@ -534,7 +536,9 @@
         "Show conflicting files if any",
         "Integrate into up agent merge command"
       ],
-      "depends_on": ["R-001"],
+      "depends_on": [
+        "R-001"
+      ],
       "passes": true,
       "completedAt": "2026-02-05"
     },
@@ -581,7 +585,8 @@
         "Add comment pointing to src/up/core/ for actual implementation",
         "Test up init produces correct output"
       ],
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-05"
     },
     {
       "id": "C-004",
@@ -596,7 +601,9 @@
         "Test error handling for GitNotInstalledError, GitTimeoutError",
         "Mock subprocess calls appropriately"
       ],
-      "depends_on": ["C-002"],
+      "depends_on": [
+        "C-002"
+      ],
       "passes": false
     },
     {
@@ -612,7 +619,9 @@
         "Set minimum coverage threshold at 50%",
         "Add coverage badge to README"
       ],
-      "depends_on": ["C-002"],
+      "depends_on": [
+        "C-002"
+      ],
       "passes": false
     },
     {
@@ -644,7 +653,9 @@
         "Each file under 400 lines",
         "All tests pass"
       ],
-      "depends_on": ["C-002"],
+      "depends_on": [
+        "C-002"
+      ],
       "passes": false
     },
     {
