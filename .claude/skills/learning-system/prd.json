@@ -614,7 +614,7 @@
     {
       "id": "AP-001",
       "title": "Fix dashboard to use manager APIs",
-      "description": "dashboard.py reads .claude/context_budget.json and .loop_state.json directly. Should use ContextManager and StateManager APIs.",
+      "description": "Rewrote all 3 dashboard panels (context, circuit, progress) to use StateManager API instead of direct file reads.",
       "phase": "sprint14",
       "priority": "medium",
       "effort": "low",
@@ -624,12 +624,13 @@
         "Remove fallback to legacy file locations",
         "Verify dashboard shows same information"
       ],
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-06"
     },
     {
       "id": "AP-002",
       "title": "Replace print() with logging module",
-      "description": "events.py and other modules use print() for error reporting. Should use Python logging module for proper log levels.",
+      "description": "Added logging to events.py (handler errors) and learn/utils.py (memory recording). Using logger.warning/debug.",
       "phase": "sprint14",
       "priority": "medium",
       "effort": "low",
@@ -639,12 +640,13 @@
         "Add logging to learn/utils.py silent exception handlers",
         "Configure logging level via UpConfig"
       ],
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-06"
     },
     {
       "id": "AP-003",
       "title": "Wire branch hierarchy enforcement into merge",
-      "description": "branch.py saves enforcement config but no merge command checks it. Wire the check into agent merge.",
+      "description": "Added _can_merge() check in agent merge_cmd. Reads branch_hierarchy_enforcement from UpConfig. Blocks merge with clear error message.",
       "phase": "sprint14",
       "priority": "low",
       "effort": "medium",
@@ -654,13 +656,13 @@
         "Block merge if hierarchy violated (with --force override)",
         "Show clear error message explaining the hierarchy"
       ],
-      "depends_on": ["BF-001"],
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-06"
     },
     {
       "id": "AP-004",
       "title": "Clean up stale artifacts",
-      "description": "Remove migrated file markers and outdated state files from project root.",
+      "description": "Deleted .loop_state.json.migrated and .claude/context_budget.json.migrated. Updated .gitignore with *.lock, *.migrated patterns.",
       "phase": "sprint14",
       "priority": "low",
       "effort": "trivial",
@@ -670,13 +672,14 @@
         "Update .gitignore to exclude .up/*.lock and .up/*.tmp",
         "Verify no other stale files"
       ],
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-06"
     }
   ],
   "metadata": {
     "total_tasks": 52,
-    "completed": 46,
-    "pending": 6,
+    "completed": 50,
+    "pending": 2,
     "reopened": 7,
     "new": 9,
     "sprints": {
@@ -687,14 +690,14 @@
       "sprint11": "Critical Bug Fixes - COMPLETE (BF-001 to BF-006 done 2026-02-06)",
       "sprint12": "Thread Safety - COMPLETE (TS-001 to TS-003 done 2026-02-06)",
       "sprint13": "Test Infrastructure - COMPLETE (TI-001, TI-002, C-002, C-004 done 2026-02-06)",
-      "sprint14": "API Consistency - 4 NEW (AP-001 to AP-004)"
+      "sprint14": "API Consistency - COMPLETE (AP-001 to AP-004 done 2026-02-06)"
     },
     "execution_order": [
       "Sprint 11: COMPLETE - All critical bugs fixed (2026-02-06)",
       "Sprint 12: COMPLETE - Thread safety hardening (2026-02-06)",
       "Sprint 13: COMPLETE - Test infrastructure + 82 tests (2026-02-06)",
       "Sprint 9: COMPLETE - Coverage gates (2026-02-06)",
-      "Sprint 14: API consistency and polish (AP-001 to AP-004)",
+      "Sprint 14: COMPLETE - API consistency and polish (2026-02-06)",
       "Sprint 10 last: Modularization (M-001, M-002) - defer until tests exist"
     ],
     "research_files": [
