@@ -21,7 +21,7 @@
     "sprint7": "Code Review Fixes",
     "sprint8": "Cleanup (INCOMPLETE - reopened)",
     "sprint9": "Quality Gates (INCOMPLETE - reopened)",
-    "sprint10": "Modularization (INCOMPLETE - reopened)",
+      "sprint10": "Modularization - COMPLETE (M-001, M-002 done 2026-02-06)",
     "sprint11": "Critical Bug Fixes (NEW)",
     "sprint12": "Thread Safety & Hardening (NEW)",
     "sprint13": "Test Infrastructure (NEW)",
@@ -382,7 +382,7 @@
     {
       "id": "M-001",
       "title": "Split start.py into modules",
-      "description": "Refactor 1125-line start.py. Previously marked complete but file unchanged.",
+      "description": "Split into start/ package: command.py (180), helpers.py (277), loop.py (474), verification.py (150). All imports preserved.",
       "phase": "sprint10",
       "priority": "medium",
       "effort": "high",
@@ -395,15 +395,13 @@
         "All existing functionality preserved",
         "Tests pass"
       ],
-      "depends_on": ["C-002"],
-      "passes": false,
-      "reopenedAt": "2026-02-06",
-      "reopenReason": "start.py still 1125 lines"
+      "passes": true,
+      "completedAt": "2026-02-06"
     },
     {
       "id": "M-002",
       "title": "Split memory.py into modules",
-      "description": "Refactor 1097-line memory.py. Previously marked complete but file unchanged.",
+      "description": "Split into memory/ package: entry.py (110), stores.py (257), _manager.py (core). All backward-compatible imports preserved.",
       "phase": "sprint10",
       "priority": "low",
       "effort": "high",
@@ -414,10 +412,8 @@
         "Extract indexing to indexer.py",
         "Each file under 400 lines"
       ],
-      "depends_on": ["C-002"],
-      "passes": false,
-      "reopenedAt": "2026-02-06",
-      "reopenReason": "memory.py still 1097 lines"
+      "passes": true,
+      "completedAt": "2026-02-06"
     },
 
     {
@@ -678,8 +674,8 @@
   ],
   "metadata": {
     "total_tasks": 52,
-    "completed": 50,
-    "pending": 2,
+    "completed": 52,
+    "pending": 0,
     "reopened": 7,
     "new": 9,
     "sprints": {
@@ -698,7 +694,7 @@
       "Sprint 13: COMPLETE - Test infrastructure + 82 tests (2026-02-06)",
       "Sprint 9: COMPLETE - Coverage gates (2026-02-06)",
       "Sprint 14: COMPLETE - API consistency and polish (2026-02-06)",
-      "Sprint 10 last: Modularization (M-001, M-002) - defer until tests exist"
+      "Sprint 10: COMPLETE - Modularization (2026-02-06). ALL TASKS DONE."
     ],
     "research_files": [
       "2026-02-04-git-design-philosophy-scaling.md",

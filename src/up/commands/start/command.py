@@ -127,7 +127,7 @@ def start_cmd(
 
     # Parallel mode
     if parallel:
-        from up.parallel import run_parallel_loop
+        from up.parallel_scheduler import run_enhanced_parallel_loop
         from up.git.utils import is_git_repo
 
         if not is_git_repo(cwd):
@@ -144,7 +144,7 @@ def start_cmd(
         console.print(f"\n[bold cyan]PARALLEL MODE[/] - {jobs} workers")
         console.print(f"PRD: {prd_path}")
 
-        run_parallel_loop(
+        run_enhanced_parallel_loop(
             workspace=cwd,
             prd_path=prd_path,
             max_workers=jobs,
