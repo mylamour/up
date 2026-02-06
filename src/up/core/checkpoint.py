@@ -225,6 +225,10 @@ class CheckpointManager:
             metadata = self._load_metadata(last_id)
         
         if metadata is None:
+            # Guard against None checkpoint_id
+            if not checkpoint_id:
+                raise CheckpointNotFoundError("No checkpoint ID provided and no checkpoints available")
+            
             # Try to restore from tag directly
             tag_name = f"{self.TAG_PREFIX}/{checkpoint_id}"
             result = self._run_git("rev-parse", tag_name, check=False)

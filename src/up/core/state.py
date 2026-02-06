@@ -12,10 +12,18 @@ Configuration is stored in .up/config.json
 """
 
 import json
+import logging
+import os
+import shutil
+import tempfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Callable
+
+from filelock import FileLock
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -371,6 +379,8 @@ class StateManager:
         self.config_file = self.state_dir / self.CONFIG_FILE
         self._state: Optional[UnifiedState] = None
         self._config: Optional[UpConfig] = None
+        # File lock for thread-safe and cross-process state access
+        self._lock = FileLock(str(self.state_file) + ".lock", timeout=30)
     
     @property
     def config(self) -> UpConfig:
@@ -400,7 +410,7 @@ class StateManager:
         """Update configuration values."""
         for key, value in kwargs.items():
             if hasattr(self.config, key):
-                setattr(self.config, key)
+                setattr(self.config, key, value)
         self.save_config()
         # Apply new config to state
         self._apply_config_to_state()
@@ -436,7 +446,11 @@ class StateManager:
             cb.cooldown_minutes = cfg.circuit_breaker_cooldown_minutes
     
     def load(self) -> UnifiedState:
-        """Load state from file, migrating old files if needed."""
+        """Load state from file, migrating old files if needed.
+        
+        If state.json is corrupted, attempts recovery from .bak file
+        before falling back to migration.
+        """
         # Try loading new unified state
         if self.state_file.exists():
             try:
@@ -446,17 +460,34 @@ class StateManager:
                 self._apply_config_to_state()
                 return self._state
             except (json.JSONDecodeError, TypeError, KeyError) as e:
-                # Corrupted state, start fresh but try to migrate
-                pass
+                logger.warning("State file corrupted: %s. Trying backup.", e)
+                # Try recovery from backup
+                backup_file = self.state_file.with_suffix(".json.bak")
+                if backup_file.exists():
+                    try:
+                        data = json.loads(backup_file.read_text())
+                        self._state = UnifiedState.from_dict(data)
+                        self._apply_config_to_state()
+                        logger.info("Recovered state from backup file")
+                        # Re-save to fix the corrupted main file
+                        self.save()
+                        return self._state
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        logger.warning("Backup file also corrupted")
         
-        # No unified state, try migration
+        # No unified state (or both corrupted), try migration
         self._state = self._migrate_old_states()
         # Apply configuration
         self._apply_config_to_state()
         return self._state
     
     def save(self) -> None:
-        """Save current state to file."""
+        """Save current state to file (thread-safe, atomic).
+        
+        Uses filelock for cross-thread/cross-process safety,
+        writes to a temp file with fsync, then atomically replaces
+        the target file using os.replace().
+        """
         if self._state is None:
             return
         
@@ -466,10 +497,103 @@ class StateManager:
         # Ensure directory exists
         self.state_dir.mkdir(parents=True, exist_ok=True)
         
-        # Write atomically (write to temp, then rename)
-        temp_file = self.state_file.with_suffix(".tmp")
-        temp_file.write_text(json.dumps(self._state.to_dict(), indent=2))
-        temp_file.rename(self.state_file)
+        with self._lock:
+            # Rolling backup: copy current state to .bak before overwriting
+            if self.state_file.exists():
+                backup_file = self.state_file.with_suffix(".json.bak")
+                try:
+                    shutil.copy2(str(self.state_file), str(backup_file))
+                except OSError:
+                    logger.warning("Could not create state backup")
+            
+            # Atomic write: temp file + fsync + os.replace()
+            fd = None
+            tmp_path = None
+            try:
+                fd, tmp_path = tempfile.mkstemp(
+                    dir=str(self.state_dir),
+                    suffix=".tmp",
+                    prefix="state_",
+                )
+                with os.fdopen(fd, "w") as f:
+                    fd = None  # os.fdopen takes ownership of fd
+                    json.dump(self._state.to_dict(), f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, str(self.state_file))
+                tmp_path = None  # replaced successfully
+            except Exception:
+                # Clean up temp file on failure
+                if fd is not None:
+                    os.close(fd)
+                if tmp_path and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                raise
+    
+    def atomic_update(self, updater: Callable[[UnifiedState], None]) -> None:
+        """Thread-safe read-modify-write on the state.
+        
+        Holds the file lock for the entire read-modify-write cycle
+        to prevent lost updates from concurrent access.
+        
+        Args:
+            updater: Function that mutates the state in-place.
+        
+        Example:
+            def bump_iteration(state):
+                state.loop.iteration += 1
+            manager.atomic_update(bump_iteration)
+        """
+        with self._lock:
+            # Re-read state from disk to get latest
+            if self.state_file.exists():
+                try:
+                    data = json.loads(self.state_file.read_text())
+                    self._state = UnifiedState.from_dict(data)
+                    self._apply_config_to_state()
+                except (json.JSONDecodeError, TypeError, KeyError):
+                    if self._state is None:
+                        self._state = UnifiedState()
+            elif self._state is None:
+                self._state = UnifiedState()
+            
+            # Apply the update
+            updater(self._state)
+            
+            # Save (will re-acquire lock, but FileLock is re-entrant)
+            self._state.updated_at = datetime.now().isoformat()
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Rolling backup
+            if self.state_file.exists():
+                backup_file = self.state_file.with_suffix(".json.bak")
+                try:
+                    shutil.copy2(str(self.state_file), str(backup_file))
+                except OSError:
+                    pass
+            
+            # Atomic write
+            fd = None
+            tmp_path = None
+            try:
+                fd, tmp_path = tempfile.mkstemp(
+                    dir=str(self.state_dir),
+                    suffix=".tmp",
+                    prefix="state_",
+                )
+                with os.fdopen(fd, "w") as f:
+                    fd = None
+                    json.dump(self._state.to_dict(), f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, str(self.state_file))
+                tmp_path = None
+            except Exception:
+                if fd is not None:
+                    os.close(fd)
+                if tmp_path and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                raise
     
     def reset(self) -> UnifiedState:
         """Reset to fresh state."""

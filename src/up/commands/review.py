@@ -97,17 +97,48 @@ def review_cmd(checkpoint: str, files: tuple, focus: str, strict: bool, model: s
     
     # Display results
     console.print("\n")
+    
+    # Detect issues using patterns that avoid false positives
+    # e.g. "No issues found" should NOT trigger, but "Found 3 issues" should
+    import re
+    result_lower = result.lower()
+    
+    # Negative patterns that indicate NO issues
+    no_issue_patterns = [
+        r"no\s+issues?\s+found",
+        r"no\s+problems?\s+found",
+        r"no\s+bugs?\s+found",
+        r"no\s+errors?\s+found",
+        r"no\s+(critical\s+)?vulnerabilit(y|ies)\s+found",
+        r"no\s+warnings?\s+found",
+        r"looks?\s+good",
+        r"no\s+concerns",
+        r"clean\s+review",
+    ]
+    is_clean = any(re.search(p, result_lower) for p in no_issue_patterns)
+    
+    # Positive patterns that indicate real issues (word-boundary matching)
+    issue_patterns = [
+        r"\bissues?\b.*\bfound\b",
+        r"\bfound\b.*\bissues?\b",
+        r"\bcritical\b",
+        r"\bvulnerabilit(y|ies)\b",
+        r"\bbug\b",
+        r"\bsecurity\s+(issue|concern|risk|flaw)\b",
+        r"\berror\b.*\b(in|at|on)\b",
+        r"\bproblem\b.*\b(with|in|at)\b",
+    ]
+    has_issues = not is_clean and any(re.search(p, result_lower) for p in issue_patterns)
+    
+    panel_style = "yellow" if has_issues else "green"
     console.print(Panel(
         Markdown(result),
         title="Review Results",
-        border_style="yellow" if "issue" in result.lower() or "problem" in result.lower() else "green"
+        border_style=panel_style,
     ))
     
     # Check for issues in strict mode
     if strict:
-        issue_indicators = ["issue", "problem", "bug", "error", "vulnerability", "critical", "warning"]
-        has_issues = any(indicator in result.lower() for indicator in issue_indicators)
-        
         if has_issues:
             console.print("\n[red]⚠ Issues found in strict mode[/]")
             console.print("Consider fixing issues before committing.")

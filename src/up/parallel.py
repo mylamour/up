@@ -9,6 +9,7 @@ Uses the unified state system in .up/state.json for consistency.
 
 import json
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -52,11 +53,16 @@ class ParallelExecutionManager:
     
     This replaces the old ParallelState dataclass to use .up/state.json
     instead of the legacy .parallel_state.json file.
+    
+    All state mutations are protected by a threading.Lock to prevent
+    race conditions when multiple threads modify state concurrently.
+    The underlying StateManager also uses filelock for cross-process safety.
     """
     
     def __init__(self, workspace: Path = None):
         self.workspace = workspace or Path.cwd()
         self._state_manager = get_state_manager(self.workspace)
+        self._lock = threading.Lock()
     
     @property
     def state(self):
@@ -69,8 +75,9 @@ class ParallelExecutionManager:
     
     @iteration.setter
     def iteration(self, value: int):
-        self.state.current_batch = value
-        self._state_manager.save()
+        with self._lock:
+            self.state.current_batch = value
+            self._state_manager.save()
     
     @property
     def parallel_limit(self) -> int:
@@ -78,38 +85,48 @@ class ParallelExecutionManager:
     
     @parallel_limit.setter
     def parallel_limit(self, value: int):
-        self.state.max_workers = value
-        self._state_manager.save()
+        with self._lock:
+            self.state.max_workers = value
+            self._state_manager.save()
     
     @property
     def active_worktrees(self) -> List[str]:
         return self.state.agents
     
     def add_active_worktree(self, task_id: str):
-        if task_id not in self.state.agents:
-            self.state.agents.append(task_id)
-            self._state_manager.save()
+        """Add a worktree to active list (thread-safe)."""
+        with self._lock:
+            if task_id not in self.state.agents:
+                self.state.agents.append(task_id)
+                self._state_manager.save()
     
     def remove_active_worktree(self, task_id: str):
-        if task_id in self.state.agents:
-            self.state.agents.remove(task_id)
-            self._state_manager.save()
+        """Remove a worktree from active list (thread-safe)."""
+        with self._lock:
+            if task_id in self.state.agents:
+                self.state.agents.remove(task_id)
+                self._state_manager.save()
     
     def set_active(self, active: bool):
-        self.state.active = active
-        self._state_manager.save()
+        """Set parallel execution active state (thread-safe)."""
+        with self._lock:
+            self.state.active = active
+            self._state_manager.save()
     
     def save(self):
-        """Explicit save (for compatibility)."""
-        self._state_manager.save()
+        """Explicit save (thread-safe, for compatibility)."""
+        with self._lock:
+            self._state_manager.save()
     
     def record_task_complete(self, task_id: str):
-        """Record a task completion in metrics."""
-        self._state_manager.record_task_complete(task_id)
+        """Record a task completion in metrics (thread-safe)."""
+        with self._lock:
+            self._state_manager.record_task_complete(task_id)
     
     def record_task_failed(self, task_id: str):
-        """Record a task failure in metrics."""
-        self._state_manager.record_task_failed(task_id)
+        """Record a task failure in metrics (thread-safe)."""
+        with self._lock:
+            self._state_manager.record_task_failed(task_id)
 
 
 def get_pending_tasks(prd_path: Path, limit: int = None) -> list[dict]:

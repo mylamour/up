@@ -49,6 +49,9 @@ class ProvenanceEntry:
     commit_sha: str = ""
     branch: str = ""
     
+    # Chain integrity (Merkle-style)
+    parent_id: str = ""  # ID of previous entry for chain integrity
+    
     # Verification
     tests_passed: Optional[bool] = None
     lint_passed: Optional[bool] = None
@@ -58,7 +61,7 @@ class ProvenanceEntry:
     # Status
     status: str = "pending"  # pending, accepted, rejected, reverted
     
-    # Timestamps
+    # Timestamps (NOT included in content hash)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     completed_at: Optional[str] = None
     
@@ -68,9 +71,23 @@ class ProvenanceEntry:
             self.id = self._generate_id()
     
     def _generate_id(self) -> str:
-        """Generate content-addressed ID."""
-        content = f"{self.task_id}:{self.prompt_hash}:{self.context_hash}:{self.created_at}"
-        return hashlib.sha256(content.encode()).hexdigest()[:12]
+        """Generate content-addressed ID from content fields only.
+        
+        Timestamps and mutable metadata are excluded so identical
+        operations produce the same ID (enabling deduplication).
+        Parent ID is included for Merkle chain integrity.
+        """
+        # Sort context_files for deterministic hashing
+        sorted_files = ",".join(sorted(self.context_files)) if self.context_files else ""
+        content = "|".join([
+            self.task_id,
+            self.prompt_hash,
+            self.context_hash,
+            self.ai_model,
+            sorted_files,
+            self.parent_id,
+        ])
+        return hashlib.sha256(content.encode()).hexdigest()[:16]
     
     def to_dict(self) -> dict:
         return asdict(self)
@@ -106,6 +123,11 @@ class ProvenanceManager:
         self.provenance_dir.mkdir(parents=True, exist_ok=True)
         self.index_file.write_text(json.dumps(self._index, indent=2))
     
+    def _get_last_entry_id(self) -> str:
+        """Get ID of the most recent entry for Merkle chain linking."""
+        entries = self.list_entries(limit=1)
+        return entries[0].id if entries else ""
+    
     def start_operation(
         self,
         task_id: str,
@@ -121,11 +143,11 @@ class ProvenanceManager:
         # Hash the prompt
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
         
-        # Hash context files
+        # Hash context files (sorted for determinism)
         context_hash = ""
         if context_files:
             context_content = ""
-            for f in context_files:
+            for f in sorted(context_files):
                 path = self.workspace / f
                 if path.exists():
                     try:
@@ -137,6 +159,9 @@ class ProvenanceManager:
         # Get current branch
         branch = self._get_branch()
         
+        # Link to previous entry for Merkle chain integrity
+        parent_id = self._get_last_entry_id()
+        
         entry = ProvenanceEntry(
             task_id=task_id,
             task_title=task_title,
@@ -144,10 +169,16 @@ class ProvenanceManager:
             prompt_hash=prompt_hash,
             prompt_preview=prompt[:200] + "..." if len(prompt) > 200 else prompt,
             context_files=context_files or [],
+            parent_id=parent_id,
             context_hash=context_hash,
             branch=branch,
             status="pending",
         )
+        
+        # Deduplication: check if identical content already exists
+        existing = self.get_entry(entry.id)
+        if existing:
+            return existing
         
         # Save entry
         self._save_entry(entry)

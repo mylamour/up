@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "up-cli"
-version = "0.4.0"
+version = "0.5.0"
 description = "Verifiable, observable AI-assisted development for building stable, high-performance software"
 readme = "Readme.md"
 license = "MIT"
@@ -30,12 +30,14 @@ dependencies = [
     "pyyaml>=6.0",
     "tqdm>=4.65.0",
     "chromadb>=0.4.0",
+    "filelock>=3.12",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-subprocess>=1.5",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
 ]
@@ -53,11 +55,26 @@ packages = ["src/up"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v"
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["up"]
+omit = ["*/templates/*", "*/ui/*"]
+
+[tool.coverage.report]
+fail_under = 50
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "pass",
+]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.mypy]

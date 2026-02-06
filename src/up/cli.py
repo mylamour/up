@@ -3,6 +3,7 @@
 import click
 from rich.console import Console
 
+from up import __version__
 from up.commands.init import init_cmd
 from up.commands.new import new_cmd
 from up.commands.status import status_cmd
@@ -23,7 +24,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="0.4.0", prog_name="up")
+@click.version_option(version=__version__, prog_name="up")
 def main():
     """up - Verifiable, observable AI-assisted development.
 
