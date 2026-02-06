@@ -1,6 +1,5 @@
 """up dashboard - Interactive health dashboard."""
 
-import json
 import time
 from pathlib import Path
 
@@ -11,6 +10,8 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+
+from up.core.state import get_state_manager
 
 console = Console()
 
@@ -88,21 +89,14 @@ def create_dashboard(workspace: Path) -> Panel:
 
 
 def create_context_panel(workspace: Path) -> Panel:
-    """Create context budget panel."""
-    context_file = workspace / ".claude/context_budget.json"
-    
-    if not context_file.exists():
-        return Panel(
-            "[dim]Not configured[/]",
-            title="Context Budget",
-            border_style="dim"
-        )
-    
+    """Create context budget panel using StateManager API."""
     try:
-        data = json.loads(context_file.read_text())
-        usage = data.get("usage_percent", 0)
-        status = data.get("status", "OK")
-        remaining = data.get("remaining_tokens", 0)
+        sm = get_state_manager(workspace)
+        ctx = sm.state.context
+        
+        usage = ctx.usage_percent
+        status = ctx.status
+        remaining = ctx.remaining_tokens
         
         # Create progress bar
         bar_width = 20
@@ -122,77 +116,60 @@ def create_context_panel(workspace: Path) -> Panel:
 [{bar}] {usage:.1f}%
 
 Remaining: {remaining:,} tokens
-Entries: {data.get('entry_count', 0)}"""
+Entries: {len(ctx.entries)}"""
         
         return Panel(content, title="Context Budget", border_style=color)
         
-    except (json.JSONDecodeError, KeyError):
-        return Panel("[red]Error reading state[/]", title="Context Budget")
+    except Exception:
+        return Panel("[dim]Not configured[/]", title="Context Budget", border_style="dim")
 
 
 def create_circuit_panel(workspace: Path) -> Panel:
-    """Create circuit breaker panel."""
-    loop_file = workspace / ".loop_state.json"
-    
-    if not loop_file.exists():
-        return Panel(
-            "[dim]Not active[/]",
-            title="Circuit Breaker",
-            border_style="dim"
-        )
-    
+    """Create circuit breaker panel using StateManager API."""
     try:
-        data = json.loads(loop_file.read_text())
-        cb = data.get("circuit_breaker", {})
+        sm = get_state_manager(workspace)
+        breakers = sm.state.circuit_breakers
+        
+        if not breakers:
+            return Panel("[dim]No circuits[/]", title="Circuit Breaker", border_style="dim")
         
         lines = []
-        for name, state in cb.items():
-            if isinstance(state, dict):
-                cb_state = state.get("state", "UNKNOWN")
-                failures = state.get("failures", 0)
-                
-                if cb_state == "OPEN":
-                    icon = "🔴"
-                    color = "red"
-                elif cb_state == "HALF_OPEN":
-                    icon = "🟡"
-                    color = "yellow"
-                else:
-                    icon = "🟢"
-                    color = "green"
-                
-                lines.append(f"{icon} [{color}]{name}[/]: {cb_state} ({failures} failures)")
+        for name, cb in breakers.items():
+            cb_state = cb.state
+            failures = cb.failures
+            
+            if cb_state == "OPEN":
+                icon = "🔴"
+                color = "red"
+            elif cb_state == "HALF_OPEN":
+                icon = "🟡"
+                color = "yellow"
+            else:
+                icon = "🟢"
+                color = "green"
+            
+            lines.append(f"{icon} [{color}]{name}[/]: {cb_state} ({failures} failures)")
         
-        content = "\n".join(lines) if lines else "[dim]No circuits[/]"
+        content = "\n".join(lines)
         return Panel(content, title="Circuit Breaker", border_style="green")
         
-    except (json.JSONDecodeError, KeyError):
-        return Panel("[red]Error[/]", title="Circuit Breaker")
+    except Exception:
+        return Panel("[dim]Not active[/]", title="Circuit Breaker", border_style="dim")
 
 
 def create_progress_panel(workspace: Path) -> Panel:
-    """Create progress panel."""
-    loop_file = workspace / ".loop_state.json"
-    
-    if not loop_file.exists():
-        return Panel(
-            "[dim]No active loop[/]",
-            title="Product Loop",
-            border_style="dim"
-        )
-    
+    """Create progress panel using StateManager API."""
     try:
-        data = json.loads(loop_file.read_text())
+        sm = get_state_manager(workspace)
+        loop = sm.state.loop
+        metrics = sm.state.metrics
         
-        iteration = data.get("iteration", 0)
-        phase = data.get("phase", "UNKNOWN")
-        current = data.get("current_task")
-        completed = len(data.get("tasks_completed", []))
-        remaining = len(data.get("tasks_remaining", []))
-        total = completed + remaining
-        
-        metrics = data.get("metrics", {})
-        success_rate = metrics.get("success_rate", 1.0)
+        iteration = loop.iteration
+        phase = loop.phase
+        current = loop.current_task
+        completed = len(loop.tasks_completed)
+        total = metrics.total_tasks or (completed + len(loop.tasks_failed))
+        success_rate = metrics.success_rate
         
         # Progress bar
         if total > 0:
@@ -214,8 +191,8 @@ Success: {success_rate*100:.0f}%"""
         
         return Panel(content, title="Product Loop", border_style="cyan")
         
-    except (json.JSONDecodeError, KeyError):
-        return Panel("[red]Error[/]", title="Product Loop")
+    except Exception:
+        return Panel("[dim]No active loop[/]", title="Product Loop", border_style="dim")
 
 
 def create_skills_panel(workspace: Path) -> Panel:

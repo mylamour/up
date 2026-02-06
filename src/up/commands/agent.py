@@ -295,6 +295,19 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
     # Get branch name
     agent_branch = agent.branch if agent else make_branch_name(name)
     
+    # Check branch hierarchy enforcement
+    try:
+        config = state_manager.config
+        if getattr(config, "branch_hierarchy_enforcement", False):
+            from up.commands.branch import _can_merge
+            can_merge_hierarchy, reason = _can_merge(agent_branch, target)
+            if not can_merge_hierarchy:
+                console.print(f"[red]Branch hierarchy violation:[/] {reason}")
+                console.print("[dim]Use --force or disable enforcement in .up/config.json[/]")
+                return
+    except Exception:
+        pass  # Don't block merge if hierarchy check fails
+    
     # Check for commits
     commits = count_commits_since(worktree_path, target)
     

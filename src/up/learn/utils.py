@@ -66,7 +66,8 @@ def safe_filename(name: str) -> str:
 
 
 def record_to_memory(workspace: Path, content: str, entry_type: str = "learning") -> None:
-    """Record entry to memory system (optional)."""
+    """Record entry to memory system (optional, best-effort)."""
+    import logging
     try:
         from up.memory import MemoryManager
         manager = MemoryManager(workspace, use_vectors=False)
@@ -74,8 +75,8 @@ def record_to_memory(workspace: Path, content: str, entry_type: str = "learning"
             manager.record_learning(content)
         else:
             manager.record(content, entry_type=entry_type)
-    except Exception:
-        pass  # Memory recording is optional
+    except Exception as e:
+        logging.getLogger(__name__).debug("Memory recording skipped: %s", e)
 
 
 def display_profile(profile: dict) -> None:

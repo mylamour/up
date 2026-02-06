@@ -17,7 +17,12 @@ build/*
 *.egg-info/
 .up/*
 
-# User project files (not tracked)
+# State file artifacts
+*.lock
+*.migrated
 .loop_state.json
+.parallel_state.json
+
+# User project files (not tracked)
 AI_PROGRAMMING_BEHAVIORAL_ANALYSIS.md
 AI_VIBING_CODING_APPROACH.md

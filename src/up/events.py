@@ -10,11 +10,14 @@ Events flow through a central bridge that dispatches to handlers.
 """
 
 import json
+import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Any, Optional
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class EventType(Enum):
@@ -164,7 +167,7 @@ class EventBridge:
                     handler(event)
                 except Exception as e:
                     # Log but don't fail on handler errors
-                    print(f"Event handler error: {e}")
+                    logger.warning("Event handler error for %s: %s", event.type, e)
     
     def emit_simple(
         self, 
