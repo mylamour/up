@@ -116,5 +116,5 @@ class TestCheckpointManager:
         mgr.save(message="first")
         mgr.save(message="second")
 
-        checkpoints = mgr.list()
+        checkpoints = mgr.list_checkpoints()
         assert len(checkpoints) >= 2
