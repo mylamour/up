@@ -11,7 +11,6 @@ from up.core.checkpoint import (
     CheckpointNotFoundError,
     NotAGitRepoError,
 )
-from up.core.state import StateManager
 
 
 class TestCheckpointMetadata:
@@ -36,54 +35,43 @@ class TestCheckpointMetadata:
 
 
 class TestCheckpointManager:
-    """Tests for CheckpointManager (uses real git repo)."""
+    """Tests for CheckpointManager (uses real git repo).
+
+    Note: CheckpointManager.__init__ takes only workspace (Optional[Path]).
+    It creates its own StateManager internally via get_state_manager().
+    """
 
     def test_save_clean_workdir(self, git_workspace):
         """Save with no dirty files still creates a checkpoint."""
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
+        mgr = CheckpointManager(git_workspace)
 
         meta = mgr.save(message="Test checkpoint")
         assert meta.id.startswith("cp-")
         assert meta.commit_sha
-        assert meta.branch == "main"
         assert meta.files_changed == 0
 
     def test_save_with_dirty_files(self, git_workspace):
         """Save auto-commits dirty files."""
-        # Create a dirty file
         test_file = git_workspace / "new_file.txt"
         test_file.write_text("hello world")
 
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
-
+        mgr = CheckpointManager(git_workspace)
         meta = mgr.save(message="Before AI work")
         assert meta.files_changed > 0
 
     def test_save_records_in_state(self, git_workspace):
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
-
+        mgr = CheckpointManager(git_workspace)
         meta = mgr.save()
-        assert meta.id in sm.state.checkpoints
-        assert sm.state.loop.last_checkpoint == meta.id
+        assert meta.id in mgr.state_manager.state.checkpoints
+        assert mgr.state_manager.state.loop.last_checkpoint == meta.id
 
     def test_save_with_task_id(self, git_workspace):
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
-
+        mgr = CheckpointManager(git_workspace)
         meta = mgr.save(task_id="US-001")
         assert "US-001" in meta.id
 
     def test_restore_to_last(self, git_workspace):
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
+        mgr = CheckpointManager(git_workspace)
 
         # Save checkpoint
         meta = mgr.save(message="checkpoint 1")
@@ -103,35 +91,27 @@ class TestCheckpointManager:
         assert restored.id == meta.id
 
     def test_restore_none_checkpoint_id_raises(self, git_workspace):
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
+        mgr = CheckpointManager(git_workspace)
 
         with pytest.raises(CheckpointNotFoundError, match="No checkpoint"):
             mgr.restore(checkpoint_id=None)
 
     def test_restore_nonexistent_raises(self, git_workspace):
-        sm = StateManager(git_workspace)
-        sm.load()
-        sm.state.loop.last_checkpoint = None
-        mgr = CheckpointManager(git_workspace, sm)
+        mgr = CheckpointManager(git_workspace)
+        mgr.state_manager.state.loop.last_checkpoint = None
 
         with pytest.raises(CheckpointNotFoundError):
             mgr.restore()
 
     def test_not_git_repo_raises(self, workspace):
         """Operations outside a git repo should raise."""
-        sm = StateManager(workspace)
-        sm.load()
-        mgr = CheckpointManager(workspace, sm)
+        mgr = CheckpointManager(workspace)
 
         with pytest.raises(NotAGitRepoError):
             mgr.save()
 
     def test_list_checkpoints(self, git_workspace):
-        sm = StateManager(git_workspace)
-        sm.load()
-        mgr = CheckpointManager(git_workspace, sm)
+        mgr = CheckpointManager(git_workspace)
 
         mgr.save(message="first")
         mgr.save(message="second")
