@@ -129,12 +129,17 @@ class ParallelExecutionManager:
             self._state_manager.record_task_failed(task_id)
 
 
-def get_pending_tasks(prd_path: Path, limit: int = None) -> list[dict]:
+def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None) -> list[dict]:
     """Get pending tasks from PRD file.
+    
+    Cross-checks against both the PRD's `passes` field AND the
+    state manager's `tasks_completed` list to avoid re-running
+    tasks that were already implemented (e.g., manually in Cursor).
     
     Args:
         prd_path: Path to prd.json
         limit: Maximum tasks to return
+        workspace: Workspace root (for state cross-check)
     
     Returns:
         List of pending task dicts
@@ -146,7 +151,40 @@ def get_pending_tasks(prd_path: Path, limit: int = None) -> list[dict]:
         data = json.loads(prd_path.read_text())
         stories = data.get("userStories", [])
         
-        pending = [s for s in stories if not s.get("passes", False)]
+        # Get already-completed tasks from state manager
+        completed_in_state = set()
+        if workspace:
+            try:
+                sm = get_state_manager(workspace)
+                completed_in_state = set(sm.state.loop.tasks_completed)
+            except Exception:
+                pass
+        
+        # A task is pending only if BOTH:
+        # 1. PRD says passes != true
+        # 2. State doesn't list it as completed
+        pending = []
+        synced_count = 0
+        for s in stories:
+            task_id = s.get("id", "")
+            if s.get("passes", False):
+                continue  # Already marked done in PRD
+            if task_id in completed_in_state:
+                # Task was completed (e.g., manually in Cursor) but PRD not updated
+                # Auto-sync: mark it as done in the PRD
+                s["passes"] = True
+                s["completedAt"] = s.get("completedAt", datetime.now().strftime("%Y-%m-%d"))
+                synced_count += 1
+                continue
+            pending.append(s)
+        
+        # Save synced PRD if any tasks were auto-completed
+        if synced_count > 0:
+            try:
+                prd_path.write_text(json.dumps(data, indent=2))
+                console.print(f"[dim]Auto-synced {synced_count} completed tasks in PRD[/]")
+            except Exception:
+                pass
         
         if limit:
             pending = pending[:limit]
@@ -402,7 +440,7 @@ def run_parallel_loop(
     try:
         while True:
             # Get pending tasks
-            tasks = get_pending_tasks(prd_path, limit=max_workers)
+            tasks = get_pending_tasks(prd_path, limit=max_workers, workspace=workspace)
             
             if not tasks:
                 console.print("\n[green]✓[/] All tasks completed!")

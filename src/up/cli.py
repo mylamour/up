@@ -14,6 +14,7 @@ from up.commands.start import start_cmd
 from up.commands.memory import memory_cmd
 from up.commands.sync import sync_cmd, hooks_cmd
 from up.commands.vibe import save_cmd, reset_cmd, diff_cmd
+from up.commands.done import done_cmd
 from up.commands.agent import agent as agent_group
 from up.commands.bisect import bisect_cmd, history_cmd
 from up.commands.provenance import provenance as provenance_group
@@ -76,6 +77,7 @@ main.add_command(start_cmd, name="start")
 main.add_command(save_cmd, name="save")
 main.add_command(reset_cmd, name="reset")
 main.add_command(diff_cmd, name="diff")
+main.add_command(done_cmd, name="done")
 main.add_command(agent_group, name="agent")
 
 # Debugging commands

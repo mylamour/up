@@ -147,8 +147,13 @@ def check_circuit_breaker(state: dict) -> dict:
     return {"open": False}
 
 
-def get_next_task_from_prd(prd_path: Path) -> dict:
-    """Get next incomplete task from PRD."""
+def get_next_task_from_prd(prd_path: Path, workspace: Path = None) -> dict:
+    """Get next incomplete task from PRD.
+    
+    Cross-checks against state.tasks_completed to skip tasks
+    that were implemented manually (e.g., in Cursor) but not
+    marked in the PRD.
+    """
     if not prd_path.exists():
         return None
 
@@ -156,10 +161,33 @@ def get_next_task_from_prd(prd_path: Path) -> dict:
         data = json.loads(prd_path.read_text())
         stories = data.get("userStories", [])
 
-        # Find first incomplete task
+        # Get completed tasks from state for cross-check
+        completed_in_state = set()
+        if workspace:
+            try:
+                from up.core.state import get_state_manager
+                sm = get_state_manager(workspace)
+                completed_in_state = set(sm.state.loop.tasks_completed)
+            except Exception:
+                pass
+
+        # Find first truly incomplete task
         for story in sorted(stories, key=lambda s: s.get("priority", 999)):
-            if not story.get("passes", False):
-                return story
+            if story.get("passes", False):
+                continue
+            task_id = story.get("id", "")
+            if task_id in completed_in_state:
+                # Auto-sync: mark done in PRD
+                story["passes"] = True
+                story["completedAt"] = story.get("completedAt", time.strftime("%Y-%m-%d"))
+                continue
+            return story
+
+        # Save any auto-synced changes
+        try:
+            prd_path.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass
 
         return None
     except json.JSONDecodeError:

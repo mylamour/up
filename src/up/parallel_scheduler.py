@@ -618,17 +618,22 @@ def run_enhanced_parallel_loop(
 
     start_time = time.time()
 
-    # Load all pending tasks
+    # Load all pending tasks (cross-checked against state)
     if not prd_path.exists():
         console.print("[red]PRD file not found[/]")
         return summary
 
     try:
-        data = json.loads(prd_path.read_text())
-        all_tasks = [s for s in data.get("userStories", []) if not s.get("passes", False)]
-    except json.JSONDecodeError:
-        console.print("[red]Invalid PRD JSON[/]")
-        return summary
+        from up.parallel import get_pending_tasks
+        all_tasks = get_pending_tasks(prd_path, workspace=workspace)
+    except Exception:
+        # Fallback: direct read
+        try:
+            data = json.loads(prd_path.read_text())
+            all_tasks = [s for s in data.get("userStories", []) if not s.get("passes", False)]
+        except json.JSONDecodeError:
+            console.print("[red]Invalid PRD JSON[/]")
+            return summary
 
     if not all_tasks:
         console.print("[green]All tasks complete![/]")
