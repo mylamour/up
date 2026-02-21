@@ -1,0 +1,94 @@
+{
+  "project": "Up-CLI Phase 6-8 Advancements",
+  "branchName": "feature/phase6-8-architecture",
+  "description": "Upgrade up-cli to v1.0.0 with state unification, smart merge, and AST analysis",
+  "createdAt": "2026-02-21T12:00:00Z",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Isolate Verification Environment (Phase 6.2)",
+      "description": "Modify verification.py to invoke pytest and ruff using the current Python executable to prevent environment leaks.",
+      "acceptanceCriteria": [
+        "subprocess.run in run_verification_with_results uses [sys.executable, '-m', 'pytest'] instead of just ['pytest']",
+        "subprocess.run uses [sys.executable, '-m', 'ruff'] instead of just ['ruff']",
+        "Tests still pass and verify correctly"
+      ],
+      "priority": 1,
+      "effort": "low",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Unify Worktree State (Phase 6.1)",
+      "description": "Deprecate .agent_state.json in individual worktrees. WorktreeState should read and write directly to the main .up/state.json using StateManager.",
+      "acceptanceCriteria": [
+        "WorktreeState.load and WorktreeState.save use get_state_manager().state.agents dictionary",
+        "Individual .agent_state.json files are no longer created in .worktrees/*",
+        "Parallel execution manager can still track active worktrees accurately"
+      ],
+      "priority": 2,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Need to update src/up/git/worktree.py"
+    },
+    {
+      "id": "US-003",
+      "title": "Abstract AIEngine Interface (Phase 7.1)",
+      "description": "Create an AIEngine interface to decouple AI calls from CLI specifics. Move current subprocess logic into CliEngine.",
+      "acceptanceCriteria": [
+        "Create src/up/ai/engine.py with an abstract base class AIEngine",
+        "Implement CliEngine(AIEngine) that wraps the existing claude/agent subprocess calls",
+        "Refactor src/up/ai_cli.py to use the new Engine classes",
+        "Tests still pass"
+      ],
+      "priority": 3,
+      "effort": "medium",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "AI-Driven Merge Conflict Resolution (Phase 7.3)",
+      "description": "Enhance parallel worktree merging to automatically resolve Git conflicts using the AIEngine.",
+      "acceptanceCriteria": [
+        "If merge_worktree encounters a Git conflict, it extracts the files with conflict markers (<<<<<<< HEAD)",
+        "Sends the conflicted file content to AIEngine to resolve the conflict intelligently",
+        "Applies the resolved code, runs `git add`, and finalizes the merge",
+        "Fails only if AI cannot resolve it"
+      ],
+      "priority": 4,
+      "effort": "high",
+      "passes": false,
+      "notes": "Modifies parallel_scheduler.py and worktree.py"
+    },
+    {
+      "id": "US-005",
+      "title": "AST-Based Code Analysis (Phase 8.1)",
+      "description": "Upgrade ProjectAnalyzer to use Python's `ast` module instead of Regex for more accurate detection of patterns and frameworks.",
+      "acceptanceCriteria": [
+        "Refactor `_detect_patterns` in src/up/learn/analyzer.py to use `ast.parse` for Python files",
+        "Accurately detects classes, functions, and decorators (e.g. @dataclass, Repository, Service)",
+        "Regex fallback is only used for non-Python files"
+      ],
+      "priority": 5,
+      "effort": "medium",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "E2E Loop Validation Tests (Phase 8.2)",
+      "description": "Add End-to-End tests simulating the full SESRC loop using a mocked AIEngine.",
+      "acceptanceCriteria": [
+        "Create tests/test_e2e_loop.py",
+        "Test successful loop: Observe -> Checkpoint -> Mock AI writes code -> Verify passes -> Commit",
+        "Test failure loop: Mock AI writes syntax error -> Verify fails -> Rollback -> Doom loop triggered"
+      ],
+      "priority": 6,
+      "effort": "high",
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
