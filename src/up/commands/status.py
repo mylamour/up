@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from up.commands.start.helpers import is_initialized
 
 console = Console()
 
@@ -57,10 +58,7 @@ def collect_status(workspace: Path) -> dict:
     }
     
     # Check if initialized
-    claude_dir = workspace / ".claude"
-    cursor_dir = workspace / ".cursor"
-    up_dir = workspace / ".up"
-    status["initialized"] = claude_dir.exists() or cursor_dir.exists() or up_dir.exists()
+    status["initialized"] = is_initialized(workspace)
     
     if not status["initialized"]:
         return status

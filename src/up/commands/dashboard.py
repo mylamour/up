@@ -29,20 +29,24 @@ def dashboard_cmd(refresh: int, once: bool):
     - Recent activity
     """
     if once:
-        dashboard = create_dashboard(Path.cwd())
+        dashboard = create_dashboard(Path.cwd(), refresh_interval=refresh)
         console.print(dashboard)
         return
     
     try:
-        with Live(create_dashboard(Path.cwd()), refresh_per_second=1, console=console) as live:
+        with Live(
+            create_dashboard(Path.cwd(), refresh_interval=refresh),
+            refresh_per_second=1,
+            console=console,
+        ) as live:
             while True:
                 time.sleep(refresh)
-                live.update(create_dashboard(Path.cwd()))
+                live.update(create_dashboard(Path.cwd(), refresh_interval=refresh))
     except KeyboardInterrupt:
         console.print("\n[dim]Dashboard stopped[/]")
 
 
-def create_dashboard(workspace: Path) -> Panel:
+def create_dashboard(workspace: Path, refresh_interval: int = 5) -> Panel:
     """Create the dashboard layout."""
     layout = Layout()
     
@@ -81,7 +85,11 @@ def create_dashboard(workspace: Path) -> Panel:
     
     # Footer
     layout["footer"].update(Panel(
-        Text("Press Ctrl+C to exit | Refreshing every 5s", style="dim", justify="center"),
+        Text(
+            f"Press Ctrl+C to exit | Refreshing every {refresh_interval}s",
+            style="dim",
+            justify="center",
+        ),
         style="dim"
     ))
     

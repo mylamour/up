@@ -4,6 +4,7 @@ Contains the main AI product loop and manual/preview modes.
 """
 
 import json
+import logging
 import signal
 import sys
 import time
@@ -38,6 +39,7 @@ from up.commands.start.verification import (
 )
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 # Global state for interrupt handling
 _state_manager: StateManager = None
@@ -79,8 +81,8 @@ def handle_interrupt(signum, frame):
                     reason="User interrupted operation",
                 )
                 console.print("[dim]Provenance entry marked as interrupted[/]")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to mark interrupted provenance entry: %s", exc)
 
         console.print("\nTo resume: [cyan]up start --resume[/]")
         console.print("To rollback: [cyan]up reset[/]")
@@ -286,7 +288,11 @@ def run_ai_product_loop(
             state["iteration"] = state.get("iteration", 0) + 1
             state["phase"] = "EXECUTE"
             state["current_task"] = task_id
-            save_loop_state(workspace, state)
+            _state_manager.update_loop(
+                iteration=state["iteration"],
+                phase="EXECUTE",
+                current_task=task_id,
+            )
 
             # Checkpoint
             display.log("Creating checkpoint...")
@@ -306,8 +312,9 @@ def run_ai_product_loop(
                     context_files=[task_source] if task_source else [],
                 )
                 display.log(f"Provenance: {_current_provenance_entry.id[:8]}...")
-            except Exception:
+            except Exception as exc:
                 _current_provenance_entry = None
+                logger.debug("Failed to start provenance tracking: %s", exc)
 
             # Run AI
             display.set_phase("EXECUTE")
@@ -336,8 +343,8 @@ def run_ai_product_loop(
                                 provenance_manager.reject_operation(
                                     _current_provenance_entry.id, reason="Verification failed"
                                 )
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("Failed to reject provenance after verification failure: %s", exc)
                             _current_provenance_entry = None
 
                         if interactive:
@@ -372,17 +379,15 @@ def run_ai_product_loop(
                             lint_passed=lint_passed,
                             status="accepted",
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to complete provenance entry: %s", exc)
                     _current_provenance_entry = None
 
                 mark_task_complete(workspace, task_source, task_id)
                 _state_manager.record_task_complete(task_id)
                 display.update_task_status(task_id, TaskStatus.COMPLETE)
                 display.set_status(LoopStatus.RUNNING)
-
-                state["tasks_completed"] = state.get("tasks_completed", []) + [task_id]
-                state["phase"] = "COMMIT"
+                _state_manager.update_loop(phase="COMMIT", current_task=task_id)
 
                 # Commit
                 if auto_commit:
@@ -410,8 +415,8 @@ def run_ai_product_loop(
                             _current_provenance_entry.id,
                             reason=output[:500] if output else "AI implementation failed",
                         )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to reject provenance entry: %s", exc)
                     _current_provenance_entry = None
 
                 display.log("Rolling back changes...")
@@ -434,9 +439,7 @@ def run_ai_product_loop(
                     display.set_status(LoopStatus.FAILED)
                     break
 
-                state["circuit_breaker"] = {"failures": cb.failures, "state": cb.state}
-
-            save_loop_state(workspace, state)
+                state["circuit_breaker"] = {"task": {"failures": cb.failures, "state": cb.state}}
 
     finally:
         display.set_status(LoopStatus.COMPLETE if failed == 0 else LoopStatus.FAILED)

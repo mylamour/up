@@ -12,6 +12,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -25,6 +26,11 @@ from up.core.checkpoint import (
 from up.core.state import get_state_manager
 
 console = Console()
+
+
+def _print_error(err: Exception) -> None:
+    """Print an exception message safely with Rich markup escaping."""
+    console.print(f"[red]Error:[/] {escape(str(err))}")
 
 
 # =============================================================================
@@ -80,7 +86,7 @@ def save_cmd(message: str, task: str, quiet: bool):
         console.print("Initialize with: [cyan]git init[/]")
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]Error:[/] {e}")
+        _print_error(e)
         sys.exit(1)
 
 
@@ -177,11 +183,11 @@ def reset_cmd(checkpoint_id: str, hard: bool, soft: bool, list_checkpoints: bool
         console.print("[red]Error:[/] Not a git repository")
         sys.exit(1)
     except CheckpointNotFoundError as e:
-        console.print(f"[red]Error:[/] {e}")
+        _print_error(e)
         console.print("List available: [cyan]up reset --list[/]")
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]Error:[/] {e}")
+        _print_error(e)
         sys.exit(1)
 
 
@@ -242,11 +248,17 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
         # Accept mode
         if accept:
             # Commit the changes
-            result = subprocess.run(
+            add_result = subprocess.run(
                 ["git", "add", "-A"],
                 cwd=cwd,
-                capture_output=True
+                capture_output=True,
+                text=True,
             )
+
+            if add_result.returncode != 0:
+                stderr = add_result.stderr.strip() if add_result.stderr else "git add failed"
+                console.print(f"[red]Error:[/] {escape(stderr)}")
+                sys.exit(1)
             
             commit_msg = message or "Accept AI changes"
             result = subprocess.run(
@@ -260,7 +272,13 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
                 console.print(f"[green]✓[/] Changes accepted and committed")
                 console.print(f"  Message: {commit_msg}")
             else:
-                console.print("[yellow]No changes to commit[/]")
+                combined = f"{result.stdout}\n{result.stderr}".lower()
+                if "nothing to commit" in combined or "no changes added to commit" in combined:
+                    console.print("[yellow]No changes to commit[/]")
+                else:
+                    stderr = result.stderr.strip() if result.stderr else "git commit failed"
+                    console.print(f"[red]Error:[/] {escape(stderr)}")
+                    sys.exit(1)
             return
         
         # Show diff
@@ -285,7 +303,7 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
         console.print("[red]Error:[/] Not a git repository")
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]Error:[/] {e}")
+        _print_error(e)
         sys.exit(1)
 
 

@@ -4,6 +4,7 @@ State loading, task finding, checkpoint operations, and PRD management.
 """
 
 import json
+import logging
 import re
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ from up.core.state import get_state_manager, CircuitBreakerState
 from up.core.checkpoint import get_checkpoint_manager, NotAGitRepoError
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def is_initialized(workspace: Path) -> bool:
@@ -22,6 +24,7 @@ def is_initialized(workspace: Path) -> bool:
     return (
         (workspace / ".claude").exists()
         or (workspace / ".cursor").exists()
+        or (workspace / ".up").exists()
         or (workspace / "CLAUDE.md").exists()
     )
 
@@ -147,12 +150,15 @@ def check_circuit_breaker(state: dict) -> dict:
     return {"open": False}
 
 
-def get_next_task_from_prd(prd_path: Path, workspace: Path = None) -> dict:
+def get_next_task_from_prd(prd_path: Path, workspace: Path = None, auto_sync: bool = False) -> dict:
     """Get next incomplete task from PRD.
     
     Cross-checks against state.tasks_completed to skip tasks
     that were implemented manually (e.g., in Cursor) but not
     marked in the PRD.
+
+    By default this function is read-only. Set auto_sync=True to
+    persist PRD pass-state updates for tasks already completed in state.
     """
     if not prd_path.exists():
         return None
@@ -168,26 +174,31 @@ def get_next_task_from_prd(prd_path: Path, workspace: Path = None) -> dict:
                 from up.core.state import get_state_manager
                 sm = get_state_manager(workspace)
                 completed_in_state = set(sm.state.loop.tasks_completed)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to read completed tasks from state: %s", exc)
 
         # Find first truly incomplete task
+        updated = False
         for story in sorted(stories, key=lambda s: s.get("priority", 999)):
             if story.get("passes", False):
                 continue
             task_id = story.get("id", "")
             if task_id in completed_in_state:
-                # Auto-sync: mark done in PRD
-                story["passes"] = True
-                story["completedAt"] = story.get("completedAt", time.strftime("%Y-%m-%d"))
+                # Skip tasks already completed in state.
+                # Optional side-effect sync when explicitly enabled.
+                if auto_sync:
+                    story["passes"] = True
+                    story["completedAt"] = story.get("completedAt", time.strftime("%Y-%m-%d"))
+                    updated = True
                 continue
             return story
 
-        # Save any auto-synced changes
-        try:
-            prd_path.write_text(json.dumps(data, indent=2))
-        except Exception:
-            pass
+        # Persist auto-sync updates only when requested.
+        if auto_sync and updated:
+            try:
+                prd_path.write_text(json.dumps(data, indent=2))
+            except Exception as exc:
+                logger.warning("Failed to persist PRD auto-sync updates: %s", exc)
 
         return None
     except json.JSONDecodeError:
@@ -266,8 +277,8 @@ def mark_task_complete(workspace: Path, task_source: str, task_id: str) -> None:
                 break
 
         prd_path.write_text(json.dumps(data, indent=2))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to mark task complete in PRD (%s): %s", task_id, exc)
 
 
 def build_implementation_prompt(workspace: Path, task: dict, task_source: str) -> str:
