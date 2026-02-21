@@ -4,6 +4,7 @@ Runs tests, linting, and collects file change information.
 """
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, Tuple, List
 
@@ -37,7 +38,7 @@ def run_verification_with_results(workspace: Path) -> Tuple[Optional[bool], Opti
     # Check if pytest exists and run tests
     try:
         pytest_result = subprocess.run(
-            ["pytest", "--tb=no", "-q"],
+            [sys.executable, "-m", "pytest", "--tb=no", "-q"],
             cwd=workspace,
             capture_output=True,
             timeout=300,
@@ -62,7 +63,7 @@ def run_verification_with_results(workspace: Path) -> Tuple[Optional[bool], Opti
     # Check for lint (optional - don't fail if not installed)
     try:
         ruff_result = subprocess.run(
-            ["ruff", "check", ".", "--quiet"],
+            [sys.executable, "-m", "ruff", "check", ".", "--quiet"],
             cwd=workspace,
             capture_output=True,
             timeout=60,
