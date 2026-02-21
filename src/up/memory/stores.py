@@ -24,8 +24,8 @@ def _ensure_chromadb():
     """Ensure ChromaDB is installed, provide helpful message if not."""
     if not _check_chromadb():
         raise ImportError(
-            "ChromaDB is required for up-cli memory system.\n"
-            "Install with: pip install up-cli[all]\n"
+            "ChromaDB is required for the memory system.\n"
+            "Install with: pip install up-cli[memory]\n"
             "Or: pip install chromadb"
         )
 

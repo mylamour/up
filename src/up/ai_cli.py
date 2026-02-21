@@ -10,35 +10,13 @@ from rich.console import Console
 console = Console()
 
 
-# =============================================================================
-# Exceptions
-# =============================================================================
-
-class AICliError(Exception):
-    """Base exception for AI CLI operations."""
-    pass
-
-
-class AICliNotFoundError(AICliError):
-    """No AI CLI is installed or available."""
-    pass
-
-
-class AICliTimeoutError(AICliError):
-    """AI CLI command timed out."""
-    
-    def __init__(self, message: str, timeout: int):
-        super().__init__(message)
-        self.timeout = timeout
-
-
-class AICliExecutionError(AICliError):
-    """AI CLI command failed to execute."""
-    
-    def __init__(self, message: str, returncode: int, stderr: str = ""):
-        super().__init__(message)
-        self.returncode = returncode
-        self.stderr = stderr
+# Re-export exceptions from unified hierarchy for backward compatibility
+from up.exceptions import (  # noqa: F401
+    AICliError,
+    AICliNotFoundError,
+    AICliTimeoutError,
+    AICliExecutionError,
+)
 
 
 # =============================================================================

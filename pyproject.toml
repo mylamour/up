@@ -10,7 +10,7 @@ readme = "Readme.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "Your Name", email = "you@example.com" }
+    { name = "Mour", email = "mour@up-cli.dev" }
 ]
 keywords = ["cli", "scaffolding", "ai", "claude", "cursor", "productivity", "mcp"]
 classifiers = [
@@ -29,27 +29,37 @@ dependencies = [
     "rich>=13.0",
     "pyyaml>=6.0",
     "tqdm>=4.65.0",
-    "chromadb>=0.4.0",
     "filelock>=3.12",
-    "pymupdf>=1.24.0",
 ]
 
 [project.optional-dependencies]
+memory = [
+    "chromadb>=0.4.0",
+]
+pdf = [
+    "pymupdf>=1.24.0",
+]
+all = [
+    "chromadb>=0.4.0",
+    "pymupdf>=1.24.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-subprocess>=1.5",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+    "chromadb>=0.4.0",
+    "pymupdf>=1.24.0",
 ]
 
 [project.scripts]
 up = "up.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/up-cli"
-Documentation = "https://github.com/yourusername/up-cli#readme"
-Repository = "https://github.com/yourusername/up-cli"
+Homepage = "https://github.com/mourproject/up-cli"
+Documentation = "https://github.com/mourproject/up-cli#readme"
+Repository = "https://github.com/mourproject/up-cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/up"]

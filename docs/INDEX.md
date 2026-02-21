@@ -1,6 +1,6 @@
 # Documentation Index
 
-**Updated**: 2026-02-04
+**Updated**: 2026-02-21
 
 > AI: Use this index to quickly find relevant documentation.
 
@@ -12,25 +12,30 @@
 |-------|------|-------------|
 | Project State | CONTEXT.md | Current status, blockers, next steps |
 | Recent Work | handoff/LATEST.md | Last session summary |
-| Vision | roadmap/vision/PRODUCT_VISION.md | Product goals |
-| Phase 1 | roadmap/phases/PHASE_1_FOUNDATION.md | Current phase |
+| Vision | roadmap/vision/PRODUCT_VISION.md | Product goals and target users |
+| Phase 1 | roadmap/phases/PHASE_1_FOUNDATION.md | Current phase deliverables |
+| Improvement Plan | roadmap/IMPROVEMENT_PLAN.md | Development roadmap |
 
 ## By Category
 
 ### Architecture
 | Topic | File |
 |-------|------|
-| *Add architecture docs here* | architecture/*.md |
+| SESRC Design | architecture/SESRC_DESIGN.md |
+| Integrated Lifecycle | architecture/INTEGRATED_LIFECYCLE.md |
+| Multi-Worktree Execution | architecture/MULTI_WORKTREE_EXECUTION.md |
 
-### Features
+### Guides
 | Topic | File |
 |-------|------|
-| *Add feature specs here* | features/*.md |
+| Cursor + Claude Integration | guides/CURSOR_CLAUDE_INTEGRATION.md |
 
-### Decisions
+### Research & Analysis
 | Topic | File |
 |-------|------|
-| *Add ADRs here* | decisions/ADR-*.md |
+| AI Vibing Coding Approach | AI_VIBING_CODING_APPROACH.md |
+| AI Programming Behavioral Analysis | AI_PROGRAMMING_BEHAVIORAL_ANALYSIS.md |
+| Multi-Agent Skills Design | MULTI_AGENT_SKILLS_DESIGN.md |
 
 ---
 

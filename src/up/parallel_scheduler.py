@@ -43,7 +43,7 @@ from up.parallel import (
     TaskResult,
     execute_task_in_worktree,
     verify_worktree,
-    _mark_task_complete,
+    mark_task_complete_in_prd,
 )
 
 console = Console()
@@ -821,7 +821,7 @@ def _execute_wave(
                 summary["completed"].append(tid)
                 state_mgr.record_task_complete(tid)
                 knowledge.mark_complete(tid)
-                _mark_task_complete(prd_path, tid)
+                mark_task_complete_in_prd(prd_path, tid)
             else:
                 dashboard.update_agent(tid, "failed", error="merge conflict")
                 dashboard.log(f"[red]{tid}: merge failed[/]")

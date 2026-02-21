@@ -285,18 +285,16 @@ def run_ai_product_loop(
             display.increment_iteration()
             display.log(f"Starting task {task_id}: {task_title[:40]}...")
 
-            state["iteration"] = state.get("iteration", 0) + 1
-            state["phase"] = "EXECUTE"
-            state["current_task"] = task_id
+            new_iteration = _state_manager.state.loop.iteration + 1
             _state_manager.update_loop(
-                iteration=state["iteration"],
+                iteration=new_iteration,
                 phase="EXECUTE",
                 current_task=task_id,
             )
 
             # Checkpoint
             display.log("Creating checkpoint...")
-            checkpoint_name = f"cp-{task_id}-{state['iteration']}"
+            checkpoint_name = f"cp-{task_id}-{_state_manager.state.loop.iteration}"
             create_checkpoint(workspace, checkpoint_name, task_id=task_id)
 
             # Build prompt
@@ -439,7 +437,7 @@ def run_ai_product_loop(
                     display.set_status(LoopStatus.FAILED)
                     break
 
-                state["circuit_breaker"] = {"task": {"failures": cb.failures, "state": cb.state}}
+                # Circuit breaker state is persisted via _state_manager.save() above
 
     finally:
         display.set_status(LoopStatus.COMPLETE if failed == 0 else LoopStatus.FAILED)

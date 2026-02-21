@@ -1,9 +1,6 @@
 data/*
-examples/docs/*
-test-project/*
 .vscode/*
 .DS_Store
-.handoff_status.md
 __pycache__/
 *.pyc
 *.pyo
@@ -22,7 +19,3 @@ build/*
 *.migrated
 .loop_state.json
 .parallel_state.json
-
-# User project files (not tracked)
-AI_PROGRAMMING_BEHAVIORAL_ANALYSIS.md
-AI_VIBING_CODING_APPROACH.md

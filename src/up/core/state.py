@@ -481,64 +481,65 @@ class StateManager:
         self._apply_config_to_state()
         return self._state
     
-    def save(self) -> None:
-        """Save current state to file (thread-safe, atomic).
-        
-        Uses filelock for cross-thread/cross-process safety,
-        writes to a temp file with fsync, then atomically replaces
-        the target file using os.replace().
+    def _write_state_to_disk(self) -> None:
+        """Atomic write of in-memory state to disk.
+
+        Creates a rolling backup, then writes via temp file + fsync +
+        os.replace() so the state file is never partially written.
+
+        Caller MUST hold ``self._lock`` before invoking this method.
         """
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+
+        # Rolling backup
+        if self.state_file.exists():
+            backup_file = self.state_file.with_suffix(".json.bak")
+            try:
+                shutil.copy2(str(self.state_file), str(backup_file))
+            except OSError:
+                logger.warning("Could not create state backup")
+
+        fd = None
+        tmp_path = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(self.state_dir),
+                suffix=".tmp",
+                prefix="state_",
+            )
+            with os.fdopen(fd, "w") as f:
+                fd = None  # os.fdopen takes ownership
+                json.dump(self._state.to_dict(), f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, str(self.state_file))
+            tmp_path = None
+        except Exception:
+            if fd is not None:
+                os.close(fd)
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
+
+    def save(self) -> None:
+        """Save current state to file (thread-safe, atomic)."""
         if self._state is None:
             return
-        
-        # Update timestamp
+
         self._state.updated_at = datetime.now().isoformat()
-        
-        # Ensure directory exists
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        
+
         with self._lock:
-            # Rolling backup: copy current state to .bak before overwriting
-            if self.state_file.exists():
-                backup_file = self.state_file.with_suffix(".json.bak")
-                try:
-                    shutil.copy2(str(self.state_file), str(backup_file))
-                except OSError:
-                    logger.warning("Could not create state backup")
-            
-            # Atomic write: temp file + fsync + os.replace()
-            fd = None
-            tmp_path = None
-            try:
-                fd, tmp_path = tempfile.mkstemp(
-                    dir=str(self.state_dir),
-                    suffix=".tmp",
-                    prefix="state_",
-                )
-                with os.fdopen(fd, "w") as f:
-                    fd = None  # os.fdopen takes ownership of fd
-                    json.dump(self._state.to_dict(), f, indent=2)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_path, str(self.state_file))
-                tmp_path = None  # replaced successfully
-            except Exception:
-                # Clean up temp file on failure
-                if fd is not None:
-                    os.close(fd)
-                if tmp_path and os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-                raise
-    
+            self._write_state_to_disk()
+
     def atomic_update(self, updater: Callable[[UnifiedState], None]) -> None:
         """Thread-safe read-modify-write on the state.
-        
+
         Holds the file lock for the entire read-modify-write cycle
         to prevent lost updates from concurrent access.
-        
+
         Args:
             updater: Function that mutates the state in-place.
-        
+
         Example:
             def bump_iteration(state):
                 state.loop.iteration += 1
@@ -556,44 +557,11 @@ class StateManager:
                         self._state = UnifiedState()
             elif self._state is None:
                 self._state = UnifiedState()
-            
-            # Apply the update
+
             updater(self._state)
-            
-            # Save (will re-acquire lock, but FileLock is re-entrant)
+
             self._state.updated_at = datetime.now().isoformat()
-            self.state_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Rolling backup
-            if self.state_file.exists():
-                backup_file = self.state_file.with_suffix(".json.bak")
-                try:
-                    shutil.copy2(str(self.state_file), str(backup_file))
-                except OSError:
-                    pass
-            
-            # Atomic write
-            fd = None
-            tmp_path = None
-            try:
-                fd, tmp_path = tempfile.mkstemp(
-                    dir=str(self.state_dir),
-                    suffix=".tmp",
-                    prefix="state_",
-                )
-                with os.fdopen(fd, "w") as f:
-                    fd = None
-                    json.dump(self._state.to_dict(), f, indent=2)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_path, str(self.state_file))
-                tmp_path = None
-            except Exception:
-                if fd is not None:
-                    os.close(fd)
-                if tmp_path and os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-                raise
+            self._write_state_to_disk()
     
     def reset(self) -> UnifiedState:
         """Reset to fresh state."""

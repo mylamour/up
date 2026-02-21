@@ -11,26 +11,21 @@ import json
 import subprocess
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Callable, List
+from typing import Optional, List
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.table import Table
 
 from up.git.worktree import (
     create_worktree,
     remove_worktree,
-    list_worktrees,
-    merge_worktree,
     create_checkpoint,
     count_commits_since,
     WorktreeState,
 )
-from up.ai_cli import check_ai_cli, run_ai_task
+from up.ai_cli import run_ai_task
 from up.core.state import get_state_manager, AgentState
 
 console = Console()
@@ -401,176 +396,11 @@ Begin implementation."""
     return prompt
 
 
-def run_parallel_loop(
-    workspace: Path,
-    prd_path: Path,
-    max_workers: int = 3,
-    run_all: bool = False,
-    timeout: int = 600,
-    dry_run: bool = False
-) -> dict:
-    """Run the parallel product loop.
-    
-    Args:
-        workspace: Project root directory
-        prd_path: Path to prd.json
-        max_workers: Number of parallel tasks
-        run_all: Whether to run all tasks or just one batch
-        timeout: AI timeout per task
-        dry_run: Preview without executing
-    
-    Returns:
-        Summary dict with results
-    """
-    # Use unified state management
-    state_mgr = ParallelExecutionManager(workspace)
-    state_mgr.iteration += 1
-    state_mgr.parallel_limit = max_workers
-    state_mgr.set_active(True)
-    
-    summary = {
-        "batches": 0,
-        "completed": [],
-        "failed": [],
-        "total_duration": 0
-    }
-    
-    start_time = time.time()
-    
-    try:
-        while True:
-            # Get pending tasks
-            tasks = get_pending_tasks(prd_path, limit=max_workers, workspace=workspace)
-            
-            if not tasks:
-                console.print("\n[green]✓[/] All tasks completed!")
-                break
-            
-            summary["batches"] += 1
-            console.print(f"\n[bold]Batch {summary['batches']}:[/] {len(tasks)} tasks")
-            
-            if dry_run:
-                for task in tasks:
-                    console.print(f"  Would execute: {task.get('id')} - {task.get('title')}")
-                if not run_all:
-                    break
-                continue
-            
-            # Phase 1: Create worktrees
-            console.print("\n[dim]Creating worktrees...[/]")
-            worktrees = []
-            for task in tasks:
-                task_id = task.get("id")
-                wt_path, wt_state = create_worktree(
-                    task_id,
-                    task.get("title", "")
-                )
-                worktrees.append({
-                    "path": wt_path,
-                    "state": wt_state,
-                    "task": task
-                })
-                console.print(f"  ✓ {wt_path}")
-                state_mgr.add_active_worktree(task_id)
-            
-            # Phase 2: Execute in parallel
-            console.print("\n[dim]Executing tasks...[/]")
-            
-            cli_name, cli_available = check_ai_cli()
-            if not cli_available:
-                console.print("[yellow]No AI CLI found. Skipping execution.[/]")
-                for wt in worktrees:
-                    remove_worktree(wt["task"].get("id"))
-                break
-            
-            results = {}
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(
-                        execute_task_in_worktree,
-                        wt["path"],
-                        wt["task"],
-                        cli_name,
-                        timeout
-                    ): wt["task"].get("id")
-                    for wt in worktrees
-                }
-                
-                for future in as_completed(futures):
-                    task_id = futures[future]
-                    try:
-                        result = future.result()
-                        results[task_id] = result
-                        status = "✓" if result.success else "✗"
-                        console.print(f"  {status} {task_id}: {result.phase}")
-                    except Exception as e:
-                        results[task_id] = TaskResult(
-                            task_id=task_id,
-                            success=False,
-                            phase="failed",
-                            duration_seconds=0,
-                            error=str(e)
-                        )
-            
-            # Phase 3: Verify
-            console.print("\n[dim]Verifying...[/]")
-            for wt in worktrees:
-                task_id = wt["task"].get("id")
-                if results.get(task_id, TaskResult("", False, "failed", 0)).success:
-                    verify_result = verify_worktree(wt["path"])
-                    results[task_id] = verify_result
-                    
-                    status = "✅" if verify_result.success else "❌"
-                    test_info = ""
-                    if verify_result.test_results:
-                        test_info = f" (tests: {verify_result.test_results.get('tests', '?')})"
-                    console.print(f"  {status} {task_id}{test_info}")
-            
-            # Phase 4: Merge passed tasks
-            console.print("\n[dim]Merging...[/]")
-            for wt in worktrees:
-                task_id = wt["task"].get("id")
-                result = results.get(task_id)
-                
-                if result and result.success:
-                    if merge_worktree(task_id):
-                        console.print(f"  ✓ {task_id} merged")
-                        summary["completed"].append(task_id)
-                        state_mgr.record_task_complete(task_id)
-                        
-                        # Mark task complete in PRD
-                        _mark_task_complete(prd_path, task_id)
-                    else:
-                        console.print(f"  ✗ {task_id} merge failed")
-                        summary["failed"].append(task_id)
-                        state_mgr.record_task_failed(task_id)
-                else:
-                    console.print(f"  - {task_id} skipped (not passed)")
-                    summary["failed"].append(task_id)
-                    state_mgr.record_task_failed(task_id)
-                
-                # Remove from active
-                state_mgr.remove_active_worktree(task_id)
-            
-            if not run_all:
-                break
-    finally:
-        # Mark parallel execution as inactive
-        state_mgr.set_active(False)
-    
-    summary["total_duration"] = time.time() - start_time
-    
-    # Print summary
-    _print_summary(summary)
-    
-    return summary
-
-
-def _mark_task_complete(prd_path: Path, task_id: str):
+def mark_task_complete_in_prd(prd_path: Path, task_id: str):
     """Mark a task as complete in the PRD."""
     if not prd_path.exists():
         return
-    
+
     try:
         data = json.loads(prd_path.read_text())
         for story in data.get("userStories", []):
@@ -581,26 +411,3 @@ def _mark_task_complete(prd_path: Path, task_id: str):
         prd_path.write_text(json.dumps(data, indent=2))
     except (json.JSONDecodeError, IOError):
         pass
-
-
-def _print_summary(summary: dict):
-    """Print execution summary."""
-    console.print("\n" + "═" * 50)
-    console.print("[bold]SUMMARY[/]")
-    console.print("═" * 50)
-    
-    table = Table(show_header=False, box=None)
-    table.add_column("Metric", style="dim")
-    table.add_column("Value")
-    
-    table.add_row("Batches", str(summary["batches"]))
-    table.add_row("Completed", f"[green]{len(summary['completed'])}[/]")
-    table.add_row("Failed", f"[red]{len(summary['failed'])}[/]")
-    table.add_row("Duration", f"{summary['total_duration']:.1f}s")
-    
-    console.print(table)
-    
-    if summary["completed"]:
-        console.print(f"\n[green]Completed:[/] {', '.join(summary['completed'])}")
-    if summary["failed"]:
-        console.print(f"[red]Failed:[/] {', '.join(summary['failed'])}")

@@ -451,21 +451,47 @@ mypy src/
 ```
 up-cli/
 ├── src/up/
-│   ├── cli.py              # Main CLI
+│   ├── cli.py              # Main CLI entry point
+│   ├── ai_cli.py           # AI CLI utilities (Claude/Cursor)
 │   ├── context.py          # Context budget management
-│   ├── memory.py           # Long-term memory (ChromaDB)
 │   ├── events.py           # Event-driven integration
 │   ├── summarizer.py       # Conversation analysis
+│   ├── parallel.py         # Parallel task execution
+│   ├── parallel_scheduler.py # Dependency-aware scheduling
+│   ├── core/               # Core modules
+│   │   ├── state.py        # Unified state management
+│   │   ├── checkpoint.py   # Git checkpoint operations
+│   │   └── provenance.py   # AI operation tracking
+│   ├── git/                # Git utilities
+│   │   ├── utils.py        # Git command helpers
+│   │   └── worktree.py     # Worktree management
+│   ├── learn/              # Learning system
+│   │   ├── analyzer.py     # Project analysis
+│   │   ├── research.py     # Topic/file learning
+│   │   ├── plan.py         # PRD generation
+│   │   └── utils.py        # Shared utilities
+│   ├── memory/             # Long-term memory (ChromaDB)
+│   │   ├── _manager.py     # Memory manager
+│   │   ├── entry.py        # Memory entries
+│   │   └── stores.py       # Storage backends
 │   ├── commands/           # CLI commands
 │   │   ├── init.py         # Initialize project
 │   │   ├── new.py          # Create new project
 │   │   ├── status.py       # System health
 │   │   ├── dashboard.py    # Live monitoring
-│   │   ├── learn.py        # Learning system
+│   │   ├── start/          # Product loop (subpackage)
+│   │   ├── vibe.py         # save/reset/diff
+│   │   ├── agent.py        # Multi-agent worktrees
+│   │   ├── bisect.py       # Bug hunting
+│   │   ├── provenance.py   # Lineage tracking
+│   │   ├── review.py       # AI code review
+│   │   ├── branch.py       # Branch hierarchy
 │   │   ├── memory.py       # Memory commands
 │   │   ├── sync.py         # Sync & hooks
-│   │   ├── start.py        # Product loop
 │   │   └── summarize.py    # Conversation summary
+│   ├── ui/                 # Terminal UI components
+│   │   ├── loop_display.py # Product loop live display
+│   │   └── theme.py        # Rich theme
 │   └── templates/          # Scaffolding templates
 │       ├── config/         # CLAUDE.md, .cursor/rules
 │       ├── docs/           # Documentation system
@@ -473,13 +499,12 @@ up-cli/
 │       ├── loop/           # Product loop
 │       ├── mcp/            # MCP server
 │       └── projects/       # Project templates
+├── tests/                  # Test suite
 ├── scripts/                # Utility scripts
-│   ├── export_claude_history.py
-│   └── export_cursor_history.py
-├── docs/                   # Documentation
-│   ├── architecture/       # System architecture
-│   └── guides/             # Usage guides
-└── skills/                 # Reference skills
+└── docs/                   # Documentation
+    ├── architecture/       # System architecture
+    ├── guides/             # Usage guides
+    └── handoff/            # Session continuity
 ```
 
 ## License

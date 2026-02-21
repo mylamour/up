@@ -43,7 +43,8 @@ def _extract_pdf_text(file_path: Path) -> str:
     except ImportError:
         raise ImportError(
             "PDF support requires pymupdf. Install it with:\n"
-            "  pip install pymupdf"
+            "  pip install up-cli[pdf]\n"
+            "  Or: pip install pymupdf"
         )
 
     text_parts: list[str] = []

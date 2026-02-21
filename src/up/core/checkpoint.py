@@ -414,33 +414,14 @@ class CheckpointManager:
             return None
 
 
-# =============================================================================
-# Exceptions
-# =============================================================================
-
-class CheckpointError(Exception):
-    """Base exception for checkpoint operations."""
-    pass
-
-
-class GitError(CheckpointError):
-    """Git operation failed."""
-    pass
-
-
-class GitNotInstalledError(GitError):
-    """Git is not installed or not in PATH."""
-    pass
-
-
-class NotAGitRepoError(CheckpointError):
-    """Not in a git repository."""
-    pass
-
-
-class CheckpointNotFoundError(CheckpointError):
-    """Checkpoint not found."""
-    pass
+# Re-export exceptions from unified hierarchy for backward compatibility
+from up.exceptions import (  # noqa: E402, F401
+    CheckpointError,
+    CheckpointNotFoundError,
+    GitError,
+    GitNotInstalledError,
+    NotAGitRepoError,
+)
 
 
 # =============================================================================
