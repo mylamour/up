@@ -87,7 +87,7 @@
       ],
       "priority": 6,
       "effort": "high",
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
