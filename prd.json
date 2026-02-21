@@ -73,7 +73,7 @@
       ],
       "priority": 5,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
