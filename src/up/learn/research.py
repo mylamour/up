@@ -16,6 +16,49 @@ from up.learn.analyzer import analyze_project, analyze_project_structure
 
 console = Console()
 
+# File extensions that require binary reading (not plain text)
+BINARY_DOCUMENT_EXTENSIONS = {".pdf"}
+
+
+def _read_file_content(file_path: Path) -> str:
+    """Read file content, handling both text and binary document formats (e.g. PDF)."""
+    ext = file_path.suffix.lower()
+
+    if ext == ".pdf":
+        return _extract_pdf_text(file_path)
+
+    # Default: read as text with fallback encodings
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return file_path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"Unable to decode {file_path.name} with supported encodings")
+
+
+def _extract_pdf_text(file_path: Path) -> str:
+    """Extract text content from a PDF file using PyMuPDF."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        raise ImportError(
+            "PDF support requires pymupdf. Install it with:\n"
+            "  pip install pymupdf"
+        )
+
+    text_parts: list[str] = []
+    with fitz.open(file_path) as doc:
+        total_pages = len(doc)
+        for page_num, page in enumerate(doc, start=1):
+            page_text = page.get_text()
+            if page_text.strip():
+                text_parts.append(f"--- Page {page_num}/{total_pages} ---\n{page_text}")
+
+    if not text_parts:
+        raise ValueError(f"No extractable text found in {file_path.name} (may be scanned/image-based)")
+
+    return "\n\n".join(text_parts)
+
 
 def learn_from_topic(workspace: Path, topic: str, use_ai: bool = True) -> dict:
     """Learn in a specific direction provided by the user."""
@@ -147,13 +190,28 @@ def learn_from_file(workspace: Path, file_path: str, use_ai: bool = True) -> dic
         border_style="blue"
     ))
     
-    try:
-        content = source_file.read_text()
-    except Exception as e:
-        console.print(f"[red]Error reading file: {e}[/]")
-        return {}
-    
     file_ext = source_file.suffix.lower()
+    is_binary_doc = file_ext in BINARY_DOCUMENT_EXTENSIONS
+    
+    # Read file content.
+    # For binary documents (PDF etc.), text extraction is best-effort — the AI
+    # CLI can read the original file directly and doesn't need pre-extracted text.
+    content: Optional[str] = None
+    if is_binary_doc:
+        try:
+            content = _read_file_content(source_file)
+        except ImportError:
+            console.print("[dim]PDF text extraction unavailable (pymupdf not installed).[/]")
+            console.print("[dim]AI CLI will read the file directly.[/]")
+        except Exception as e:
+            console.print(f"[dim]Text extraction failed ({e}), AI CLI will read the file directly.[/]")
+    else:
+        try:
+            content = _read_file_content(source_file)
+        except Exception as e:
+            console.print(f"[red]Error reading file: {e}[/]")
+            return {}
+    
     learnings = {
         "source_file": source_file.name,
         "source_path": str(source_file),
@@ -170,26 +228,42 @@ def learn_from_file(workspace: Path, file_path: str, use_ai: bool = True) -> dic
         cli_name, cli_available = check_ai_cli()
         if cli_available:
             console.print(f"\n[yellow]Analyzing with {cli_name}...[/]")
-            ai_result = _ai_analyze_file(workspace, content, source_file.name, cli_name)
+            # For binary documents (PDF etc.), pass the file path so the AI CLI
+            # can read the original file directly (better than pre-extracted text).
+            source_path = source_file if is_binary_doc else None
+            ai_result = _ai_analyze_file(
+                workspace, content or "", source_file.name, cli_name, source_path=source_path
+            )
             if ai_result:
                 learnings["ai_analysis"] = ai_result
     
-    # Basic extraction by file type
-    if file_ext in ['.md', '.markdown', '.txt', '.rst']:
-        learnings = _analyze_documentation_file(content, learnings)
-    elif file_ext in ['.py']:
-        learnings = _analyze_python_file(content, learnings)
-    elif file_ext in ['.js', '.ts', '.tsx', '.jsx']:
-        learnings = _analyze_javascript_file(content, learnings)
-    elif file_ext in ['.json', '.yaml', '.yml', '.toml']:
-        learnings = _analyze_config_file(content, learnings, file_ext)
-    else:
-        learnings = _analyze_generic_file(content, learnings)
+    # Basic extraction by file type (only if we have text content)
+    if content:
+        if file_ext in ['.md', '.markdown', '.txt', '.rst', '.pdf']:
+            learnings = _analyze_documentation_file(content, learnings)
+        elif file_ext in ['.py']:
+            learnings = _analyze_python_file(content, learnings)
+        elif file_ext in ['.js', '.ts', '.tsx', '.jsx']:
+            learnings = _analyze_javascript_file(content, learnings)
+        elif file_ext in ['.json', '.yaml', '.yml', '.toml']:
+            learnings = _analyze_config_file(content, learnings, file_ext)
+        else:
+            learnings = _analyze_generic_file(content, learnings)
+    
+    # If we have no content and no AI analysis, we can't proceed
+    if not content and not learnings.get("ai_analysis"):
+        console.print("[red]Error: Could not extract text and no AI CLI available.[/]")
+        console.print("[yellow]Install pymupdf for local PDF extraction: pip install pymupdf[/]")
+        return {}
     
     # Display results
     console.print(f"\n[bold]File:[/] {source_file.name}")
     console.print(f"[bold]Type:[/] {file_ext or 'unknown'}")
-    console.print(f"[bold]Size:[/] {len(content)} characters, {len(content.splitlines())} lines")
+    if content:
+        console.print(f"[bold]Size:[/] {len(content)} characters, {len(content.splitlines())} lines")
+    else:
+        file_size = source_file.stat().st_size
+        console.print(f"[bold]Size:[/] {file_size:,} bytes")
     
     if learnings.get("ai_analysis"):
         console.print("\n[green]✓ AI Analysis Complete[/]")
@@ -355,29 +429,55 @@ Be concise and practical. Format with markdown."""
     return run_ai_prompt(workspace, prompt, cli_name, timeout=120)
 
 
-def _ai_analyze_file(workspace: Path, content: str, filename: str, cli_name: str) -> Optional[str]:
-    """Use AI to analyze a file."""
-    max_chars = 12000
-    if len(content) > max_chars:
-        half = max_chars // 2
-        content = content[:half] + "\n\n[... content truncated ...]\n\n" + content[-half:]
-        truncated = True
-    else:
-        truncated = False
-    
-    prompt = f"""Analyze this file and extract actionable insights:
+def _ai_analyze_file(
+    workspace: Path,
+    content: str,
+    filename: str,
+    cli_name: str,
+    source_path: Optional[Path] = None,
+) -> Optional[str]:
+    """Use AI to analyze a file.
+
+    Args:
+        workspace: Working directory.
+        content: Pre-extracted text content of the file.
+        filename: Display name of the file.
+        cli_name: AI CLI to use ("claude" or "agent").
+        source_path: If provided, tell the AI CLI to read this file directly
+                     instead of embedding the text content in the prompt.
+                     Useful for binary formats (PDF) where the CLI can do a
+                     better job reading the original file.
+    """
+    analysis_instructions = """Analyze this file and extract actionable insights:
 
 1. **Key Concepts** - Main ideas and knowledge (5-8 items)
 2. **Patterns** - Design patterns, workflows, methodologies
 3. **Best Practices** - Actionable recommendations
 4. **Implementation Ideas** - How to use these learnings
 
+Be concise. Format with markdown headers."""
+
+    if source_path is not None:
+        # Let the AI CLI read the original file directly (better for PDFs, etc.)
+        prompt = f"""Read the file at: {source_path}
+
+{analysis_instructions}"""
+    else:
+        # Embed text content in the prompt (for regular text files)
+        max_chars = 12000
+        if len(content) > max_chars:
+            half = max_chars // 2
+            content = content[:half] + "\n\n[... content truncated ...]\n\n" + content[-half:]
+            truncated = True
+        else:
+            truncated = False
+
+        prompt = f"""{analysis_instructions}
+
 {"[Note: File was truncated due to size]" if truncated else ""}
 
 File ({filename}):
-{content}
-
-Be concise. Format with markdown headers."""
+{content}"""
 
     return run_ai_prompt(workspace, prompt, cli_name, timeout=180)
 
