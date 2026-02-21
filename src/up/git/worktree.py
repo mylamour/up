@@ -22,38 +22,47 @@ from up.git.utils import (
 )
 
 
-@dataclass
-class WorktreeState:
-    """State of a task worktree."""
-    task_id: str
-    task_title: str
-    branch: str
-    path: str
-    status: str = "created"  # created, executing, verifying, passed, failed, merged
-    phase: str = "INIT"
-    started: str = field(default_factory=lambda: datetime.now().isoformat())
-    checkpoints: list = field(default_factory=list)
-    ai_invocations: list = field(default_factory=list)
-    verification: dict = field(default_factory=lambda: {
-        "tests_passed": None,
-        "lint_passed": None,
-        "type_check_passed": None
-    })
-    error: Optional[str] = None
+from up.core.state import get_state_manager, AgentState
+
+# For backwards compatibility during the migration
+WorktreeState = AgentState
+
+def _get_workspace_for_worktree(worktree_path: Path) -> Path:
+    """Get the root workspace path from a worktree path.
     
-    def save(self, worktree_path: Path):
-        """Save state to worktree."""
-        state_file = worktree_path / ".agent_state.json"
-        state_file.write_text(json.dumps(asdict(self), indent=2))
+    Since worktree_path is typically something like '.worktrees/US-001',
+    its parent's parent is the workspace root.
+    """
+    return worktree_path.absolute().parent.parent
+
+def save_worktree_state(state: AgentState, worktree_path: Path):
+    """Save state to unified state manager instead of local file."""
+    workspace = _get_workspace_for_worktree(worktree_path)
+    sm = get_state_manager(workspace)
+    sm.add_agent(state)
+
+def load_worktree_state(worktree_path: Path, task_id: Optional[str] = None) -> AgentState:
+    """Load state from unified state manager."""
+    workspace = _get_workspace_for_worktree(worktree_path)
+    sm = get_state_manager(workspace)
     
-    @classmethod
-    def load(cls, worktree_path: Path) -> "WorktreeState":
-        """Load state from worktree."""
-        state_file = worktree_path / ".agent_state.json"
-        if state_file.exists():
-            data = json.loads(state_file.read_text())
-            return cls(**data)
-        raise FileNotFoundError(f"No state file in {worktree_path}")
+    # Extract task_id from path if not provided
+    if not task_id:
+        task_id = worktree_path.name
+        
+    if task_id in sm.state.agents:
+        return sm.state.agents[task_id]
+        
+    raise FileNotFoundError(f"No state found for agent {task_id} in unified state")
+
+def _monkeypatch_agent_state():
+    """Add load/save methods to AgentState for backward compatibility."""
+    if not hasattr(AgentState, 'save'):
+        AgentState.save = save_worktree_state
+    if not hasattr(AgentState, 'load'):
+        AgentState.load = classmethod(lambda cls, path: load_worktree_state(path))
+
+_monkeypatch_agent_state()
 
 
 def create_worktree(

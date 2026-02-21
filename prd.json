@@ -29,7 +29,7 @@
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Need to update src/up/git/worktree.py"
     },
     {

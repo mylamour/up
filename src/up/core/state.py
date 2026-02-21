@@ -197,6 +197,13 @@ class AgentState:
     completed_at: Optional[str] = None
     commits: int = 0
     error: Optional[str] = None
+    checkpoints: list = field(default_factory=list)
+    ai_invocations: list = field(default_factory=list)
+    verification: dict = field(default_factory=lambda: {
+        "tests_passed": None,
+        "lint_passed": None,
+        "type_check_passed": None
+    })
 
 
 @dataclass
