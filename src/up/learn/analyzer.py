@@ -82,16 +82,9 @@ def analyze_project(workspace: Path) -> dict:
     
     profile["frameworks"] = sorted(found_frameworks)
     
-    # Detect patterns
-    pattern_indicators = {
-        r"class.*Repository": "Repository Pattern",
-        r"class.*Service": "Service Layer",
-        r"@dataclass": "Dataclasses",
-        r"async def": "Async/Await",
-        r"def test_": "Unit Tests",
-        r"Protocol\)": "Protocol Pattern",
-    }
+    import ast
     
+    # Detect patterns via AST for Python files
     src_dir = workspace / "src"
     if not src_dir.exists():
         src_dir = workspace
@@ -100,9 +93,48 @@ def analyze_project(workspace: Path) -> dict:
     for py_file in src_dir.rglob("*.py"):
         try:
             content = py_file.read_text()
-            for pattern, name in pattern_indicators.items():
-                if re.search(pattern, content, re.IGNORECASE):
-                    found_patterns.add(name)
+            tree = ast.parse(content)
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    if "Repository" in node.name:
+                        found_patterns.add("Repository Pattern")
+                    if "Service" in node.name:
+                        found_patterns.add("Service Layer")
+                    for base in node.bases:
+                        if isinstance(base, ast.Name) and base.id == "Protocol":
+                            found_patterns.add("Protocol Pattern")
+                    for dec in node.decorator_list:
+                        if isinstance(dec, ast.Name) and dec.id == "dataclass":
+                            found_patterns.add("Dataclasses")
+                        elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name) and dec.func.id == "dataclass":
+                            found_patterns.add("Dataclasses")
+                elif isinstance(node, ast.AsyncFunctionDef):
+                    found_patterns.add("Async/Await")
+                    if node.name.startswith("test_"):
+                        found_patterns.add("Unit Tests")
+                elif isinstance(node, ast.FunctionDef):
+                    if node.name.startswith("test_"):
+                        found_patterns.add("Unit Tests")
+                        
+        except SyntaxError:
+            # Fallback to regex if AST parsing fails
+            try:
+                content = py_file.read_text()
+                if "class" in content and "Repository" in content:
+                    found_patterns.add("Repository Pattern")
+                if "class" in content and "Service" in content:
+                    found_patterns.add("Service Layer")
+                if "@dataclass" in content:
+                    found_patterns.add("Dataclasses")
+                if "async def" in content:
+                    found_patterns.add("Async/Await")
+                if "def test_" in content:
+                    found_patterns.add("Unit Tests")
+                if "Protocol" in content:
+                    found_patterns.add("Protocol Pattern")
+            except Exception:
+                continue
         except Exception:
             continue
     
