@@ -207,21 +207,26 @@ def merge_worktree(
     task_id: str,
     target_branch: str = "main",
     squash: bool = True,
-    message: str = None
+    message: str = None,
+    cli_name: str = None,
+    workspace: Path = None
 ) -> bool:
-    """Merge worktree changes into target branch.
+    """Merge worktree changes into target branch, with AI conflict resolution.
     
     Args:
         task_id: Task identifier
         target_branch: Branch to merge into
         squash: Whether to squash commits
         message: Custom commit message
+        cli_name: AI CLI to use for conflict resolution
+        workspace: Project root directory
     
     Returns:
         True if merge successful
     """
     branch = make_branch_name(task_id)
     worktree_path = Path(f".worktrees/{task_id}")
+    workspace_dir = workspace or Path.cwd()
     
     # Load state for commit message
     try:
@@ -235,6 +240,7 @@ def merge_worktree(
     # Checkout target branch
     result = subprocess.run(
         ["git", "checkout", target_branch],
+        cwd=workspace_dir,
         capture_output=True,
         text=True
     )
@@ -242,32 +248,76 @@ def merge_worktree(
         return False
     
     # Merge
-    if squash:
-        # Squash merge - combines all commits into staging
-        result = subprocess.run(
-            ["git", "merge", "--squash", branch],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            return False
-        
-        # Commit the squashed changes
-        result = subprocess.run(
-            ["git", "commit", "-m", commit_message],
-            capture_output=True,
-            text=True
-        )
-    else:
-        # Regular merge
-        result = subprocess.run(
-            ["git", "merge", branch, "-m", commit_message],
-            capture_output=True,
-            text=True
-        )
+    merge_cmd = ["git", "merge", "--squash", branch] if squash else ["git", "merge", branch, "-m", commit_message]
     
+    result = subprocess.run(
+        merge_cmd,
+        cwd=workspace_dir,
+        capture_output=True,
+        text=True
+    )
+    
+    # If merge fails, attempt AI conflict resolution
     if result.returncode != 0:
-        return False
+        if not cli_name:
+            # Revert the failed merge
+            subprocess.run(["git", "merge", "--abort"], cwd=workspace_dir, capture_output=True)
+            return False
+            
+        # Get conflicted files
+        diff_res = subprocess.run(
+            ["git", "diff", "--name-only", "--diff-filter=U"],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True
+        )
+        conflicted_files = [f for f in diff_res.stdout.strip().split("\n") if f]
+        
+        if not conflicted_files:
+            subprocess.run(["git", "merge", "--abort"], cwd=workspace_dir, capture_output=True)
+            return False
+            
+        from up.ai_cli import run_ai_prompt
+        
+        for file in conflicted_files:
+            file_path = workspace_dir / file
+            if not file_path.exists():
+                continue
+            
+            content = file_path.read_text()
+            prompt = (
+                f"Please resolve the Git merge conflicts in this file. "
+                f"Output ONLY the fully resolved file content, with no markdown formatting, "
+                f"no explanations, and no original conflict markers.\n\nFile: {file}\n\n"
+                f"```\n{content}\n```"
+            )
+            
+            resolved = run_ai_prompt(workspace_dir, prompt, cli_name, timeout=300, silent=True)
+            if not resolved or "<<<<<<< HEAD" in resolved:
+                # Resolution failed
+                subprocess.run(["git", "merge", "--abort"], cwd=workspace_dir, capture_output=True)
+                return False
+                
+            # Clean up markdown block if the AI included it
+            if resolved.startswith("```"):
+                lines = resolved.split("\n")
+                if len(lines) >= 2 and lines[-1].startswith("```"):
+                    resolved = "\n".join(lines[1:-1])
+            
+            file_path.write_text(resolved)
+            subprocess.run(["git", "add", file], cwd=workspace_dir)
+            
+    # Commit the changes (always needed for squash, or if we resolved conflicts)
+    if squash or result.returncode != 0:
+        commit_res = subprocess.run(
+            ["git", "commit", "-m", commit_message],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True
+        )
+        if commit_res.returncode != 0:
+            # Commit failed (e.g. no changes)
+            return False
     
     # Cleanup worktree
     remove_worktree(task_id)

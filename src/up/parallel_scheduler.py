@@ -815,7 +815,7 @@ def _execute_wave(
 
         if result and result.success:
             dashboard.log(f"Merging {tid}...")
-            if merge_worktree(tid):
+            if merge_worktree(tid, cli_name=self.cli_name, workspace=self.workspace):
                 dashboard.update_agent(tid, "done")
                 dashboard.log(f"[green]{tid}: merged[/]")
                 summary["completed"].append(tid)
