@@ -214,18 +214,12 @@ def _install_hooks(hooks_dir: Path):
 # up-cli auto-sync hook
 # Indexes commits to memory automatically
 
-# Run in background to not slow down commits
-(
-    # Wait a moment for git to finish
-    sleep 1
-    
-    # Sync memory with latest commit
-    if command -v up &> /dev/null; then
-        up memory sync 2>/dev/null
-    elif command -v python3 &> /dev/null; then
-        python3 -m up.memory sync 2>/dev/null
-    fi
-) &
+# Run synchronously to avoid macOS fork + C-extension crashes
+if command -v up &> /dev/null; then
+    up memory sync 2>/dev/null
+elif command -v python3 &> /dev/null; then
+    python3 -m up.memory sync 2>/dev/null
+fi
 
 exit 0
 '''
@@ -245,12 +239,9 @@ BRANCH_CHECKOUT=$3
 
 # Only run on branch checkout, not file checkout
 if [ "$BRANCH_CHECKOUT" = "1" ]; then
-    (
-        sleep 1
-        if command -v up &> /dev/null; then
-            up sync --no-memory 2>/dev/null
-        fi
-    ) &
+    if command -v up &> /dev/null; then
+        up sync --no-memory 2>/dev/null
+    fi
 fi
 
 exit 0
