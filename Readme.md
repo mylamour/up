@@ -1,85 +1,132 @@
-# up-cli
+# Up-CLI 🚀
 
-<img width="3498" height="2182" alt="543426914-37655a9f-e661-4ab5-b994-e4e11f97dd95" src="https://github.com/user-attachments/assets/7cbc2614-af8e-41cb-be2f-df2b6cd43b07" />
+<div align="center">
+<img width="1200" alt="Up-CLI Dashboard" src="https://github.com/user-attachments/assets/7cbc2614-af8e-41cb-be2f-df2b6cd43b07" />
 
+**Make AI-assisted development verifiable, observable, and safe — turning Vibe Coding into Software Engineering.**
 
-An AI-powered CLI tool for scaffolding projects with built-in documentation, learning systems, and product-loop workflows designed for use with Claude Code and Cursor AI.
+[![PyPI version](https://badge.fury.io/py/up-cli.svg)](https://badge.fury.io/py/up-cli)
+[![Python Version](https://img.shields.io/pypi/pyversions/up-cli.svg)](https://pypi.org/project/up-cli/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-**Learned from real practice** - Built on insights from 5+ billion tokens of development experience and commercial products. Extracts best practices from chat history, documentation patterns, and proven workflows.
+</div>
 
-## Installation
+An AI-powered CLI tool for scaffolding projects with built-in documentation, learning systems, and SESRC product-loop workflows designed for use with **Claude Code** and **Cursor AI**.
+
+**Learned from real practice** - Built on insights from millions of tokens of development experience. Extracts best practices from chat history, documentation patterns, and proven autonomous workflows.
+
+---
+
+## 🌟 Why Up-CLI? (The SESRC Principles)
+
+Traditional "Vibe Coding" with AI produces unverified changes, leading to silent bugs and runaway loops. Up-CLI wraps your AI assistant in an engineering safety net:
+
+| Principle | Implementation |
+|-----------|----------------|
+| **Stable** | Graceful degradation, fallback modes, unified state manager |
+| **Efficient** | Token budget tracking, incremental testing, AST-based analysis |
+| **Safe** | Input validation, path whitelisting, dry-run previews |
+| **Reliable** | Circuit breakers, idempotency, verifiable `git` rollback |
+| **Cost-effective** | Early termination, multi-agent parallel execution |
+
+---
+
+## ⚡ Installation
 
 ```bash
+# Minimal installation
 pip install up-cli
+
+# Full installation (includes ChromaDB for Semantic Search Memory)
+pip install up-cli[all]
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
+### 1. Scaffold a new project
 ```bash
-# Create new project
-up new my-project
-
-# Or initialize in existing project
-cd existing-project
-up init
-
-# Start AI-assisted development with safety rails
-up save                    # Checkpoint before AI work
-up start                   # Run AI product loop
-up diff                    # Review changes
-up review                  # AI adversarial review
-
-# Check system health
-up status
-
-# Live dashboard
-up dashboard
+up new my-project --template fastapi
+cd my-project
 ```
 
-## Commands
+### 2. Check System Safety Rails
+```bash
+up status
+```
 
+### 3. Start the Autonomous Loop
+```bash
+# Write your tasks in TODO.md or prd.json, then run:
+up start --auto-commit
+
+# Or run multiple AI agents in parallel!
+up start --parallel --jobs 3
+```
+
+---
+
+## 🛠️ Commands Reference
+
+### Vibe Coding Safety Rails
 | Command | Description |
 |---------|-------------|
-| `up new <name>` | Create a new project with full scaffolding |
-| `up new <name> --template <type>` | Create project from specific template |
-| `up init` | Initialize up systems (auto-installs git hooks, builds memory) |
-| `up init --ai claude` | Initialize for Claude Code only |
-| `up init --ai cursor` | Initialize for Cursor AI only |
-| `up init --systems docs,learn` | Initialize specific systems only |
-| `up start` | Start the product loop |
-| `up start --resume` | Resume from last checkpoint |
-| `up start --dry-run` | Preview mode without changes |
-| `up start --parallel` | Parallel multi-agent execution |
-| `up save` | Create checkpoint before AI work |
-| `up reset` | Restore to checkpoint |
-| `up diff` | Review AI changes |
-| `up review` | AI adversarial code review |
-| `up agent spawn <name>` | Create agent worktree |
-| `up agent status` | List all agents |
-| `up agent merge <name>` | Squash and merge |
-| `up bisect` | Find bug-introducing commit |
-| `up provenance list` | View AI operation history |
-| `up branch status` | Show branch hierarchy |
-| `up status` | Show health of all systems |
-| `up dashboard` | Live interactive health dashboard |
-| `up sync` | Sync all systems (memory, docs) |
-| `up hooks` | Install/manage git hooks for auto-sync |
-| `up learn` | Auto-improve project with AI (requires vision map) |
-| `up learn "topic"` | Learn about specific topic with AI research |
-| `up learn "file.md"` | Analyze file with AI (auto-fallback to basic) |
-| `up learn "path"` | Compare and learn from another project |
-| `up learn analyze` | Analyze all research files with AI + progress bar |
-| `up learn plan` | Generate improvement PRD |
-| `up learn --no-ai` | Disable AI (faster, basic extraction only) |
-| `up memory search <query>` | Semantic search in memory |
-| `up memory sync` | Index git commits and files |
-| `up memory branch` | Show branch-specific knowledge |
-| `up memory record` | Record learnings/decisions/errors |
-| `up summarize` | Summarize AI conversation history |
+| `up save` | Create a Git checkpoint before risky AI work |
+| `up reset` | Instantly restore workspace to the last checkpoint |
+| `up diff` | Review AI changes before accepting |
+| `up review` | Run an AI adversarial code review |
 
-## Project Templates
+### Autonomous Development (Product Loop)
+| Command | Description |
+|---------|-------------|
+| `up start` | Start the SESRC autonomous product loop |
+| `up start --parallel` | Run multi-agent execution in isolated git worktrees |
+| `up agent spawn/status` | Manage isolated agent worktrees manually |
+| `up bisect` | Find bug-introducing commits automatically |
+| `up provenance list` | View AI operation lineage and audit trail |
 
-Create projects with pre-configured tech stacks:
+### Knowledge & Memory System
+| Command | Description |
+|---------|-------------|
+| `up learn auto` | Auto-improve project using AST analysis (Requires Vision Map) |
+| `up learn "topic"` | Command AI to research and document a specific tech topic |
+| `up memory search <q>` | Semantic search across historical decisions and bugs |
+| `up memory record` | Manually record learnings/decisions to Long-Term Memory |
+
+### System & Scaffolding
+| Command | Description |
+|---------|-------------|
+| `up new <name> -t <type>`| Scaffold a new project (minimal, full, fastapi, nextjs) |
+| `up init` | Initialize up-cli in an existing repository |
+| `up status` | Show health of Circuit Breakers and Context Budgets |
+| `up dashboard` | Launch the live interactive TUI dashboard |
+| `up hooks` | Install git hooks for automatic memory indexing |
+
+---
+
+## 🧠 Core Systems
+
+### 1. The Resilient Product Loop (SESRC)
+
+The `up start` command implements a bulletproof autonomous execution cycle:
+`OBSERVE → CHECKPOINT → EXECUTE → VERIFY → COMMIT`
+
+- **Circuit Breaker**: Prevents Doom Loops. If the AI fails to write passing code 3 times in a row, the circuit opens, halts execution, and prevents token burn.
+- **Auto-Rollback**: If tests or linting fails, changes are instantly reverted.
+- **Smart Merge**: In `--parallel` mode, if multiple agents cause a Git conflict, the system feeds the conflict markers back to the AI to resolve intelligently.
+
+### 2. AST-Based Learning System
+
+The `/learn` commands use Python's Abstract Syntax Tree (`ast`) to physically parse your code, accurately detecting framework usage (e.g., React Hooks, FastAPI Routers, Repository patterns) rather than relying on brittle Regex or AI hallucinations.
+
+### 3. Long-Term Memory
+
+Up-CLI comes with a local ChromaDB instance (`.up/memory`). It auto-indexes your git commits. When the AI gets stuck, it can semantic-search past errors and decisions to avoid repeating mistakes across sessions.
+
+---
+
+## 📂 Project Templates
+
+Create projects with pre-configured tech stacks and AI rules (`CLAUDE.md`, `.cursorrules`):
 
 ```bash
 # FastAPI backend with SQLAlchemy
@@ -91,344 +138,9 @@ up new my-app --template nextjs
 # Python library with packaging
 up new my-lib --template python-lib
 
-# Minimal structure
-up new my-project --template minimal
-
-# Full setup with MCP
+# Full setup with MCP support
 up new my-project --template full
 ```
-
-| Template | Description |
-|----------|-------------|
-| `minimal` | Basic structure with docs |
-| `standard` | Full up systems (default) |
-| `full` | Everything including MCP server |
-| `fastapi` | FastAPI + SQLAlchemy + pytest |
-| `nextjs` | Next.js 14 + TypeScript + Tailwind |
-| `python-lib` | Python library with pyproject.toml |
-
-## Usage Examples
-
-### Create a new project
-
-```bash
-# Create a new project with all systems
-up new my-saas-app
-
-# Create with a specific template
-up new my-api --template fastapi
-```
-
-### Initialize in existing project
-
-```bash
-cd my-existing-project
-
-# Full initialization
-up init
-
-# Claude Code focused setup
-up init --ai claude
-
-# Only add docs and learn systems
-up init --systems docs,learn
-```
-
-### Monitor System Health
-
-```bash
-# Quick status check
-up status
-
-# Live dashboard (updates every 5 seconds)
-up dashboard
-
-# JSON output for scripting
-up status --json
-```
-
-### Using the Learn System
-
-All learn commands use Claude/Cursor AI by default with automatic fallback.
-
-```bash
-# Self-improvement analysis (requires configured vision map)
-up learn
-
-# Learn about a specific topic (AI-powered research)
-up learn "caching strategies"
-up learn "authentication"
-up learn "testing best practices"
-
-# Learn from another project's design
-up learn "../other-project"
-up learn "~/projects/reference-app"
-
-# Learn from a file (AI-powered analysis)
-up learn "docs/architecture.md"
-up learn "guide.txt"
-
-# Analyze all research files with AI + progress bar
-up learn analyze
-
-# Auto-analyze without vision map requirement
-up learn auto
-
-# Check learning system status
-up learn status
-
-# Generate a PRD from analysis
-up learn plan
-
-# Disable AI for faster basic extraction
-up learn --no-ai "docs/guide.md"
-```
-
-The learn system uses AI by default:
-- **Self-improvement** (`up learn`): Analyzes current project with AI insights. Requires a configured `docs/roadmap/vision/PRODUCT_VISION.md`.
-- **Topic learning** (`up learn "topic"`): AI-powered research for specific topics based on your project's tech stack.
-- **File learning** (`up learn "file.md"`): AI analysis of files with automatic fallback to basic extraction.
-- **Batch analysis** (`up learn analyze`): Process all research files with AI and tqdm progress bar.
-- **Basic mode** (`--no-ai`): Skip AI for faster basic regex extraction.
-
-### Using the Product Loop
-
-```bash
-# Start the product loop
-up start
-
-# Resume from checkpoint
-up start --resume
-
-# Preview what would happen
-up start --dry-run
-
-# Start with specific task
-up start --task US-003
-
-# Use custom PRD file
-up start --prd path/to/prd.json
-```
-
-### Summarize Conversations
-
-```bash
-# Summarize Cursor chat history
-up summarize
-
-# Export as JSON
-up summarize --format json --output summary.json
-
-# Filter by project
-up summarize --project myproject
-```
-
-## Systems
-
-### 1. Docs System
-
-Comprehensive documentation structure:
-
-```
-docs/
-├── CONTEXT.md         # AI reads first
-├── INDEX.md           # Quick reference
-├── roadmap/           # Strategic planning
-│   ├── vision/        # Product vision
-│   └── phases/        # Phase roadmaps
-├── architecture/      # System design
-├── features/          # Feature specs
-├── changelog/         # Progress tracking
-├── handoff/           # Session continuity
-├── decisions/         # ADRs
-└── learnings/         # Patterns discovered
-```
-
-### 2. Learn System
-
-Research and improvement pipeline:
-
-```
-RESEARCH → ANALYZE → COMPARE → PLAN → IMPLEMENT
-```
-
-Three learning modes:
-
-| Mode | Command | Description |
-|------|---------|-------------|
-| Self-improvement | `up learn` | Analyze and improve current project (requires vision map) |
-| Topic learning | `up learn "topic"` | Create research file for specific topic |
-| External learning | `up learn "path"` | Learn from project directory or file |
-
-Supported file types for learning:
-- **Documentation**: `.md`, `.markdown`, `.txt`, `.rst`
-- **Python**: `.py` (extracts patterns, classes, functions)
-- **JavaScript/TypeScript**: `.js`, `.ts`, `.tsx`, `.jsx`
-- **Config**: `.json`, `.yaml`, `.yml`, `.toml`
-
-Additional commands:
-- `up learn auto` - Analyze without vision map requirement
-- `up learn analyze` - Extract patterns from research files
-- `up learn plan` - Generate improvement PRD
-- `up learn status` - Show learning system status
-
-Storage:
-```
-.claude/skills/learning-system/
-├── project_profile.json    # Current project analysis
-├── research/               # Topic research files
-├── external_learnings/     # Learnings from other projects
-├── file_learnings/         # Learnings from individual files
-├── insights/               # Extracted patterns
-└── prd.json               # Generated improvement plan
-```
-
-### 3. Product Loop (SESRC)
-
-Autonomous development with safety guardrails:
-
-| Principle | Implementation |
-|-----------|----------------|
-| **Stable** | Graceful degradation, fallback modes |
-| **Efficient** | Token budgets, incremental testing |
-| **Safe** | Input validation, path whitelisting |
-| **Reliable** | Timeouts, idempotency, rollback |
-| **Cost-effective** | Early termination, ROI threshold |
-
-Features:
-- Circuit breaker (max 3 failures)
-- Checkpoint/rollback
-- Health checks
-- Budget limits
-
-### 4. Context Budget
-
-Tracks AI context window usage:
-
-- Estimates token usage per file/message
-- Warns at 80% capacity
-- Suggests handoff at 90%
-- Persists across sessions
-
-### 5. Long-Term Memory System
-
-Persistent knowledge that survives across sessions:
-
-```bash
-# Search for relevant knowledge
-up memory search "authentication"
-
-# Sync git commits and files to memory
-up memory sync
-
-# Record learnings and decisions
-up memory record --learning "Use dataclasses for configs"
-up memory record --decision "Chose PostgreSQL for ACID compliance"
-
-# View branch-specific knowledge
-up memory branch
-up memory branch feature-x --compare main
-```
-
-Features:
-- **Semantic search** using ChromaDB (local embeddings, no API required)
-- **Branch/commit-aware** - knowledge tagged with git context
-- **Auto-indexing** - git hooks sync commits automatically
-- **Cross-session persistence** - remembers learnings, decisions, errors
-
-Storage:
-```
-.up/
-└── memory/
-    └── chroma/     # ChromaDB vector database
-```
-
-### 6. MCP Server Support
-
-Model Context Protocol integration:
-
-```
-.mcp/
-├── config.json       # Server configuration
-├── tools/            # Custom tool definitions
-└── README.md         # Usage guide
-```
-
-## AI Integration
-
-### Automatic Memory Sync
-
-When you run `up init`, git hooks are automatically installed:
-
-```bash
-# Git hooks auto-installed by up init
-.git/hooks/
-├── post-commit      # Auto-indexes commits to memory
-└── post-checkout    # Updates context on branch switch
-```
-
-This means your knowledge is captured automatically:
-- Every `git commit` is indexed to memory
-- Branch switches update context
-- No manual sync required for commits
-
-### Generated Files
-
-| File | Purpose |
-|------|---------|
-| `CLAUDE.md` | Claude Code instructions |
-| `.cursorrules` | Cursor AI rules |
-| `.cursor/rules/*.md` | File-specific rules |
-| `.claude/context_budget.json` | Context tracking |
-| `.up/memory/` | Long-term memory storage |
-
-### Cursor Rules
-
-Generated rules for different file types:
-- `main.md` - General project rules
-- `python.md` - Python standards
-- `typescript.md` - TypeScript standards
-- `docs.md` - Documentation standards
-- `tests.md` - Testing standards
-
-## Design Principles & Practices
-
-### AI-First Development
-
-**Design for AI collaboration, not just human readability.**
-
-- **Context-aware scaffolding** - Project structures optimized for AI agents to navigate and understand quickly
-- **Explicit over implicit** - Clear file naming, directory structures, and documentation that AI can parse without ambiguity
-- **Prompt-friendly patterns** - Code and docs written to be easily referenced in AI conversations
-- **Tool integration** - Native support for Claude Code skills and Cursor AI rules
-
-### Documentation-Driven Development
-
-**Documentation is the source of truth, not an afterthought.**
-
-- **Docs-first workflow** - Write documentation before implementation to clarify intent
-- **Living documentation** - Docs evolve with the codebase through automated learning systems
-- **Knowledge extraction** - `/learn` commands analyze patterns and generate insights from real usage
-- **Structured knowledge** - Vision, roadmaps, and changelogs in predictable locations for AI and human consumption
-
-### Product Loop Patterns (SESRC)
-
-**Autonomous development with safety guardrails.**
-
-- **Circuit breaker protection** - Max 3 consecutive failures before stopping to prevent runaway loops
-- **Checkpoint/rollback** - Save state before risky operations, restore on failure
-- **Health checks** - Validate system state between iterations
-- **Budget limits** - Token and time constraints to prevent unbounded execution
-- **Human-in-the-loop** - Critical decisions require explicit approval
-
-### Core Practices
-
-| Practice | Description |
-|----------|-------------|
-| **Incremental delivery** | Ship small, working increments over big-bang releases |
-| **Fail fast, recover faster** | Detect issues early, rollback automatically |
-| **Observable by default** | Logging, metrics, and state visible to both AI and humans |
-| **Convention over configuration** | Sensible defaults that work out of the box |
 
 ## Development
 
