@@ -119,6 +119,15 @@ This project tracks context window usage:
 
 See `.up/state.json` for current usage (unified state file).
 
+## Long-Term Memory Protocol
+
+You have access to the project's long-term memory system (`up memory`). You MUST follow this protocol:
+
+1. **Active Retrieval (Recall)**: When you encounter a complex error or need context on past architectural decisions, DO NOT GUESS. Run `up memory search "<keywords>"` to search for past learnings, errors, and decisions.
+2. **Active Indexing (Record)**: When you solve a difficult bug (took >2 turns) or establish a new architectural pattern, you MUST record it before ending the session:
+   - For errors: `up memory record --error "<short error>" --solution "<root cause and fix>"`
+   - For decisions/learnings: `up memory record --decision "<why we chose this approach>"`
+
 ## Code Style
 
 ### General
@@ -205,18 +214,22 @@ globs: ["**/*"]
 - Keep functions under 50 lines
 - Document public APIs
 
-## Context Management
+## Context & Memory Management
 
 - Read `docs/CONTEXT.md` for current state
 - Update `docs/handoff/LATEST.md` at session end
 - Reference specific files with @file syntax
+- **Recall**: When stuck, use `up memory search "<keywords>"` to find past errors and architectural decisions. DO NOT GUESS.
+- **Record**: Before session end, if you solved a tough bug (>2 turns) or made a key design decision, MUST record it:
+  `up memory record --error "<error>" --solution "<fix>"` or `--decision "<why>"`
 
 ## Error Handling
 
 If something fails twice:
-1. Add more context
-2. Break into smaller steps
-3. Consider a different approach
+1. Search memory: `up memory search "error signature"`
+2. Add more context
+3. Break into smaller steps
+4. Consider a different approach
 """
     _write_file(rules_dir / "main.md", content, force)
 
@@ -561,8 +574,9 @@ See `.cursor/rules/` for detailed rules:
 ## Workflow
 
 1. Read context files first
-2. Use appropriate skill commands
-3. Test changes before committing
-4. Update handoff at session end
+2. Use `up memory search` if you encounter tough bugs or unclear architecture decisions
+3. Use appropriate skill commands
+4. Test changes before committing
+5. Update handoff and `up memory record` learnings at session end
 """
     _write_file(target_dir / ".cursorrules", content, force)
