@@ -529,6 +529,4 @@ def agent():
 
 
 agent.add_command(spawn_cmd, name="spawn")
-agent.add_command(status_cmd, name="status")
 agent.add_command(merge_cmd, name="merge")
-agent.add_command(cleanup_cmd, name="cleanup")

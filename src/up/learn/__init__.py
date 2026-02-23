@@ -1,11 +1,8 @@
-"""Learning system CLI commands.
+"""Learning system CLI commands (v1.0 simplified routing).
 
-This module provides the main CLI entry points for the learning system.
-The implementation is split across several submodules:
-- utils: Shared utilities
-- analyzer: Project analysis
-- research: Topic and file learning
-- plan: PRD generation
+up learn              → Auto-analyze project + generate PRD
+up learn "topic"      → Research specific topic
+up learn --status     → Show learning system status
 """
 
 from pathlib import Path
@@ -14,143 +11,76 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
-from up.learn.utils import check_vision_map_exists, is_valid_path, find_skill_dir, display_profile, save_profile
-from up.learn.analyzer import analyze_project, learn_self_improvement
+from up.learn.utils import is_valid_path, display_profile, save_profile
+from up.learn.analyzer import analyze_project
 from up.learn.research import learn_from_topic, learn_from_file, learn_from_project
 from up.learn.plan import learn_analyze, learn_plan, learn_status
 
 console = Console()
 
 
-@click.group(invoke_without_command=True)
+@click.command()
 @click.argument("topic_or_path", required=False)
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
 @click.option("--no-ai", is_flag=True, help="Disable AI analysis")
-@click.pass_context
-def learn_cmd(ctx, topic_or_path: str, workspace: str, no_ai: bool):
-    """Learning system - analyze, research, and improve.
-    
+@click.option("--status", "show_status", is_flag=True, help="Show learning system status")
+def learn_cmd(topic_or_path: str, workspace: str, no_ai: bool, show_status: bool):
+    """Analyze project, research topics, and generate improvement PRD.
+
     \b
     Usage:
-      up learn                    Auto-analyze and improve
-      up learn "topic"            Learn about a specific topic
-      up learn "file.md"          Analyze file with AI
-      up learn "project/path"     Compare and learn from another project
-    
-    \b
-    Subcommands:
-      up learn auto               Analyze project (no vision check)
-      up learn analyze            Analyze all research files
-      up learn plan               Generate improvement PRD
-      up learn status             Show learning system status
+      up learn                    Auto-analyze + generate PRD
+      up learn "topic"            Research a specific topic
+      up learn path/to/file       Analyze a file or project
+      up learn --status           Show learning system status
     """
-    if ctx.invoked_subcommand is not None:
-        return
-    
-    ctx.ensure_object(dict)
-    ctx.obj['workspace'] = workspace
-    ctx.obj['no_ai'] = no_ai
-    
-    # Check if topic_or_path is a subcommand
-    subcommands = ["auto", "analyze", "plan", "status"]
-    if topic_or_path in subcommands:
-        subcmd = ctx.command.commands[topic_or_path]
-        kwargs = {"workspace": workspace}
-        if topic_or_path in ("analyze", "plan"):
-            kwargs["no_ai"] = no_ai
-        ctx.invoke(subcmd, **kwargs)
-        return
-    
     ws = Path(workspace) if workspace else Path.cwd()
     use_ai = not no_ai
-    
-    # No argument: self-improvement mode
-    if not topic_or_path:
-        vision_exists, vision_path = check_vision_map_exists(ws)
-        
-        if not vision_exists:
-            console.print(Panel.fit(
-                "[yellow]Vision Map Not Configured[/]",
-                border_style="yellow"
-            ))
-            console.print("\nThe learning system requires a configured vision map.")
-            console.print(f"\nPlease configure: [cyan]{vision_path}[/]")
-            console.print("\n[bold]Alternatives:[/]")
-            console.print("  • [cyan]up learn auto[/] - Analyze without vision map")
-            console.print("  • [cyan]up learn \"topic\"[/] - Learn about specific topic")
-            return
-        
-        learn_self_improvement(ws, use_ai=use_ai)
+
+    if show_status:
+        learn_status(ws)
         return
-    
-    # Has argument: determine if topic or path
-    if is_valid_path(topic_or_path):
-        learn_from_project(ws, topic_or_path, use_ai=use_ai)
-    else:
-        learn_from_topic(ws, topic_or_path, use_ai=use_ai)
 
+    # Topic or path provided: research mode
+    if topic_or_path:
+        if is_valid_path(topic_or_path):
+            p = Path(topic_or_path)
+            if p.is_file():
+                learn_from_file(ws, topic_or_path, use_ai=use_ai)
+            else:
+                learn_from_project(ws, topic_or_path, use_ai=use_ai)
+        else:
+            learn_from_topic(ws, topic_or_path, use_ai=use_ai)
+        return
 
-@learn_cmd.command("auto")
-@click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-def auto_cmd(workspace: str):
-    """Auto-analyze project and identify improvements."""
-    ws = Path(workspace) if workspace else Path.cwd()
-    
+    # No argument: full pipeline (analyze → plan)
     console.print(Panel.fit(
-        "[bold blue]Learning System[/] - Auto Analysis",
+        "[bold blue]Learning System[/] - Full Pipeline",
         border_style="blue"
     ))
-    
+
+    # Step 1: Analyze project
+    console.print("\n[bold]Step 1:[/] Analyzing project...")
     profile = analyze_project(ws)
-    
-    if profile is None:
-        console.print("[red]Error: Could not analyze project[/]")
-        return
-    
-    display_profile(profile)
-    
-    save_path = save_profile(ws, profile)
-    console.print(f"\n[green]✓[/] Profile saved to: [cyan]{save_path}[/]")
-    
-    console.print("\n[bold]Next Steps:[/]")
-    if profile.get("research_topics"):
-        console.print("  1. Research topics with: [cyan]up learn \"topic\"[/]")
-    console.print("  2. Generate PRD with: [cyan]up learn plan[/]")
-    console.print("  3. Start development with: [cyan]up start[/]")
+    if profile:
+        display_profile(profile)
+        save_profile(ws, profile)
 
+    # Step 2: Analyze research files
+    console.print("\n[bold]Step 2:[/] Analyzing research files...")
+    learn_analyze(ws, use_ai=use_ai)
 
-@learn_cmd.command("analyze")
-@click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-@click.option("--no-ai", is_flag=True, help="Disable AI analysis")
-def analyze_cmd(workspace: str, no_ai: bool):
-    """Analyze all research files with AI."""
-    ws = Path(workspace) if workspace else Path.cwd()
-    learn_analyze(ws, use_ai=not no_ai)
+    # Step 3: Generate PRD
+    console.print("\n[bold]Step 3:[/] Generating PRD...")
+    learn_plan(ws, output=None, use_ai=use_ai)
 
-
-@learn_cmd.command("plan")
-@click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-@click.option("--output", "-o", type=click.Path(), help="Output file path")
-@click.option("--no-ai", is_flag=True, help="Disable AI analysis")
-def plan_cmd(workspace: str, output: str, no_ai: bool):
-    """Generate improvement PRD from analysis."""
-    ws = Path(workspace) if workspace else Path.cwd()
-    learn_plan(ws, output, use_ai=not no_ai)
-
-
-@learn_cmd.command("status")
-@click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-def status_cmd(workspace: str):
-    """Show learning system status."""
-    ws = Path(workspace) if workspace else Path.cwd()
-    learn_status(ws)
+    console.print("\n[green]✓[/] Pipeline complete. Run [cyan]up start[/] to begin development.")
 
 
 # Export for external use
 __all__ = [
     "learn_cmd",
     "analyze_project",
-    "learn_self_improvement",
     "learn_from_topic",
     "learn_from_file",
     "learn_from_project",

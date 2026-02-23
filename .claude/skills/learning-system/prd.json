@@ -1,714 +1,326 @@
 {
   "name": "up-cli",
-  "version": "3.0.0",
-  "generated": "2026-02-06",
-  "source": "Full code audit + hardening research + gap analysis",
-  "description": "Harden up-cli: fix critical bugs, add thread safety, establish test coverage, clean dead code, and correct project tracking.",
-  "vision": "up helps you build any tool in a verifiable and observable way using vibe coding, resulting in stable, high-performance, and modern software engineering.",
+  "version": "1.0.0",
+  "generated": "2026-02-23",
+  "revised": "Large-project focus — features stay, interface simplifies",
+  "source": "Codebase audit + large-project vibe coding research + gap analysis",
+  "description": "Ship v1.0 for large-project vibe coding: simplify CLI from 28 to 14 commands, stabilize core loop, add schema validation, consolidate parallel modules, and wire memory for context retention.",
+  "vision": "Make AI-assisted development on large codebases safe, traceable, and context-aware. Solve the 7 failure modes of vibe coding at scale: context loss, architectural debt, security gaps, accountability holes, review bottlenecks, agent coordination, and shared context fragmentation.",
   "pillars": {
-    "verifiable": "Every change can be tested, traced, and validated",
-    "observable": "Full visibility into what's happening",
-    "vibe_coding": "AI-assisted development with safety rails"
+    "safe": "Every AI change is checkpointed, reviewed, and reversible",
+    "traceable": "Provenance tracking and memory give full accountability",
+    "context_aware": "Memory system retains decisions, bugs, and learnings across sessions",
+    "scalable": "Multi-agent parallel execution with dependency-aware scheduling"
+  },
+  "target_audience": "Teams using AI assistants (Claude Code, Cursor) on large codebases (50k+ LOC) where context loss, coordination, and accountability are real problems.",
+  "v1_command_surface": {
+    "setup": ["init", "new"],
+    "safety": ["save", "reset", "diff"],
+    "workflow": ["start", "done"],
+    "quality": ["review", "status"],
+    "context": ["memory search", "memory record", "memory status"],
+    "agents": ["agent spawn", "agent merge"],
+    "learning": ["learn"],
+    "tracing": ["provenance show"],
+    "total": 14
+  },
+  "cut_commands": {
+    "branch_group": "Remove 4 subcmds. Git handles branch rules.",
+    "memory_collapse": "11 → 3 subcmds. Remove: recall, branch, sync, session, list, clear, reset, migrate.",
+    "agent_collapse": "4 → 2 subcmds. Remove: status (fold into up status), cleanup (automatic).",
+    "provenance_collapse": "4 → 1 subcmd. Remove: list/stats (fold into status --verbose), verify.",
+    "dashboard": "Remove. status is sufficient.",
+    "summarize": "Remove. Research feature.",
+    "bisect": "Remove. Users know git bisect.",
+    "history": "Remove. Users know git log.",
+    "hooks": "Auto-install during init.",
+    "sync": "Automatic via post-commit hook."
   },
   "phases": {
-    "sprint0": "Foundation (Fix Critical Issues)",
-    "sprint1": "Safety Rails",
-    "sprint2": "Multi-Agent Orchestration",
-    "sprint3": "Debugging & History",
-    "sprint4": "Architecture Refactor",
-    "sprint5": "Provenance & Observability",
-    "sprint6": "Advanced Features",
-    "sprint7": "Code Review Fixes",
-    "sprint8": "Cleanup (INCOMPLETE - reopened)",
-    "sprint9": "Quality Gates (INCOMPLETE - reopened)",
-      "sprint10": "Modularization - COMPLETE (M-001, M-002 done 2026-02-06)",
-    "sprint11": "Critical Bug Fixes (NEW)",
-    "sprint12": "Thread Safety & Hardening (NEW)",
-    "sprint13": "Test Infrastructure (NEW)",
-    "sprint14": "API Consistency & Polish (NEW)"
+    "phase1": "Simplify CLI Surface (28 → 14 commands)",
+    "phase2": "Stabilize Core Loop (tests + PRD schema)",
+    "phase3": "Consolidate Architecture (parallel, JSON, truncation)",
+    "phase4": "Polish & Ship (docs, UX, version bump)"
   },
   "userStories": [
     {
-      "id": "F-001",
-      "title": "Create unified state.py module",
-      "phase": "sprint0",
-      "priority": "critical",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "F-002",
-      "title": "Migrate loop state to unified state",
-      "phase": "sprint0",
-      "priority": "critical",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "F-003",
-      "title": "Migrate context budget to unified state",
-      "phase": "sprint0",
-      "priority": "critical",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "F-004",
-      "title": "Create unified checkpoint.py module",
-      "phase": "sprint0",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "F-005",
-      "title": "Update start.py to use new modules",
-      "phase": "sprint0",
-      "priority": "high",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "F-006",
-      "title": "Add backwards compatibility layer",
-      "phase": "sprint0",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-001",
-      "title": "Pre-prompt checkpoint command",
-      "phase": "sprint1",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-002",
-      "title": "Doom loop detection",
-      "phase": "sprint1",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-003",
-      "title": "Context budget tracking",
-      "phase": "sprint1",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-004",
-      "title": "up save - Quick checkpoint command",
-      "phase": "sprint1",
-      "priority": "high",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-005",
-      "title": "up reset - Instant recovery command",
-      "phase": "sprint1",
-      "priority": "high",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-006",
-      "title": "up diff - Mandatory review step",
-      "phase": "sprint1",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-007",
-      "title": "up agent spawn - Create agent worktree",
-      "phase": "sprint2",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-008",
-      "title": "up agent status - Monitor all agents",
-      "phase": "sprint2",
-      "priority": "high",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-009",
-      "title": "up agent merge - Squash and merge agent work",
-      "phase": "sprint2",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-010",
-      "title": "up agent cleanup - Remove completed worktrees",
-      "phase": "sprint2",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-011",
-      "title": "up bisect - Automated bug hunting",
-      "phase": "sprint3",
-      "priority": "high",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-012",
-      "title": "up history squash - Clean AI commit history",
-      "phase": "sprint3",
-      "priority": "medium",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "A-001",
-      "title": "Split learn.py into submodules",
-      "phase": "sprint4",
-      "priority": "high",
-      "effort": "high",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "A-002",
-      "title": "Reorganize commands into groups",
-      "phase": "sprint4",
-      "priority": "medium",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "A-003",
-      "title": "Update CLI help and documentation",
-      "phase": "sprint4",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-013",
-      "title": "Provenance logging for commits",
-      "phase": "sprint5",
-      "priority": "medium",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-014",
-      "title": "up provenance show - Query AI context",
-      "phase": "sprint5",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-015",
-      "title": "Content-addressed state tracking",
-      "phase": "sprint5",
-      "priority": "low",
-      "effort": "high",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-016",
-      "title": "Adversarial AI review",
-      "phase": "sprint6",
-      "priority": "low",
-      "effort": "high",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "US-017",
-      "title": "Branch hierarchy enforcement",
-      "phase": "sprint6",
-      "priority": "low",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "R-001",
-      "title": "Unify Git utilities into shared module",
-      "phase": "sprint7",
-      "priority": "high",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-04"
-    },
-    {
-      "id": "R-002",
-      "title": "Standardize branch naming convention",
-      "phase": "sprint7",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-05"
-    },
-    {
-      "id": "R-003",
-      "title": "Add merge conflict preview",
-      "phase": "sprint7",
-      "priority": "medium",
-      "effort": "medium",
-      "passes": true,
-      "completedAt": "2026-02-05"
-    },
-
-    {
-      "id": "C-001",
-      "title": "Remove dead learn.py file",
-      "description": "Delete the old monolithic learn.py (1741 lines) that was replaced by src/up/learn/ modules.",
-      "phase": "sprint8",
-      "priority": "critical",
-      "effort": "trivial",
+      "id": "V1-001",
+      "title": "Collapse memory from 11 to 3 subcommands",
+      "description": "Keep: search, record, status. Remove CLI registration for: recall, branch, sync, session, list, clear, reset, migrate. Memory auto-sync stays internal via hooks.",
       "acceptanceCriteria": [
-        "Delete src/up/commands/learn.py",
-        "Verify CLI still works: up learn --help",
-        "Verify imports in cli.py point to src/up/learn/",
-        "Remove any imports referencing the old file"
+        "up memory search works",
+        "up memory record works",
+        "up memory status works (new — shows stats + branch info)",
+        "Removed subcommands return helpful error",
+        "Internal auto-indexing unchanged"
       ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "C-002",
-      "title": "Add core module tests",
-      "description": "Created 35 tests across test_state.py (28), test_checkpoint.py (10), test_provenance.py (10). All passing.",
-      "phase": "sprint13",
+      "phase": "phase1",
       "priority": "high",
       "effort": "medium",
-      "acceptanceCriteria": [
-        "Create tests/conftest.py with shared fixtures (cli_runner, mock_git, workspace)",
-        "Create tests/test_core/test_state.py - StateManager CRUD, migration, atomic save",
-        "Create tests/test_core/test_checkpoint.py - create, restore, cleanup",
-        "Create tests/test_core/test_provenance.py - content addressing, dedup, chain",
-        "All tests pass with pytest",
-        "Minimum 60% coverage for core modules",
-        "Delete tests/test_placeholder.py"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
+      "passes": false
     },
     {
-      "id": "C-003",
-      "title": "Fix template implementations",
-      "description": "Verify templates are reference-only and point to actual code",
-      "phase": "sprint8",
+      "id": "V1-002",
+      "title": "Collapse agent from 4 to 2 subcommands",
+      "description": "Keep: spawn, merge. Remove: status (fold into up status), cleanup (auto after merge). Agent cleanup runs automatically when merge succeeds.",
+      "acceptanceCriteria": [
+        "up agent spawn works",
+        "up agent merge auto-cleans worktree on success",
+        "up status shows active agents",
+        "up agent cleanup removed from CLI"
+      ],
+      "phase": "phase1",
+      "priority": "high",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-003",
+      "title": "Collapse provenance from 4 to 1 subcommand",
+      "description": "Keep: show. Remove: list, stats, verify. Fold list/stats into up status --verbose.",
+      "acceptanceCriteria": [
+        "up provenance show ENTRY_ID works",
+        "up status --verbose shows recent provenance + stats",
+        "Removed subcommands return helpful error"
+      ],
+      "phase": "phase1",
+      "priority": "high",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-004",
+      "title": "Remove branch command group",
+      "description": "Remove all 4 branch subcommands. Git handles branch rules natively.",
+      "acceptanceCriteria": [
+        "up branch returns unknown command",
+        "No import errors in cli.py",
+        "Source file kept for potential v2"
+      ],
+      "phase": "phase1",
+      "priority": "high",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-005",
+      "title": "Remove dashboard, summarize, bisect, history",
+      "description": "Remove these 4 standalone commands from CLI. Source files kept.",
+      "acceptanceCriteria": [
+        "All 4 return unknown command",
+        "No import errors",
+        "up --help shows 14 commands"
+      ],
+      "phase": "phase1",
+      "priority": "high",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-006",
+      "title": "Auto-install hooks during init, remove standalone command",
+      "description": "up init auto-installs hooks. Remove hooks as standalone. Add --no-hooks to init.",
+      "acceptanceCriteria": [
+        "up hooks returns unknown command",
+        "up init installs hooks automatically",
+        "up init --no-hooks skips"
+      ],
+      "phase": "phase1",
       "priority": "medium",
       "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-05",
-      "note": "Needs verification but lower priority"
+      "passes": false
     },
     {
-      "id": "C-004",
-      "title": "Add git utilities tests",
-      "description": "Created 15 tests in test_git/test_utils.py covering is_git_repo, get_current_branch, run_git, mocked subprocess.",
-      "phase": "sprint13",
+      "id": "V1-007",
+      "title": "Make sync automatic, remove standalone command",
+      "description": "Sync runs via post-commit hook. Remove as standalone command.",
+      "acceptanceCriteria": [
+        "up sync returns unknown command",
+        "Post-commit hook triggers sync",
+        "Memory auto-indexes on commit"
+      ],
+      "phase": "phase1",
+      "priority": "medium",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-008",
+      "title": "Simplify learn command routing",
+      "description": "up learn = full pipeline (analyze + plan). up learn TOPIC = research. up learn --status = show status. No hidden subcommand routing.",
+      "acceptanceCriteria": [
+        "up learn runs full pipeline",
+        "up learn 'topic' researches topic",
+        "up learn --status shows status",
+        "No magic string routing"
+      ],
+      "phase": "phase1",
       "priority": "medium",
       "effort": "medium",
+      "passes": false
+    },
+    {
+      "id": "V1-009",
+      "title": "Add tests for commands/start/ core loop",
+      "description": "The main value path has zero tests. Cover: observe, checkpoint, execute, verify, commit phases. Circuit breaker. Dry-run mode.",
       "acceptanceCriteria": [
-        "Create tests/test_git/test_utils.py",
-        "Create tests/test_git/test_worktree.py",
-        "Mock subprocess calls with pytest-subprocess",
-        "Test error handling (GitNotInstalledError, GitTimeoutError)",
-        "Test worktree create, merge, cleanup paths",
+        "tests/test_commands/test_start.py exists",
+        "Tests cover all 5 SESRC phases",
+        "Tests cover circuit breaker after 3 failures",
+        "Tests cover --dry-run",
+        "50%+ coverage on commands/start/"
+      ],
+      "phase": "phase2",
+      "priority": "critical",
+      "effort": "high",
+      "passes": false
+    },
+    {
+      "id": "V1-010",
+      "title": "Create shared PRD schema with validation",
+      "description": "Dataclass schema for prd.json shared between learn/plan.py and commands/start/. Validate on write and read.",
+      "acceptanceCriteria": [
+        "Schema in core/prd_schema.py",
+        "learn/plan.py validates before writing",
+        "commands/start/ validates before reading",
+        "Invalid PRD raises clear error"
+      ],
+      "phase": "phase2",
+      "priority": "critical",
+      "effort": "medium",
+      "passes": false
+    },
+    {
+      "id": "V1-011",
+      "title": "Consolidate parallel.py and parallel_scheduler.py",
+      "description": "Merge into single parallel/ package. One clear API.",
+      "acceptanceCriteria": [
+        "Single parallel/ package",
+        "One import path for callers",
+        "Dependency-aware scheduling is default",
+        "Existing tests pass"
+      ],
+      "phase": "phase3",
+      "priority": "high",
+      "effort": "medium",
+      "passes": false
+    },
+    {
+      "id": "V1-012",
+      "title": "Fix JSON extraction in plan.py",
+      "description": "Replace bracket-depth matching with fenced code block extraction + json.loads fallback.",
+      "acceptanceCriteria": [
+        "Handles brackets inside strings",
+        "Extracts from ```json blocks first",
+        "Fallback chain: fenced → json.loads → bracket-depth",
+        "Tests with edge cases"
+      ],
+      "phase": "phase3",
+      "priority": "high",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-013",
+      "title": "Centralize truncation limits in UpConfig",
+      "description": "Move hardcoded 10000/12000 char limits to UpConfig.ai_max_prompt_chars.",
+      "acceptanceCriteria": [
+        "UpConfig has ai_max_prompt_chars (default 10000)",
+        "learn/research.py and learn/plan.py read from config",
+        "No hardcoded truncation in learn/"
+      ],
+      "phase": "phase3",
+      "priority": "medium",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-014",
+      "title": "Add debug logging to silent exception handlers",
+      "description": "Replace bare except:pass with logger.debug() in record_to_memory, AST fallbacks, event handlers.",
+      "acceptanceCriteria": [
+        "No bare except:pass in codebase",
+        "All silent handlers log at debug level",
+        "UP_DEBUG=1 shows debug output"
+      ],
+      "phase": "phase3",
+      "priority": "medium",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-015",
+      "title": "Update README and help for 14-command surface",
+      "description": "Rewrite README quick-start. Update up --help with grouped commands. Remove references to cut commands.",
+      "acceptanceCriteria": [
+        "README shows core workflow: init → save → diff → reset",
+        "up --help shows 14 commands in groups",
+        "CLAUDE.md updated"
+      ],
+      "phase": "phase4",
+      "priority": "high",
+      "effort": "medium",
+      "passes": false
+    },
+    {
+      "id": "V1-016",
+      "title": "Improve first-run experience",
+      "description": "up init prints next-steps showing the safety workflow + memory setup.",
+      "acceptanceCriteria": [
+        "up init prints next-steps guide",
+        "Shows: save → AI work → diff workflow",
+        "Mentions memory search for context retention"
+      ],
+      "phase": "phase4",
+      "priority": "medium",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-017",
+      "title": "Bump version to 1.0.0 and tag release",
+      "description": "Update version everywhere. Tag v1.0.0. All tests must pass.",
+      "acceptanceCriteria": [
+        "pyproject.toml version = 1.0.0",
+        "__init__.py __version__ = 1.0.0",
+        "git tag v1.0.0",
         "All tests pass"
       ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "Q-001",
-      "title": "Add pytest-cov and coverage gate",
-      "description": "Added pytest-cov and pytest-subprocess to dev deps. Configured [tool.coverage] with fail_under=50.",
-      "phase": "sprint9",
+      "phase": "phase4",
       "priority": "high",
       "effort": "low",
-      "acceptanceCriteria": [
-        "Add pytest-cov to dev dependencies in pyproject.toml",
-        "Configure [tool.coverage] in pyproject.toml",
-        "Set minimum coverage threshold at 50%",
-        "Verify pytest --cov works"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "Q-002",
-      "title": "Add test requirement to task completion",
-      "phase": "sprint9",
-      "priority": "medium",
-      "effort": "low",
-      "passes": true,
-      "completedAt": "2026-02-05"
-    },
-    {
-      "id": "M-001",
-      "title": "Split start.py into modules",
-      "description": "Split into start/ package: command.py (180), helpers.py (277), loop.py (474), verification.py (150). All imports preserved.",
-      "phase": "sprint10",
-      "priority": "medium",
-      "effort": "high",
-      "acceptanceCriteria": [
-        "Create src/up/commands/start/ directory",
-        "Extract loop logic to loop.py",
-        "Extract phase implementations to phases.py",
-        "Extract verification to verification.py",
-        "Each file under 400 lines",
-        "All existing functionality preserved",
-        "Tests pass"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "M-002",
-      "title": "Split memory.py into modules",
-      "description": "Split into memory/ package: entry.py (110), stores.py (257), _manager.py (core). All backward-compatible imports preserved.",
-      "phase": "sprint10",
-      "priority": "low",
-      "effort": "high",
-      "acceptanceCriteria": [
-        "Create src/up/memory/ directory",
-        "Extract storage to storage.py",
-        "Extract search to search.py",
-        "Extract indexing to indexer.py",
-        "Each file under 400 lines"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-
-    {
-      "id": "BF-001",
-      "title": "Fix setattr() bug in update_config()",
-      "description": "state.py line 403: setattr(self.config, key) was missing the value parameter.",
-      "phase": "sprint11",
-      "priority": "critical",
-      "effort": "trivial",
-      "acceptanceCriteria": [
-        "Change setattr(self.config, key) to setattr(self.config, key, value)",
-        "Verify update_config works with a simple test"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "BF-002",
-      "title": "Fix malformed pyproject.toml",
-      "description": "Separated [tool.ruff.lint] and [tool.mypy] into proper TOML sections.",
-      "phase": "sprint11",
-      "priority": "critical",
-      "effort": "trivial",
-      "acceptanceCriteria": [
-        "Separate [tool.ruff] select line from [tool.mypy] section",
-        "Add proper [tool.ruff.lint] section with select",
-        "Add proper [tool.mypy] section",
-        "Verify: python -c 'import tomllib; tomllib.load(open(\"pyproject.toml\",\"rb\"))'",
-        "Verify: ruff check src/"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "BF-003",
-      "title": "Sync version to single source of truth",
-      "description": "Synced to 0.5.0. cli.py now imports __version__ from __init__.py.",
-      "phase": "sprint11",
-      "priority": "high",
-      "effort": "low",
-      "acceptanceCriteria": [
-        "Set canonical version in pyproject.toml",
-        "Update __init__.py to match",
-        "Update cli.py to import version from __init__.py",
-        "All three report same version"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "BF-004",
-      "title": "Fix provenance content-addressed ID generation",
-      "description": "Removed timestamp from hash, added parent_id for Merkle chain, sorted files for determinism, increased to 16-char hash, added dedup check.",
-      "phase": "sprint11",
-      "priority": "high",
-      "effort": "low",
-      "acceptanceCriteria": [
-        "Remove created_at from _generate_id() hash input",
-        "Add parent_id to hash for Merkle chain integrity",
-        "Sort files_touched before hashing for determinism",
-        "Use 16+ chars of hash (currently 12, collision risk)",
-        "Add deduplication check in record_operation()"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "BF-005",
-      "title": "Fix checkpoint restore None bug",
-      "description": "Added None guard for checkpoint_id before tag lookup.",
-      "phase": "sprint11",
-      "priority": "high",
-      "effort": "trivial",
-      "acceptanceCriteria": [
-        "Add None check for checkpoint_id before tag lookup",
-        "Raise CheckpointNotFoundError with clear message",
-        "Add cleanup on partial failure in save_checkpoint()"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "BF-006",
-      "title": "Fix review false positive detection",
-      "description": "Replaced naive keyword matching with regex patterns that check for negative indicators first (e.g. 'No issues found') before positive patterns.",
-      "phase": "sprint11",
-      "priority": "medium",
-      "effort": "low",
-      "acceptanceCriteria": [
-        "Use word-boundary matching or structured AI output",
-        "Test that 'No issues found' does NOT trigger has_issues",
-        "Test that 'Critical issue: SQL injection' DOES trigger"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-
-    {
-      "id": "TS-001",
-      "title": "Add filelock for thread-safe state saves",
-      "description": "Added filelock dependency, FileLock to StateManager, atomic save() with fsync+os.replace(), and atomic_update() method.",
-      "phase": "sprint12",
-      "priority": "critical",
-      "effort": "medium",
-      "acceptanceCriteria": [
-        "Add filelock>=3.12 to dependencies in pyproject.toml",
-        "Add FileLock to StateManager with .lock suffix file",
-        "Wrap save() in lock context manager",
-        "Use os.replace() instead of Path.rename() for atomic semantics",
-        "Add fsync before replace for crash safety",
-        "Use tempfile.mkstemp() in same directory",
-        "Add atomic_update(fn) method for read-modify-write pattern",
-        "Test concurrent saves don't corrupt state"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "TS-002",
-      "title": "Add threading.Lock to parallel.py state operations",
-      "description": "Added threading.Lock to ParallelExecutionManager, wrapping all state-mutating methods including add/remove worktree, set_active, save, and task record methods.",
-      "phase": "sprint12",
-      "priority": "critical",
-      "effort": "medium",
-      "acceptanceCriteria": [
-        "Add threading.Lock to ParallelExecutor",
-        "Wrap add_active_worktree() with lock",
-        "Wrap remove_active_worktree() with lock",
-        "Wrap all state_manager.save() calls with lock",
-        "Test parallel execution doesn't lose state updates"
-      ],
-      "depends_on": ["TS-001"],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "TS-003",
-      "title": "Add rolling backup for state files",
-      "description": "Added .bak copy before each write, recovery from .bak if state.json is corrupt, with logging.",
-      "phase": "sprint12",
-      "priority": "medium",
-      "effort": "low",
-      "acceptanceCriteria": [
-        "Copy state.json to state.json.bak before write",
-        "Add recovery: if state.json is corrupt, try .bak",
-        "Log when falling back to backup"
-      ],
-      "depends_on": ["TS-001"],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-
-    {
-      "id": "TI-001",
-      "title": "Create test infrastructure",
-      "description": "Created conftest.py with workspace, git_workspace, state_manager, cli_runner, mock_git_basic fixtures. Dir structure: test_core/, test_git/, test_commands/.",
-      "phase": "sprint13",
-      "priority": "high",
-      "effort": "medium",
-      "acceptanceCriteria": [
-        "Add pytest-subprocess to dev dependencies",
-        "Create tests/conftest.py with shared fixtures",
-        "Fixture: cli_runner (CliRunner + isolated_filesystem)",
-        "Fixture: mock_git (pytest-subprocess fp for git commands)",
-        "Fixture: workspace (temp dir with .up/ and .git/ structure)",
-        "Fixture: state_manager (initialized with temp workspace)",
-        "Create tests/test_core/__init__.py",
-        "Create tests/test_commands/__init__.py",
-        "Create tests/test_git/__init__.py",
-        "Verify: pytest --co lists all test files"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "TI-002",
-      "title": "Add command tests for vibe commands",
-      "description": "Created 10 tests in test_commands/test_vibe.py covering save, reset, diff commands with real git repos.",
-      "phase": "sprint13",
-      "priority": "medium",
-      "effort": "medium",
-      "acceptanceCriteria": [
-        "Create tests/test_commands/test_vibe.py",
-        "Test save_cmd creates checkpoint",
-        "Test reset_cmd restores to checkpoint",
-        "Test diff_cmd shows changes",
-        "Test error cases (no git, no checkpoints)",
-        "All tests pass"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-
-    {
-      "id": "AP-001",
-      "title": "Fix dashboard to use manager APIs",
-      "description": "Rewrote all 3 dashboard panels (context, circuit, progress) to use StateManager API instead of direct file reads.",
-      "phase": "sprint14",
-      "priority": "medium",
-      "effort": "low",
-      "acceptanceCriteria": [
-        "Replace direct file reads with ContextManager.get_status()",
-        "Replace direct file reads with StateManager.state property",
-        "Remove fallback to legacy file locations",
-        "Verify dashboard shows same information"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "AP-002",
-      "title": "Replace print() with logging module",
-      "description": "Added logging to events.py (handler errors) and learn/utils.py (memory recording). Using logger.warning/debug.",
-      "phase": "sprint14",
-      "priority": "medium",
-      "effort": "low",
-      "acceptanceCriteria": [
-        "Add import logging to events.py",
-        "Replace print(f'Event handler error: {e}') with logging.warning()",
-        "Add logging to learn/utils.py silent exception handlers",
-        "Configure logging level via UpConfig"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "AP-003",
-      "title": "Wire branch hierarchy enforcement into merge",
-      "description": "Added _can_merge() check in agent merge_cmd. Reads branch_hierarchy_enforcement from UpConfig. Blocks merge with clear error message.",
-      "phase": "sprint14",
-      "priority": "low",
-      "effort": "medium",
-      "acceptanceCriteria": [
-        "Read branch_hierarchy_enforcement from UpConfig in agent merge",
-        "Check _can_merge() before performing merge",
-        "Block merge if hierarchy violated (with --force override)",
-        "Show clear error message explaining the hierarchy"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
-    },
-    {
-      "id": "AP-004",
-      "title": "Clean up stale artifacts",
-      "description": "Deleted .loop_state.json.migrated and .claude/context_budget.json.migrated. Updated .gitignore with *.lock, *.migrated patterns.",
-      "phase": "sprint14",
-      "priority": "low",
-      "effort": "trivial",
-      "acceptanceCriteria": [
-        "Delete .loop_state.json.migrated if present",
-        "Delete .claude/context_budget.json.migrated if present",
-        "Update .gitignore to exclude .up/*.lock and .up/*.tmp",
-        "Verify no other stale files"
-      ],
-      "passes": true,
-      "completedAt": "2026-02-06"
+      "passes": false,
+      "depends_on": ["V1-001", "V1-002", "V1-003", "V1-004", "V1-005", "V1-006", "V1-007", "V1-008", "V1-009", "V1-010", "V1-011", "V1-012", "V1-013", "V1-014", "V1-015", "V1-016"]
     }
   ],
+  "success_metrics": {
+    "command_count": {"current": 28, "target": 14},
+    "memory_subcommands": {"current": 11, "target": 3},
+    "core_loop_test_coverage": {"current": "0%", "target": "60%+"},
+    "prd_schema_validated": {"current": false, "target": true},
+    "parallel_modules": {"current": 2, "target": 1},
+    "silent_exception_handlers": {"current": "5+", "target": 0}
+  },
   "metadata": {
-    "total_tasks": 52,
-    "completed": 52,
-    "pending": 0,
-    "reopened": 7,
-    "new": 9,
-    "sprints": {
-      "sprint0-7": "Complete (29 tasks)",
-      "sprint8": "Cleanup - COMPLETE (C-001 done 2026-02-06)",
-      "sprint9": "Quality Gates - COMPLETE (Q-001 done 2026-02-06)",
-      "sprint10": "Modularization - 2 reopened (M-001, M-002)",
-      "sprint11": "Critical Bug Fixes - COMPLETE (BF-001 to BF-006 done 2026-02-06)",
-      "sprint12": "Thread Safety - COMPLETE (TS-001 to TS-003 done 2026-02-06)",
-      "sprint13": "Test Infrastructure - COMPLETE (TI-001, TI-002, C-002, C-004 done 2026-02-06)",
-      "sprint14": "API Consistency - COMPLETE (AP-001 to AP-004 done 2026-02-06)"
+    "total_tasks": 17,
+    "completed": 0,
+    "pending": 17,
+    "phases": {
+      "phase1": "8 tasks — Simplify CLI Surface",
+      "phase2": "2 tasks — Stabilize Core Loop",
+      "phase3": "4 tasks — Consolidate Architecture",
+      "phase4": "3 tasks — Polish & Ship"
     },
-    "execution_order": [
-      "Sprint 11: COMPLETE - All critical bugs fixed (2026-02-06)",
-      "Sprint 12: COMPLETE - Thread safety hardening (2026-02-06)",
-      "Sprint 13: COMPLETE - Test infrastructure + 82 tests (2026-02-06)",
-      "Sprint 9: COMPLETE - Coverage gates (2026-02-06)",
-      "Sprint 14: COMPLETE - API consistency and polish (2026-02-06)",
-      "Sprint 10: COMPLETE - Modularization (2026-02-06). ALL TASKS DONE."
+    "large_project_problems_addressed": [
+      "Context fragmentation → memory system (3 commands)",
+      "Architectural debt → learn system + PRD schema",
+      "Security vulnerabilities → review command",
+      "Accountability gap → provenance show",
+      "Review bottleneck → diff + review",
+      "Multi-agent coordination → agent spawn/merge + parallel scheduler",
+      "Shared context loss → memory auto-indexing via hooks"
     ],
-    "research_files": [
-      "2026-02-04-git-design-philosophy-scaling.md",
-      "2026-02-04_git_for_ai_vibe_coding.md",
-      "2026-02-05-implementation-review.md",
-      "2026-02-06-hardening-patterns.md"
-    ],
-    "audit_summary": {
-      "critical_bugs": 4,
-      "race_conditions": 3,
-      "false_completes": 8,
-      "dead_code_lines": 1741,
-      "test_coverage": "0%"
-    },
+    "previous_prd_version": "3.0.0 (hardening, 52 tasks, all complete)",
     "ai_generated": true
   }
 }
