@@ -55,7 +55,10 @@ def learn_cmd(ctx, topic_or_path: str, workspace: str, no_ai: bool):
     subcommands = ["auto", "analyze", "plan", "status"]
     if topic_or_path in subcommands:
         subcmd = ctx.command.commands[topic_or_path]
-        ctx.invoke(subcmd, workspace=workspace)
+        kwargs = {"workspace": workspace}
+        if topic_or_path in ("analyze", "plan"):
+            kwargs["no_ai"] = no_ai
+        ctx.invoke(subcmd, **kwargs)
         return
     
     ws = Path(workspace) if workspace else Path.cwd()
@@ -118,19 +121,21 @@ def auto_cmd(workspace: str):
 
 @learn_cmd.command("analyze")
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
-def analyze_cmd(workspace: str):
+@click.option("--no-ai", is_flag=True, help="Disable AI analysis")
+def analyze_cmd(workspace: str, no_ai: bool):
     """Analyze all research files with AI."""
     ws = Path(workspace) if workspace else Path.cwd()
-    learn_analyze(ws)
+    learn_analyze(ws, use_ai=not no_ai)
 
 
 @learn_cmd.command("plan")
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
-def plan_cmd(workspace: str, output: str):
+@click.option("--no-ai", is_flag=True, help="Disable AI analysis")
+def plan_cmd(workspace: str, output: str, no_ai: bool):
     """Generate improvement PRD from analysis."""
     ws = Path(workspace) if workspace else Path.cwd()
-    learn_plan(ws, output)
+    learn_plan(ws, output, use_ai=not no_ai)
 
 
 @learn_cmd.command("status")

@@ -1,8 +1,6 @@
 """PRD generation for the learning system."""
 
 import json
-import re
-import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -16,6 +14,25 @@ from up.ai_cli import check_ai_cli, run_ai_prompt
 from up.learn.utils import find_skill_dir, load_profile
 
 console = Console()
+
+
+def _extract_json_array(text: str) -> Optional[list]:
+    """Extract a JSON array from text using bracket-depth matching."""
+    start = text.find('[')
+    if start == -1:
+        return None
+    depth = 0
+    for i, ch in enumerate(text[start:], start):
+        if ch == '[':
+            depth += 1
+        elif ch == ']':
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 def analyze_research_file(file_path: Path, workspace: Path) -> dict:
@@ -44,34 +61,19 @@ Research file ({file_path.name}):
         return {"error": "No AI CLI available", "file": file_path.name}
     
     try:
-        if cli_name == "claude":
-            cmd = ["claude", "-p", prompt]
-        else:
-            cmd = ["agent", "-p", prompt]
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,
-            cwd=workspace
-        )
-        
-        if result.returncode == 0:
+        result = run_ai_prompt(workspace, prompt, cli_name, timeout=300)
+        if result:
             return {
                 "file": file_path.name,
-                "analysis": result.stdout,
-                "cli": cli_name
+                "analysis": result,
+                "cli": cli_name,
             }
-        else:
-            return {"error": result.stderr, "file": file_path.name}
-    except subprocess.TimeoutExpired:
-        return {"error": "Timeout", "file": file_path.name}
+        return {"error": "Empty response from AI CLI", "file": file_path.name}
     except Exception as e:
         return {"error": str(e), "file": file_path.name}
 
 
-def learn_analyze(workspace: Path) -> None:
+def learn_analyze(workspace: Path, use_ai: bool = True) -> None:
     """Analyze all research files and extract patterns with AI."""
     skill_dir = find_skill_dir(workspace, "learning-system")
     research_dir = skill_dir / "research"
@@ -100,6 +102,10 @@ def learn_analyze(workspace: Path) -> None:
     ))
     
     console.print(f"Found [cyan]{len(files_to_analyze)}[/] files to analyze")
+    
+    if not use_ai:
+        console.print("\n[yellow]AI analysis disabled (--no-ai).[/]")
+        return
     
     cli_name, cli_available = check_ai_cli()
     if not cli_available:
@@ -175,7 +181,7 @@ def learn_analyze(workspace: Path) -> None:
     console.print(f"  • [cyan]{gap_file.relative_to(workspace)}[/]")
 
 
-def learn_plan(workspace: Path, output: Optional[str] = None) -> None:
+def learn_plan(workspace: Path, output: Optional[str] = None, use_ai: bool = True) -> None:
     """Generate improvement plan (PRD) from analysis."""
     console.print(Panel.fit(
         "[bold blue]Learning System[/] - Generate PRD",
@@ -223,7 +229,7 @@ def learn_plan(workspace: Path, output: Optional[str] = None) -> None:
     profile = load_profile(workspace)
     
     # Try AI to generate user stories
-    cli_name, cli_available = check_ai_cli()
+    cli_name, cli_available = check_ai_cli() if use_ai else ("", False)
     user_stories = []
     
     if cli_available:
@@ -253,12 +259,11 @@ Focus on practical improvements. No explanation, just the JSON array."""
         result = run_ai_prompt(workspace, prompt, cli_name, timeout=120)
         
         if result:
-            try:
-                json_match = re.search(r'\[[\s\S]*\]', result)
-                if json_match:
-                    user_stories = json.loads(json_match.group())
-                    console.print(f"[green]✓[/] Generated {len(user_stories)} user stories")
-            except json.JSONDecodeError:
+            parsed = _extract_json_array(result)
+            if parsed is not None:
+                user_stories = parsed
+                console.print(f"[green]✓[/] Generated {len(user_stories)} user stories")
+            else:
                 console.print("[yellow]Could not parse AI response[/]")
     
     if not user_stories:

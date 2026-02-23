@@ -2,7 +2,6 @@
 
 import json
 import re
-from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -52,12 +51,20 @@ def check_vision_map_exists(workspace: Path) -> tuple[bool, Path]:
 
 
 def is_valid_path(s: str) -> bool:
-    """Check if string looks like a path."""
+    """Check if string looks like a file or directory path (not a topic)."""
     if Path(s).exists():
         return True
     
-    path_indicators = ['/', '\\', './', '../', '~/', ':', 'C:\\']
-    return any(s.startswith(ind) or ind in s for ind in path_indicators)
+    path_prefixes = ['/', './', '../', '~/', 'C:\\']
+    if any(s.startswith(p) for p in path_prefixes):
+        return True
+    
+    # For relative paths like "src/foo.py", check if the parent dir exists.
+    parent = Path(s).parent
+    if str(parent) != '.' and parent.exists():
+        return True
+    
+    return False
 
 
 def safe_filename(name: str) -> str:
@@ -71,10 +78,16 @@ def record_to_memory(workspace: Path, content: str, entry_type: str = "learning"
     try:
         from up.memory import MemoryManager
         manager = MemoryManager(workspace, use_vectors=False)
-        if entry_type == "learning":
-            manager.record_learning(content)
+        _record_methods = {
+            "learning": manager.record_learning,
+            "decision": manager.record_decision,
+            "error": manager.record_error,
+        }
+        method = _record_methods.get(entry_type)
+        if method:
+            method(content)
         else:
-            manager.record(content, entry_type=entry_type)
+            manager.record_learning(content)
     except Exception as e:
         logging.getLogger(__name__).debug("Memory recording skipped: %s", e)
 

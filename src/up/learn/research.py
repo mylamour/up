@@ -18,6 +18,7 @@ console = Console()
 
 # File extensions that require binary reading (not plain text)
 BINARY_DOCUMENT_EXTENSIONS = {".pdf"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 def _read_file_content(file_path: Path) -> str:
@@ -186,6 +187,13 @@ def learn_from_file(workspace: Path, file_path: str, use_ai: bool = True) -> dic
         console.print(f"[red]Error: File not found: {file_path}[/]")
         return {}
     
+    file_size = source_file.stat().st_size
+    if file_size > MAX_FILE_SIZE:
+        console.print(
+            f"[red]Error: File too large ({file_size:,} bytes, max {MAX_FILE_SIZE:,})[/]"
+        )
+        return {}
+    
     console.print(Panel.fit(
         f"[bold blue]Learning System[/] - Learn from File: {source_file.name}",
         border_style="blue"
@@ -337,7 +345,19 @@ def learn_from_project(workspace: Path, project_path: str, use_ai: bool = True) 
         "patterns_to_adopt": [],
         "frameworks_to_consider": [],
         "structure_insights": [],
+        "ai_analysis": None,
     }
+    
+    # Try deep AI analysis
+    if use_ai:
+        cli_name, cli_available = check_ai_cli()
+        if cli_available:
+            console.print(f"\n[yellow]Deep analyzing project with {cli_name}...[/]")
+            ai_result = _ai_analyze_project(workspace, external_project, cli_name)
+            if ai_result:
+                learnings["ai_analysis"] = ai_result
+                console.print("\n[green]✓ AI Deep Analysis Complete[/]")
+                console.print(Panel(ai_result, title="Project AI Insights", border_style="green"))
     
     # Find patterns to adopt
     current_patterns = set(current_profile.get("patterns_detected", []))
@@ -385,12 +405,16 @@ def learn_from_project(workspace: Path, project_path: str, use_ai: bool = True) 
     safe_name = safe_filename(external_project.name)
     summary_file = learnings_dir / f"{date.today().isoformat()}_{safe_name}.md"
     
+    ai_section = ""
+    if learnings.get("ai_analysis"):
+        ai_section = f"## AI Deep Analysis\n\n{learnings['ai_analysis']}\n\n---\n\n"
+    
     summary_content = f"""# Learnings from: {external_project.name}
 
 **Analyzed**: {date.today().isoformat()}
 **Source**: `{external_project}`
 
-## Patterns to Adopt
+{ai_section}## Patterns to Adopt
 
 {chr(10).join(f'- [ ] {p}' for p in learnings['patterns_to_adopt']) or '- None identified'}
 
@@ -468,7 +492,14 @@ Be concise. Format with markdown headers."""
         max_chars = 12000
         if len(content) > max_chars:
             half = max_chars // 2
-            content = content[:half] + "\n\n[... content truncated ...]\n\n" + content[-half:]
+            # Truncate at line boundaries to avoid splitting mid-line
+            head_end = content.rfind('\n', 0, half)
+            if head_end == -1:
+                head_end = half
+            tail_start = content.find('\n', len(content) - half)
+            if tail_start == -1:
+                tail_start = len(content) - half
+            content = content[:head_end] + "\n\n[... content truncated ...]\n\n" + content[tail_start:]
             truncated = True
         else:
             truncated = False
@@ -481,6 +512,32 @@ File ({filename}):
 {content}"""
 
     return run_ai_prompt(workspace, prompt, cli_name, timeout=180)
+
+
+def _ai_analyze_project(
+    workspace: Path,
+    project_path: Path,
+    cli_name: str,
+) -> Optional[str]:
+    """Use AI to deeply analyze an entire project directory.
+    
+    Args:
+        workspace: Working directory.
+        project_path: The path of the project to analyze.
+        cli_name: AI CLI to use ("claude" or "agent").
+    """
+    analysis_instructions = f"""Deeply analyze the software project located at: {project_path}
+
+Please explore its codebase and extract actionable insights and best practices:
+
+1. **Architecture & Structure** - Overall system design, component organization
+2. **Key Patterns** - Design patterns, frameworks, and methodologies used
+3. **Best Practices** - Actionable recommendations, error handling strategies, business logic patterns
+4. **Implementation Ideas** - How these learnings could be applied to other projects
+
+Be thorough but concise. Format with markdown headers."""
+
+    return run_ai_prompt(workspace, analysis_instructions, cli_name, timeout=300)
 
 
 # =============================================================================
