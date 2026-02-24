@@ -1,0 +1,102 @@
+{
+  "project": "UP Platform — Master Roadmap",
+  "description": "Complete roadmap for merging up-cli + claude-code into the UP Platform",
+  "createdAt": "2026-02-24T12:00:00Z",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Plugin System & Hook Pipeline",
+      "file": "prd.json",
+      "stories": 12,
+      "status": "ready",
+      "summary": "Plugin manifest, loader, registry, CLI commands, polyglot hook runner, EventBridge integration, Markdown rules engine, builtin safety + verify plugins, up init integration",
+      "new_modules": [
+        "src/up/plugins/manifest.py",
+        "src/up/plugins/loader.py",
+        "src/up/plugins/registry.py",
+        "src/up/plugins/hooks.py",
+        "src/up/plugins/bridge.py",
+        "src/up/plugins/rules.py",
+        "src/up/commands/plugin.py"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Diverge-Then-Converge Agents",
+      "file": "prd-phase2.json",
+      "stories": 7,
+      "status": "ready",
+      "depends_on": [1],
+      "summary": "ExploreStrategy definitions, parallel agent spawning, result comparison, Rich UI, merge selection, up agent explore command, custom strategies via Markdown",
+      "new_modules": [
+        "src/up/parallel/explore.py",
+        "src/up/parallel/analyze.py",
+        "src/up/ui/explore_display.py"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Config Generation (up sync)",
+      "file": "prd-phase3.json",
+      "stories": 7,
+      "status": "ready",
+      "depends_on": [1],
+      "summary": "Template renderers for CLAUDE.md, .cursorrules, .claude/settings.json. up sync command, auto-sync on plugin changes, init integration",
+      "new_modules": [
+        "src/up/sync/renderer.py",
+        "src/up/sync/claude_md.py",
+        "src/up/sync/cursorrules.py",
+        "src/up/sync/claude_settings.py",
+        "src/up/commands/sync_config.py"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Memory Auto-Hooks",
+      "file": "prd-phase4.json",
+      "stories": 6,
+      "status": "ready",
+      "depends_on": [1],
+      "summary": "Error pattern extraction, auto-recall on failure, auto-record after consecutive failures, auto-index commits, memory hint injection into SESRC loop, builtin memory plugin",
+      "new_modules": [
+        "src/up/memory/patterns.py",
+        ".up/plugins/builtin/memory/"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Provenance Plugin & Observability",
+      "file": "prd-phase5.json",
+      "stories": 6,
+      "status": "ready",
+      "depends_on": [1],
+      "summary": "Provenance auto-record hooks, prompt context capture, chain verification, compliance export, builtin provenance plugin, enhanced status dashboard",
+      "new_modules": [
+        ".up/plugins/builtin/provenance/"
+      ]
+    },
+    {
+      "phase": 6,
+      "name": "Plugin Migration & Ecosystem",
+      "file": "prd-phase6.json",
+      "stories": 9,
+      "status": "ready",
+      "depends_on": [1, 3],
+      "summary": "Port code-review, security-guidance, commit-commands plugins. Marketplace registry, remote install, skill pipeline orchestration (learn -> product-loop), bisect plugin, plugin template",
+      "new_modules": [
+        "src/up/plugins/marketplace.py",
+        "src/up/templates/projects/plugin/",
+        ".up/plugins/installed/code-review/",
+        ".up/plugins/installed/security-guidance/",
+        ".up/plugins/installed/git-workflow/",
+        ".up/plugins/installed/bisect/"
+      ]
+    }
+  ],
+  "totals": {
+    "phases": 6,
+    "total_stories": 47,
+    "new_modules": 20,
+    "dependency_graph": "Phase 1 → [Phase 2, Phase 3, Phase 4, Phase 5] → Phase 6"
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "project": "UP Platform Phase 2: Diverge-Then-Converge Agents",
+  "branchName": "feature/explore-agents",
+  "description": "Add multi-perspective agent exploration where multiple agents tackle the same problem from different angles in isolated worktrees, then present a comparison for user selection.",
+  "createdAt": "2026-02-24T12:00:00Z",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "ExploreStrategy dataclass and strategy definitions",
+      "description": "Define the data model for exploration strategies. Each strategy has a name, description, and prompt template that guides the AI toward a specific approach.",
+      "acceptanceCriteria": [
+        "Create src/up/parallel/explore.py with ExploreStrategy dataclass: name, description, prompt_template, constraints (optional list of strings)",
+        "Define 3 default strategies: 'minimal' (fewest changes, lowest risk), 'clean' (best architecture, may refactor), 'pragmatic' (balance of speed and quality)",
+        "Each strategy's prompt_template includes placeholders: {problem}, {codebase_context}, {constraints}",
+        "get_default_strategies() -> List[ExploreStrategy] returns the 3 defaults",
+        "Unit tests in tests/test_explore_strategy.py"
+      ],
+      "priority": 1,
+      "effort": "low",
+      "passes": false,
+      "notes": "Foundation dataclass. Keep strategies simple — the AI does the heavy lifting."
+    },
+    {
+      "id": "US-002",
+      "title": "ExploreExecutor: parallel agent spawning with strategies",
+      "description": "Create ExploreExecutor that spawns one agent per strategy in isolated Git worktrees, each receiving a strategy-specific prompt for the same problem.",
+      "acceptanceCriteria": [
+        "Create ExploreExecutor class in src/up/parallel/explore.py",
+        "execute(problem: str, strategies: List[ExploreStrategy], workspace: Path) -> List[ExploreResult]",
+        "Each agent gets its own worktree via existing worktree.py create_worktree()",
+        "Each agent receives: strategy prompt + problem description + relevant file context",
+        "ExploreResult dataclass: strategy_name, branch, worktree_path, success (bool), output (str), files_changed (list), error (optional)",
+        "Agents run in parallel using existing parallel/executor.py patterns",
+        "Timeout per agent configurable via .up/config.json: explore.agent_timeout (default 300s)",
+        "Unit tests with mocked AIEngine in tests/test_explore_executor.py"
+      ],
+      "priority": 2,
+      "effort": "high",
+      "passes": false,
+      "notes": "Depends on US-001. Reuses existing worktree and parallel execution infrastructure."
+    },
+    {
+      "id": "US-003",
+      "title": "ExploreAnalyzer: compare agent results",
+      "description": "Create ExploreAnalyzer that compares results from multiple agents: files changed, test results, diff size, and generates a structured comparison.",
+      "acceptanceCriteria": [
+        "Create src/up/parallel/analyze.py with ExploreAnalyzer class",
+        "analyze(results: List[ExploreResult], workspace: Path) -> ExploreComparison",
+        "ExploreComparison dataclass: strategies (list of ExploreResultSummary), recommendation (optional str)",
+        "ExploreResultSummary: strategy_name, files_changed_count, lines_added, lines_removed, tests_passed (bool), lint_passed (bool)",
+        "Runs verification (test/lint) in each worktree to get pass/fail status",
+        "Calculates diff stats via git diff --stat in each worktree",
+        "Unit tests in tests/test_explore_analyzer.py"
+      ],
+      "priority": 3,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-002. Uses existing verification.py for test/lint checks."
+    },
+    {
+      "id": "US-004",
+      "title": "Rich comparison display for explore results",
+      "description": "Create a Rich terminal UI that displays the comparison of agent results side-by-side with key metrics, allowing the user to select an approach.",
+      "acceptanceCriteria": [
+        "Create src/up/ui/explore_display.py with display_comparison() function",
+        "Shows Rich table with columns: Strategy | Files Changed | Lines +/- | Tests | Lint | Approach Summary",
+        "Color coding: green for passing, red for failing, yellow for warnings",
+        "Shows truncated diff preview for each strategy (first 20 lines)",
+        "Prompts user: 'Which approach? [1/2/3/combine/none]'",
+        "Returns user selection as ExploreChoice enum: STRATEGY_1, STRATEGY_2, STRATEGY_3, COMBINE, NONE"
+      ],
+      "priority": 4,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-003. Uses Rich library (already a dependency)."
+    },
+    {
+      "id": "US-005",
+      "title": "Merge selected exploration result",
+      "description": "After user selects an approach, merge the chosen worktree's changes back to the main branch. Clean up all worktrees.",
+      "acceptanceCriteria": [
+        "Add merge_exploration() to src/up/parallel/explore.py",
+        "For single strategy selection: merge worktree using existing merge_worktree() from worktree.py",
+        "For 'combine': cherry-pick non-conflicting changes from multiple worktrees (best-effort)",
+        "For 'none': clean up all worktrees, no changes applied",
+        "All worktrees cleaned up after merge (success or failure)",
+        "Provenance recorded: which strategies were explored, which was selected, why",
+        "Integration test: spawn 2 mock agents, select one, verify merge"
+      ],
+      "priority": 5,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-004. Reuses existing worktree merge infrastructure."
+    },
+    {
+      "id": "US-006",
+      "title": "CLI command: up agent explore",
+      "description": "Add 'up agent explore' subcommand that orchestrates the full diverge-then-converge workflow: spawn agents, analyze results, display comparison, merge selection.",
+      "acceptanceCriteria": [
+        "Add 'explore' subcommand to src/up/commands/agent.py",
+        "'up agent explore \"optimize database queries\"' runs full workflow",
+        "Optional --strategies flag to specify custom strategy count (default 3)",
+        "Optional --timeout flag to override per-agent timeout",
+        "Shows progress spinner while agents work",
+        "Handles partial failures: if 1 of 3 agents fails, still shows comparison of successful ones",
+        "Records exploration in .up/state.json metrics"
+      ],
+      "priority": 6,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-002 through US-005. This is the user-facing command that ties everything together."
+    },
+    {
+      "id": "US-007",
+      "title": "Custom strategy definitions via Markdown",
+      "description": "Allow users to define custom exploration strategies as Markdown files in .up/plugins/*/strategies/ directories, extending the default 3.",
+      "acceptanceCriteria": [
+        "Strategy .md format: YAML frontmatter (name, description, constraints) + body as prompt template",
+        "Add load_custom_strategies() to explore.py that scans plugin directories",
+        "Custom strategies merged with defaults (custom can override by name)",
+        "'up agent explore --strategies minimal,my-custom-strategy' selects specific strategies",
+        "Unit tests with sample custom strategy files"
+      ],
+      "priority": 7,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-006 and Phase 1 plugin system. Extends explore with plugin ecosystem."
+    }
+  ]
+}

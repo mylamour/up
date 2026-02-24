@@ -1,0 +1,112 @@
+{
+  "project": "UP Platform Phase 5: Provenance Plugin & Observability",
+  "branchName": "feature/provenance-plugin",
+  "description": "Refactor provenance tracking into a plugin with hooks, add confidence-based quality scoring, and create a status dashboard skill for Claude Code.",
+  "createdAt": "2026-02-24T12:00:00Z",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Provenance hook: auto-record on task completion",
+      "description": "Create a plugin hook that automatically records provenance entries after every AI operation, capturing model, files changed, verification results, and chain links.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/provenance/hooks/auto_record.py",
+        "Triggers on TASK_COMPLETE and TASK_FAILED events",
+        "Records: operation_id (content-addressed hash), parent_id (previous op), timestamp, task_title",
+        "Captures: ai_engine name, files_modified (list with line counts), verification_results (test/lint/type)",
+        "Chain integrity: each record includes hash of parent record (Merkle-style)",
+        "Uses existing ProvenanceManager from core/provenance.py",
+        "Unit tests verifying chain integrity across 3+ operations"
+      ],
+      "priority": 1,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Refactors existing provenance logic into plugin hook format."
+    },
+    {
+      "id": "US-002",
+      "title": "Provenance hook: capture AI prompt context",
+      "description": "Extend provenance recording to capture prompt hash and context files used in each AI operation, without storing full prompt content.",
+      "acceptanceCriteria": [
+        "Add PRE_EXECUTE hook that captures: prompt hash (SHA-256 of prompt text), context_files (list of file paths referenced)",
+        "Store prompt hash in provenance record, NOT the full prompt (privacy/size)",
+        "Context files detected by scanning prompt for file path patterns",
+        "POST_EXECUTE hook links the pre-execute context to the completion record",
+        "Provenance record now includes: prompt_hash, context_files, duration_seconds",
+        "Unit tests verifying prompt hash consistency"
+      ],
+      "priority": 2,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-001. Adds the 'what was the AI thinking' dimension to provenance."
+    },
+    {
+      "id": "US-003",
+      "title": "Chain integrity verification command",
+      "description": "Add 'up provenance verify' that walks the Merkle chain and reports any broken links or tampered records.",
+      "acceptanceCriteria": [
+        "Add 'verify' subcommand to src/up/commands/provenance.py",
+        "Walks chain from latest record back to genesis, verifying each parent hash",
+        "Reports: total operations, chain length, integrity status (pass/fail)",
+        "If broken: shows exactly which record has mismatched hash",
+        "Rich output: green checkmarks for valid links, red X for broken",
+        "Exit code 0 if chain valid, 1 if broken (for CI integration)"
+      ],
+      "priority": 3,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-001. Simple chain walk + hash verification."
+    },
+    {
+      "id": "US-004",
+      "title": "Provenance export for compliance",
+      "description": "Add 'up provenance export' that generates a JSON or CSV report of all AI operations for audit/compliance purposes.",
+      "acceptanceCriteria": [
+        "Add 'export' subcommand to src/up/commands/provenance.py",
+        "'up provenance export --format json' outputs structured JSON array",
+        "'up provenance export --format csv' outputs CSV with headers",
+        "Optional --since flag to filter by date range",
+        "Optional --output flag to write to file (default: stdout)",
+        "Includes all fields: operation_id, timestamp, task, files, verification, chain_hash",
+        "Unit tests verifying export format correctness"
+      ],
+      "priority": 4,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-001. Useful for enterprise compliance and team retrospectives."
+    },
+    {
+      "id": "US-005",
+      "title": "Builtin provenance plugin manifest",
+      "description": "Package provenance hooks as a builtin plugin with proper manifest and hooks.json.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/provenance/plugin.json",
+        "Create hooks/hooks.json registering auto_record and context capture hooks",
+        "auto_record: matches TASK_COMPLETE, TASK_FAILED",
+        "context_capture: matches PRE_EXECUTE, POST_EXECUTE",
+        "Update up init to include provenance plugin in builtin setup",
+        "Integration test: run task, verify provenance recorded with chain link"
+      ],
+      "priority": 5,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-001, US-002. Packaging step."
+    },
+    {
+      "id": "US-006",
+      "title": "Enhanced status dashboard with plugin awareness",
+      "description": "Upgrade 'up status' to show plugin status, hook activity, and provenance chain health alongside existing loop/circuit/memory info.",
+      "acceptanceCriteria": [
+        "Modify src/up/commands/status.py to include plugin section",
+        "Plugin section shows: total installed, enabled count, recent hook executions (last 5)",
+        "Provenance section shows: chain length, last operation, integrity status",
+        "Memory section shows: total entries, last search, last record",
+        "All sections use Rich panels with consistent formatting",
+        "Sections gracefully degrade if subsystem unavailable (e.g., no ChromaDB)"
+      ],
+      "priority": 6,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on Phase 1 plugin registry. Enhances existing status command."
+    }
+  ]
+}

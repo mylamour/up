@@ -43,31 +43,35 @@ pip install up-cli[all]
 
 ## 🚀 Quick Start
 
-### 1. Initialize Up-CLI in your project
+### 1. Initialize your project
 ```bash
 up init
 ```
+This sets up the `.up/` directory, safety hooks, and AI configuration files in your repo.
 
-### 2. The Core Safety Workflow
-Create a checkpoint before asking the AI to write code:
-```bash
-up save
+### 2. Describe your vision
+Open Claude Code (or Cursor) in your project and simply describe what you want to build. Use the AI to help you enrich and detail your vision — don't worry about getting it perfect on the first pass. The AI will help you think through edge cases, architecture, and scope.
+
+### 3. Research and plan with `/learn`
+Once your vision is clear, use the learning skill to analyze your codebase and generate a structured PRD:
 ```
-
-After the AI finishes, review the changes:
-```bash
-up diff
+/learn auto
 ```
+This parses your project with AST analysis, detects frameworks and patterns, and produces a `prd.json` with prioritized, dependency-ordered tasks.
 
-If the AI broke something or you're not happy, instantly rollback:
-```bash
-up reset
+### 4. Build it with `/product-loop`
+With your PRD ready, kick off the autonomous development loop:
 ```
+/product-loop
+```
+The AI will work through each task in order — checkpointing, implementing, verifying, and committing — with circuit breakers and auto-rollback keeping things safe.
 
-### 3. Start the Autonomous Product Loop
+### Safety net (anytime)
+You always have manual control:
 ```bash
-# Write your tasks in prd.json, then run:
-up start
+up save      # checkpoint before risky work
+up diff      # review AI changes
+up reset     # rollback to last checkpoint
 ```
 
 ---

@@ -8,7 +8,6 @@ import abc
 import shutil
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Optional, Tuple, Callable
 
@@ -95,20 +94,19 @@ class CliEngine(AIEngine):
     def name(self) -> str:
         return self._cli_name or ""
 
-    def _build_command(self, prompt: str, continue_session: bool = False) -> list:
-        """Build the CLI command list.
+    def _build_command(self, continue_session: bool = False) -> list:
+        """Build the CLI command list (prompt piped via stdin separately).
 
         Args:
-            prompt: The prompt text.
             continue_session: If True and CLI is claude, add --continue flag.
         """
         if self.name() == "claude":
             cmd = ["claude"]
             if continue_session:
                 cmd.append("--continue")
-            cmd.extend(["-p", prompt])
+            cmd.extend(["-p", "-"])  # Read prompt from stdin
         else:
-            cmd = ["agent", "-p", prompt, "--output-format", "text"]
+            cmd = ["agent", "-p", "-", "--output-format", "text"]
         return cmd
 
     def execute_prompt(
@@ -125,14 +123,15 @@ class CliEngine(AIEngine):
             return None
 
         try:
-            cmd = self._build_command(prompt, continue_session=continue_session)
+            cmd = self._build_command(continue_session=continue_session)
 
             result = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                cwd=workspace
+                cwd=workspace,
             )
 
             if result.returncode == 0 and result.stdout.strip():
@@ -167,51 +166,54 @@ class CliEngine(AIEngine):
             return False, error_msg
 
         try:
-            cmd = self._build_command(prompt, continue_session=continue_session)
+            cmd = self._build_command(continue_session=continue_session)
 
             proc = subprocess.Popen(
                 cmd,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=workspace,
             )
 
+            # Write prompt to stdin and close to signal EOF
+            proc.stdin.write(prompt)
+            proc.stdin.close()
+
             stdout_lines: list[str] = []
             stderr_lines: list[str] = []
+
+            def _read_stdout():
+                for line in proc.stdout:
+                    stdout_lines.append(line)
+                    if on_output:
+                        stripped = line.rstrip()
+                        if stripped:
+                            on_output(stripped)
 
             def _read_stderr():
                 for line in proc.stderr:
                     stderr_lines.append(line)
 
+            stdout_thread = threading.Thread(target=_read_stdout, daemon=True)
             stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+            stdout_thread.start()
             stderr_thread.start()
 
-            deadline = time.monotonic() + timeout
-            for line in proc.stdout:
-                stdout_lines.append(line)
-                if on_output:
-                    stripped = line.rstrip()
-                    if stripped:
-                        on_output(stripped)
-                if time.monotonic() > deadline:
-                    proc.kill()
-                    proc.wait()
-                    error_msg = f"AI task timed out ({timeout}s)"
-                    if raise_on_error:
-                        raise AICliTimeoutError(error_msg, timeout=timeout)
-                    return False, error_msg
-
-            proc.wait()
-            stderr_thread.join(timeout=5)
-
-            # Check if we exceeded deadline while waiting
-            if time.monotonic() > deadline:
+            # Wait for process with proper timeout enforcement
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
                 proc.kill()
+                proc.wait()
                 error_msg = f"AI task timed out ({timeout}s)"
                 if raise_on_error:
                     raise AICliTimeoutError(error_msg, timeout=timeout)
                 return False, error_msg
+
+            stdout_thread.join(timeout=5)
+            stderr_thread.join(timeout=5)
 
             stdout = "".join(stdout_lines)
             stderr = "".join(stderr_lines)

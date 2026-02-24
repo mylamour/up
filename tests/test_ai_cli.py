@@ -23,6 +23,7 @@ def _mock_popen(returncode=0, stdout="", stderr=""):
     mock_proc = MagicMock()
     mock_proc.stdout = StringIO(stdout)
     mock_proc.stderr = StringIO(stderr)
+    mock_proc.stdin = MagicMock()  # Supports .write() and .close()
     mock_proc.returncode = returncode
     mock_proc.wait.return_value = returncode
     mock_proc.kill = MagicMock()
@@ -102,7 +103,7 @@ class TestRunAiPrompt:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             run_ai_prompt(tmp_path, "hello", "agent")
             cmd = mock_run.call_args[0][0]
-            assert cmd == ["agent", "-p", "hello", "--output-format", "text"]
+            assert cmd == ["agent", "-p", "-", "--output-format", "text"]
 
 
 class TestRunAiTask:
@@ -173,7 +174,7 @@ class TestContinueSession:
             mock_popen.return_value = _mock_popen(returncode=0, stdout="ok\n")
             run_ai_task(tmp_path, "phase 2", "claude", continue_session=True)
             cmd = mock_popen.call_args[0][0]
-            assert cmd == ["claude", "--continue", "-p", "phase 2"]
+            assert cmd == ["claude", "--continue", "-p", "-"]
 
     def test_claude_no_continue_by_default(self, tmp_path):
         with patch("shutil.which", return_value="/usr/bin/claude"), \
@@ -181,7 +182,7 @@ class TestContinueSession:
             mock_popen.return_value = _mock_popen(returncode=0, stdout="ok\n")
             run_ai_task(tmp_path, "phase 1", "claude")
             cmd = mock_popen.call_args[0][0]
-            assert cmd == ["claude", "-p", "phase 1"]
+            assert cmd == ["claude", "-p", "-"]
 
     def test_agent_ignores_continue_flag(self, tmp_path):
         with patch("shutil.which", return_value="/usr/bin/agent"), \
@@ -190,7 +191,7 @@ class TestContinueSession:
             run_ai_task(tmp_path, "phase 2", "agent", continue_session=True)
             cmd = mock_popen.call_args[0][0]
             assert "--continue" not in cmd
-            assert cmd == ["agent", "-p", "phase 2", "--output-format", "text"]
+            assert cmd == ["agent", "-p", "-", "--output-format", "text"]
 
     def test_prompt_continue_adds_flag(self, tmp_path):
         """execute_prompt still uses subprocess.run."""
@@ -199,7 +200,7 @@ class TestContinueSession:
             mock_run.return_value = MagicMock(returncode=0, stdout="response", stderr="")
             run_ai_prompt(tmp_path, "follow up", "claude", continue_session=True)
             cmd = mock_run.call_args[0][0]
-            assert cmd == ["claude", "--continue", "-p", "follow up"]
+            assert cmd == ["claude", "--continue", "-p", "-"]
 
 
 class TestGetInstallInstructions:

@@ -1,0 +1,115 @@
+{
+  "project": "UP Platform Phase 4: Memory Auto-Hooks",
+  "branchName": "feature/memory-auto-hooks",
+  "description": "Automate the memory protocol so errors are auto-recorded on failure and past solutions are auto-recalled when encountering known error patterns. Removes reliance on manual 'up memory' invocation.",
+  "createdAt": "2026-02-24T12:00:00Z",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Error pattern extractor",
+      "description": "Create a module that extracts searchable error signatures from task failures, verification output, and exception traces.",
+      "acceptanceCriteria": [
+        "Create src/up/memory/patterns.py with ErrorPatternExtractor class",
+        "extract(error_output: str) -> List[str] returns 1-3 search keywords from error text",
+        "Handles: Python tracebacks (extracts exception class + message), test failures (extracts test name + assertion), lint errors (extracts rule code + file), generic errors (extracts first meaningful line)",
+        "Strips noise: file paths, line numbers, timestamps, ANSI codes",
+        "Unit tests with real-world error samples in tests/test_error_patterns.py"
+      ],
+      "priority": 1,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Foundation for auto-recall. Quality of extraction determines recall accuracy."
+    },
+    {
+      "id": "US-002",
+      "title": "Auto-recall hook: search memory on task failure",
+      "description": "Create a plugin hook that automatically searches memory when a task fails, looking for past solutions to similar errors.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/memory/hooks/auto_recall.py",
+        "Triggers on TASK_FAILED and VERIFY_FAIL events",
+        "Uses ErrorPatternExtractor to get search keywords from failure output",
+        "Searches memory via existing MemoryManager.search()",
+        "If matches found (similarity > 0.7): logs past solution to event data as 'memory_hint'",
+        "If no matches: silently continues (no noise)",
+        "Configurable in .up/config.json: automation.memory.auto_recall (default true)",
+        "Unit tests with mocked MemoryManager"
+      ],
+      "priority": 2,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-001. Uses Phase 1 hook pipeline for event integration."
+    },
+    {
+      "id": "US-003",
+      "title": "Auto-record hook: save errors after consecutive failures",
+      "description": "Create a plugin hook that automatically records error entries in memory after 2+ consecutive failures on the same task, preserving the error context and any eventual solution.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/memory/hooks/auto_record.py",
+        "Triggers on TASK_FAILED event when consecutive_failures >= 2",
+        "Records via MemoryManager.record(): error signature, full error output, task context, files involved",
+        "Also triggers on TASK_COMPLETE after previous failures: records the solution that worked",
+        "Deduplication: doesn't record if identical error signature exists within last 24 hours",
+        "Configurable threshold in .up/config.json: automation.memory.auto_record_threshold (default 2)",
+        "Unit tests with mocked MemoryManager"
+      ],
+      "priority": 3,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-001. Pairs with auto-recall to create a learning loop."
+    },
+    {
+      "id": "US-004",
+      "title": "Auto-index hook: index commits into memory",
+      "description": "Create a plugin hook that automatically indexes git commits into memory for semantic search across project history.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/memory/hooks/auto_index.py",
+        "Triggers on GIT_COMMIT event",
+        "Indexes: commit message, files changed, diff summary (first 500 chars)",
+        "Tags entries with: commit SHA, branch, author, timestamp",
+        "Batch-friendly: handles multiple commits (e.g., after merge) without flooding",
+        "Configurable in .up/config.json: automation.memory.auto_index_commits (default true)",
+        "Skips merge commits and commits with 'chore:' prefix",
+        "Unit tests with mocked git output"
+      ],
+      "priority": 4,
+      "effort": "low",
+      "passes": false,
+      "notes": "Refactors existing auto-index logic from events.py into plugin hook format."
+    },
+    {
+      "id": "US-005",
+      "title": "Memory hint injection into SESRC loop",
+      "description": "When auto-recall finds relevant past solutions, inject them into the AI prompt during the EXECUTE phase of the SESRC loop.",
+      "acceptanceCriteria": [
+        "Modify src/up/commands/start/loop.py EXECUTE phase to check for memory_hint in event data",
+        "If memory_hint exists: prepend to AI prompt as context block with header 'Past solution found:'",
+        "Format: 'Previously, a similar error was solved by: {solution}. Consider this approach.'",
+        "Memory hint is optional — loop works normally without it",
+        "Log when memory hint is used: 'Memory recall: applied hint from {date}'",
+        "Integration test: mock memory hit, verify prompt includes hint"
+      ],
+      "priority": 5,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-002. This closes the loop: error → record → recall → inject → fix."
+    },
+    {
+      "id": "US-006",
+      "title": "Builtin memory plugin manifest and registration",
+      "description": "Package the auto-recall, auto-record, and auto-index hooks as the builtin memory plugin with proper manifest and hooks.json.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/memory/plugin.json with name 'memory', category 'safety'",
+        "Create .up/plugins/builtin/memory/hooks/hooks.json registering all 3 hooks with correct event matchers",
+        "auto_recall: matches TASK_FAILED, VERIFY_FAIL events",
+        "auto_record: matches TASK_FAILED, TASK_COMPLETE events",
+        "auto_index: matches GIT_COMMIT event",
+        "Update Phase 1 US-012 (up init) to include memory plugin in builtin setup",
+        "Integration test: full cycle — fail task, verify error recorded, fail again, verify recall triggered"
+      ],
+      "priority": 6,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-002, US-003, US-004. Packaging step."
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "project": "UP Platform Phase 6: Plugin Migration & Ecosystem",
+  "branchName": "feature/plugin-migration",
+  "description": "Port the best claude-code plugins to UP plugin format, create a plugin marketplace registry, and add the skill pipeline orchestration that chains learn -> product-loop automatically.",
+  "createdAt": "2026-02-24T12:00:00Z",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Port code-review plugin to UP format",
+      "description": "Migrate claude-code's code-review plugin into a UP plugin that works with any AI backend. Adds adversarial review as an optional post-verify step in the SESRC loop.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/installed/code-review/ with plugin.json (engines: ['all'])",
+        "Create commands/review.md slash command with YAML frontmatter",
+        "Create hooks/post_verify.py that triggers adversarial review after verification passes",
+        "Review hook uses AIEngine to prompt a second-opinion review of changed files",
+        "Confidence scoring: issues scored 0-100, only issues >= 80 reported",
+        "Hook is optional: configurable in .up/config.json: review.enabled (default false)",
+        "Output: Rich table of findings with severity, file, line, description",
+        "Unit tests with mocked AIEngine review responses"
+      ],
+      "priority": 1,
+      "effort": "high",
+      "passes": false,
+      "notes": "First real plugin migration. Proves the plugin system works with complex functionality."
+    },
+    {
+      "id": "US-002",
+      "title": "Port security-guidance plugin to UP format",
+      "description": "Migrate claude-code's security-guidance plugin into a UP plugin that detects security anti-patterns in AI-generated code.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/installed/security-guidance/ with plugin.json",
+        "Create rules/ directory with Markdown rule files for each security pattern",
+        "Rules cover: eval() injection, os.system() usage, SQL injection patterns, XSS (innerHTML/dangerouslySetInnerHTML), pickle deserialization, hardcoded secrets regex",
+        "Each rule is a standalone .md file with pattern regex and warning message",
+        "Triggers on POST_TOOL_USE for file write/edit operations",
+        "Session-scoped state: don't repeat same warning twice per session",
+        "Unit tests with code samples containing each vulnerability pattern"
+      ],
+      "priority": 2,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Good test of the Markdown rules engine from Phase 1."
+    },
+    {
+      "id": "US-003",
+      "title": "Port commit-commands plugin to UP format",
+      "description": "Migrate claude-code's commit-commands plugin into a UP plugin providing /commit and /commit-push-pr slash commands.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/installed/git-workflow/ with plugin.json",
+        "Create commands/commit.md: stages changes, generates commit message via AI, commits",
+        "Create commands/push-pr.md: pushes branch, creates PR via gh CLI",
+        "Commands use allowed-tools restrictions for safety (only git and gh commands)",
+        "Provenance recorded for each commit (links AI operation to git SHA)",
+        "Works with both Claude Code and Cursor (engine-agnostic)",
+        "Integration test: mock git operations, verify command flow"
+      ],
+      "priority": 3,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Tests slash command system from Phase 1."
+    },
+    {
+      "id": "US-004",
+      "title": "Plugin marketplace registry",
+      "description": "Create a marketplace registry that catalogs available plugins (local and remote) with metadata, categories, and version tracking. Foundation for plugin discovery and sharing.",
+      "acceptanceCriteria": [
+        "Create src/up/plugins/marketplace.py with Marketplace class",
+        "MarketplaceEntry dataclass: name, description, version, author, source (local path or git URL), category, downloads (int), rating (float)",
+        "marketplace.json schema at .up/plugins/marketplace.json with entries array",
+        "Methods: search(query) -> List[MarketplaceEntry], get(name) -> MarketplaceEntry, add(entry), remove(name)",
+        "Local registry: scans .up/plugins/installed/ and .up/plugins/builtin/ to build catalog",
+        "Remote registry support: reads from a URL (configurable in .up/config.json: marketplace.registry_url)",
+        "Unit tests in tests/test_marketplace.py"
+      ],
+      "priority": 4,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Foundation for plugin ecosystem. Remote registry is optional — local-first."
+    },
+    {
+      "id": "US-005",
+      "title": "CLI command: up plugin search",
+      "description": "Add 'up plugin search' that queries the marketplace registry to find available plugins by keyword or category.",
+      "acceptanceCriteria": [
+        "'up plugin search <query>' searches by name and description",
+        "'up plugin search --category safety' filters by category",
+        "Rich table output: Name | Version | Category | Description | Source",
+        "Shows installed status: [installed] tag for already-installed plugins",
+        "If remote registry configured: searches both local and remote",
+        "If no remote: searches local only with message about configuring remote"
+      ],
+      "priority": 5,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-004. Simple CLI wrapper around Marketplace.search()."
+    },
+    {
+      "id": "US-006",
+      "title": "Remote plugin install from git URL",
+      "description": "Extend 'up plugin install' to support git URLs, cloning the plugin repo into .up/plugins/installed/.",
+      "acceptanceCriteria": [
+        "'up plugin install https://github.com/user/my-plugin.git' clones repo",
+        "'up plugin install github:user/my-plugin' shorthand syntax supported",
+        "Clones to temp dir first, validates plugin.json, then moves to .up/plugins/installed/",
+        "Records source URL in registry.json for update tracking",
+        "Error handling: invalid URL, missing plugin.json, network failure",
+        "Auto-runs 'up sync' after install"
+      ],
+      "priority": 6,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on Phase 1 US-011. Extends local install to support remote sources."
+    },
+    {
+      "id": "US-007",
+      "title": "Skill pipeline orchestration: learn -> product-loop",
+      "description": "Add automatic handoff between the learning system and product loop. When 'up learn' generates a prd.json, the product loop auto-detects and offers to start execution.",
+      "acceptanceCriteria": [
+        "After 'up learn auto' completes and writes prd.json: prompt user 'PRD ready. Start product loop? [y/n]'",
+        "If yes: automatically invoke 'up start' with the generated prd.json",
+        "Add --auto-start flag to 'up learn': skips prompt, starts loop immediately",
+        "Product loop's OBSERVE phase checks for prd.json freshness (modified within last hour)",
+        "If prd.json is stale: warns user and asks to confirm",
+        "Emit LEARNING_COMPLETE event when learn finishes, LOOP_START event when product loop begins",
+        "Integration test: mock learn output, verify loop starts with correct PRD"
+      ],
+      "priority": 7,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Closes the gap between research and execution. The full pipeline: learn -> prd.json -> product-loop."
+    },
+    {
+      "id": "US-008",
+      "title": "Bisect skill as plugin",
+      "description": "Package the existing 'up bisect' functionality as a plugin with a slash command, making it available inside AI coding sessions.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/installed/bisect/ with plugin.json",
+        "Create commands/bisect.md slash command: walks through UP checkpoints to find which change broke tests",
+        "Command accepts: test command to run at each checkpoint (default from .up/config.json)",
+        "Uses existing bisect.py logic, wrapped as plugin command",
+        "Output: Rich display showing checkpoint walk with pass/fail at each step",
+        "Final output: 'Regression introduced in checkpoint {hash}: {commit message}'",
+        "Works with both Claude Code and Cursor"
+      ],
+      "priority": 8,
+      "effort": "low",
+      "passes": false,
+      "notes": "Simple packaging of existing functionality as a plugin."
+    },
+    {
+      "id": "US-009",
+      "title": "Plugin template for 'up new'",
+      "description": "Add a 'claude-code-plugin' template to 'up new' that scaffolds a complete plugin with example command, hook, rule, and tests.",
+      "acceptanceCriteria": [
+        "Create src/up/templates/projects/plugin/ with template files",
+        "'up new my-plugin --template plugin' creates a standalone plugin project",
+        "Template includes: plugin.json, commands/example.md, hooks/hooks.json + example hook, rules/example-rule.md, tests/, README.md",
+        "README explains plugin structure, how to test, how to install",
+        "Example hook is a working Python script with JSON stdin/stdout",
+        "Example rule is a working Markdown rule that warns on TODO comments"
+      ],
+      "priority": 9,
+      "effort": "low",
+      "passes": false,
+      "notes": "Lowers barrier to plugin creation. Template teaches by example."
+    }
+  ]
+}

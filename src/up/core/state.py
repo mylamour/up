@@ -55,6 +55,15 @@ class UpConfig:
     default_ai_timeout_seconds: int = 600  # 10 minutes
     ai_max_prompt_chars: int = 10000  # Truncation limit for prompt content
     
+    # Verification timeouts (seconds)
+    verify_test_timeout: int = 300
+    verify_lint_timeout: int = 60
+    verify_type_check_timeout: int = 120
+    
+    # Verification policy: which checks must pass to proceed
+    # Options: "tests", "lint", "types"
+    verify_required_checks: List[str] = field(default_factory=lambda: ["tests", "lint", "types"])
+    
     # Parallel execution
     default_parallel_workers: int = 3
     

@@ -212,13 +212,12 @@ def _install_hooks(hooks_dir: Path):
     post_commit = hooks_dir / "post-commit"
     post_commit_content = '''#!/bin/bash
 # up-cli auto-sync hook
-# Indexes commits to memory automatically
+# Indexes commits to memory automatically via internal runtime
 
-# Run synchronously to avoid macOS fork + C-extension crashes
-if command -v up &> /dev/null; then
-    up memory sync 2>/dev/null
-elif command -v python3 &> /dev/null; then
-    python3 -m up.memory sync 2>/dev/null
+if command -v python3 &> /dev/null; then
+    python3 -m up._hook_runtime memory 2>/dev/null
+elif command -v python &> /dev/null; then
+    python -m up._hook_runtime memory 2>/dev/null
 fi
 
 exit 0
@@ -231,7 +230,7 @@ exit 0
     post_checkout = hooks_dir / "post-checkout"
     post_checkout_content = '''#!/bin/bash
 # up-cli context update hook
-# Updates context when switching branches
+# Updates context when switching branches via internal runtime
 
 PREV_HEAD=$1
 NEW_HEAD=$2
@@ -239,8 +238,10 @@ BRANCH_CHECKOUT=$3
 
 # Only run on branch checkout, not file checkout
 if [ "$BRANCH_CHECKOUT" = "1" ]; then
-    if command -v up &> /dev/null; then
-        up sync --no-memory 2>/dev/null
+    if command -v python3 &> /dev/null; then
+        python3 -m up._hook_runtime context 2>/dev/null
+    elif command -v python &> /dev/null; then
+        python -m up._hook_runtime context 2>/dev/null
     fi
 fi
 

@@ -1,94 +1,219 @@
 {
-  "project": "Up-CLI Phase 6-8 Advancements",
-  "branchName": "feature/phase6-8-architecture",
-  "description": "Upgrade up-cli to v1.0.0 with state unification, smart merge, and AST analysis",
-  "createdAt": "2026-02-21T12:00:00Z",
+  "project": "UP Platform Phase 1: Plugin System & Hook Pipeline",
+  "branchName": "feature/plugin-system",
+  "description": "Add a declarative plugin system with auto-discovery, polyglot hook pipeline, and Markdown rules engine to up-cli. This transforms up-cli from a closed Python tool into an extensible platform.",
+  "createdAt": "2026-02-24T12:00:00Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Isolate Verification Environment (Phase 6.2)",
-      "description": "Modify verification.py to invoke pytest and ruff using the current Python executable to prevent environment leaks.",
+      "title": "Plugin manifest schema and directory structure",
+      "description": "Define the plugin.json schema and standard directory layout. Create the PluginManifest dataclass and validation logic. Plugins live in .up/plugins/ with auto-discovery by convention.",
       "acceptanceCriteria": [
-        "subprocess.run in run_verification_with_results uses [sys.executable, '-m', 'pytest'] instead of just ['pytest']",
-        "subprocess.run uses [sys.executable, '-m', 'ruff'] instead of just ['ruff']",
-        "Tests still pass and verify correctly"
+        "Create src/up/plugins/__init__.py and src/up/plugins/manifest.py",
+        "PluginManifest dataclass with fields: name, version, description, author, engines (list), category (enum: safety|productivity|quality|learning)",
+        "Validation: name must be kebab-case, version must be semver, engines defaults to ['all']",
+        "from_json(path) class method that reads and validates plugin.json",
+        "Unit tests in tests/test_plugin_manifest.py"
       ],
       "priority": 1,
       "effort": "low",
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Foundation for everything else. Keep it minimal — just the data model."
     },
     {
       "id": "US-002",
-      "title": "Unify Worktree State (Phase 6.1)",
-      "description": "Deprecate .agent_state.json in individual worktrees. WorktreeState should read and write directly to the main .up/state.json using StateManager.",
+      "title": "Plugin loader with auto-discovery",
+      "description": "Create PluginLoader that scans .up/plugins/installed/ and .up/plugins/builtin/ directories, reads plugin.json from each, and builds a registry of available plugins with their components (commands/, hooks/, rules/, agents/, skills/).",
       "acceptanceCriteria": [
-        "WorktreeState.load and WorktreeState.save use get_state_manager().state.agents dictionary",
-        "Individual .agent_state.json files are no longer created in .worktrees/*",
-        "Parallel execution manager can still track active worktrees accurately"
+        "Create src/up/plugins/loader.py with PluginLoader class",
+        "discover_plugins(workspace: Path) -> List[LoadedPlugin] scans both installed/ and builtin/ dirs",
+        "LoadedPlugin dataclass holds: manifest, path, components dict (commands=[], hooks=[], rules=[], agents=[], skills=[])",
+        "Components auto-discovered by scanning subdirectories: *.md in commands/, hooks.json in hooks/, *.md in rules/",
+        "Graceful handling: skip plugins with invalid manifests, log warnings",
+        "Unit tests with temp directory fixtures in tests/test_plugin_loader.py"
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": true,
-      "notes": "Need to update src/up/git/worktree.py"
+      "passes": false,
+      "notes": "This is the core discovery mechanism. No execution yet — just finding and cataloging plugins."
     },
     {
       "id": "US-003",
-      "title": "Abstract AIEngine Interface (Phase 7.1)",
-      "description": "Create an AIEngine interface to decouple AI calls from CLI specifics. Move current subprocess logic into CliEngine.",
+      "title": "Plugin registry with enable/disable state",
+      "description": "Create PluginRegistry that persists plugin state (enabled/disabled) in .up/plugins/registry.json. Provides lookup methods for active plugins and their components.",
       "acceptanceCriteria": [
-        "Create src/up/ai/engine.py with an abstract base class AIEngine",
-        "Implement CliEngine(AIEngine) that wraps the existing claude/agent subprocess calls",
-        "Refactor src/up/ai_cli.py to use the new Engine classes",
-        "Tests still pass"
+        "Create src/up/plugins/registry.py with PluginRegistry class",
+        "registry.json schema: {plugins: [{name, version, enabled, installed_at, source}]}",
+        "Methods: get_enabled() -> List[LoadedPlugin], is_enabled(name) -> bool, enable(name), disable(name)",
+        "load() reads registry.json + runs PluginLoader.discover_plugins(), merges state",
+        "save() writes registry.json atomically (temp file + os.replace, same pattern as StateManager)",
+        "New plugins found on disk are auto-registered as enabled",
+        "Unit tests in tests/test_plugin_registry.py"
       ],
       "priority": 3,
       "effort": "medium",
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Depends on US-001 and US-002. Uses same atomic write pattern as core/state.py."
     },
     {
       "id": "US-004",
-      "title": "AI-Driven Merge Conflict Resolution (Phase 7.3)",
-      "description": "Enhance parallel worktree merging to automatically resolve Git conflicts using the AIEngine.",
+      "title": "CLI commands: up plugin list|enable|disable",
+      "description": "Add 'up plugin' command group with list, enable, and disable subcommands. Uses Rich tables for display.",
       "acceptanceCriteria": [
-        "If merge_worktree encounters a Git conflict, it extracts the files with conflict markers (<<<<<<< HEAD)",
-        "Sends the conflicted file content to AIEngine to resolve the conflict intelligently",
-        "Applies the resolved code, runs `git add`, and finalizes the merge",
-        "Fails only if AI cannot resolve it"
+        "Create src/up/commands/plugin.py with Click command group",
+        "Register in cli.py: main.add_command(plugin_group)",
+        "'up plugin list' shows table: Name | Version | Status | Category | Components",
+        "'up plugin enable <name>' enables a disabled plugin",
+        "'up plugin disable <name>' disables an enabled plugin",
+        "Rich formatting: enabled=green, disabled=dim, component counts shown",
+        "Error handling: unknown plugin name shows helpful message"
       ],
       "priority": 4,
-      "effort": "high",
-      "passes": true,
-      "notes": "Modifies parallel_scheduler.py and worktree.py"
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-003. Simple CLI wrapper around PluginRegistry."
     },
     {
       "id": "US-005",
-      "title": "AST-Based Code Analysis (Phase 8.1)",
-      "description": "Upgrade ProjectAnalyzer to use Python's `ast` module instead of Regex for more accurate detection of patterns and frameworks.",
+      "title": "Plugin scaffold command: up plugin create",
+      "description": "Add 'up plugin create <name>' that scaffolds a new plugin directory with plugin.json, empty component directories, and a README.",
       "acceptanceCriteria": [
-        "Refactor `_detect_patterns` in src/up/learn/analyzer.py to use `ast.parse` for Python files",
-        "Accurately detects classes, functions, and decorators (e.g. @dataclass, Repository, Service)",
-        "Regex fallback is only used for non-Python files"
+        "Add 'create' subcommand to plugin group in src/up/commands/plugin.py",
+        "'up plugin create my-plugin' creates .up/plugins/installed/my-plugin/ with: plugin.json, commands/, hooks/, rules/, README.md",
+        "plugin.json pre-filled with name, version 0.1.0, empty description",
+        "README.md has basic structure explaining each directory",
+        "Auto-registers in registry as enabled",
+        "Error if plugin name already exists"
       ],
       "priority": 5,
-      "effort": "medium",
-      "passes": true,
-      "notes": ""
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-003. Lowers barrier to creating plugins."
     },
     {
       "id": "US-006",
-      "title": "E2E Loop Validation Tests (Phase 8.2)",
-      "description": "Add End-to-End tests simulating the full SESRC loop using a mocked AIEngine.",
+      "title": "Hook pipeline runner with JSON I/O",
+      "description": "Create HookRunner that executes hook scripts (any language) via subprocess with JSON stdin and exit code semantics. This is the polyglot execution layer.",
       "acceptanceCriteria": [
-        "Create tests/test_e2e_loop.py",
-        "Test successful loop: Observe -> Checkpoint -> Mock AI writes code -> Verify passes -> Commit",
-        "Test failure loop: Mock AI writes syntax error -> Verify fails -> Rollback -> Doom loop triggered"
+        "Create src/up/plugins/hooks.py with HookRunner class",
+        "HookSpec dataclass: type (command|prompt), command (str), timeout (int, default 10), matcher (optional regex)",
+        "run_hook(spec, event_data: dict) -> HookResult where HookResult has: allowed (bool), message (str), exit_code (int)",
+        "Passes event_data as JSON via stdin to subprocess",
+        "Exit code semantics: 0=allow, 1=warn (log stderr, continue), 2=block (log stderr, halt)",
+        "Timeout enforcement via subprocess timeout parameter",
+        "Handles missing commands, permission errors, and crashes gracefully",
+        "Unit tests with simple bash/python test hooks in tests/test_hook_runner.py"
       ],
       "priority": 6,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Core execution engine for hooks. Language-agnostic via JSON stdin/stdout."
+    },
+    {
+      "id": "US-007",
+      "title": "Hook pipeline integration with EventBridge",
+      "description": "Wire HookRunner into the existing EventBridge so that plugin hooks are automatically invoked when matching events fire. Add new EventTypes for hook lifecycle.",
+      "acceptanceCriteria": [
+        "Add EventTypes to events.py: PRE_TOOL_USE, POST_TOOL_USE, PRE_EXECUTE, POST_EXECUTE",
+        "Create src/up/plugins/bridge.py with PluginEventBridge that connects PluginRegistry hooks to EventBridge",
+        "On EventBridge.emit(), matching plugin hooks are executed via HookRunner",
+        "Hook matcher field filters by event data (e.g., tool_name regex match)",
+        "If any hook returns exit_code=2, the event is marked as blocked",
+        "Hook results are logged to event_log for observability",
+        "Integration test: register a test hook, emit event, verify hook was called"
+      ],
+      "priority": 7,
       "effort": "high",
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Depends on US-003 and US-006. This is the key integration point between the plugin system and up-cli's existing event architecture."
+    },
+    {
+      "id": "US-008",
+      "title": "Markdown rules engine",
+      "description": "Create RulesEngine that parses Markdown rule files (YAML frontmatter + body) and converts them into hook-like event handlers. Rules are the simplest extension point — no code required.",
+      "acceptanceCriteria": [
+        "Create src/up/plugins/rules.py with RulesEngine class",
+        "RuleSpec dataclass: name, event (str), pattern (regex), action (block|warn|allow), confidence (int 0-100), message (str from markdown body)",
+        "parse_rule(path: Path) -> RuleSpec reads .md file, extracts YAML frontmatter and body",
+        "evaluate(rule: RuleSpec, event_data: dict) -> HookResult applies regex pattern to event data, returns result based on action",
+        "RulesEngine.load_rules(plugin_path) discovers all .md files in rules/ directory",
+        "Integration with PluginEventBridge: rules are treated as lightweight hooks",
+        "Unit tests with sample rule files in tests/test_rules_engine.py"
+      ],
+      "priority": 8,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-006. Uses same HookResult type. YAML frontmatter parsing via PyYAML (already a dependency)."
+    },
+    {
+      "id": "US-009",
+      "title": "Builtin safety plugin: checkpoint and circuit breaker hooks",
+      "description": "Refactor existing checkpoint and circuit breaker logic into a builtin plugin that ships with UP. This proves the plugin system works with real functionality.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/safety/ with plugin.json and hooks/",
+        "Pre-execute hook: auto-creates checkpoint before AI operations (wraps existing checkpoint.py logic)",
+        "Post-execute hook: checks circuit breaker state, blocks if OPEN (wraps existing state.py logic)",
+        "Hook implementations in Python, invoked via HookRunner",
+        "Existing up save/reset/start commands still work (they call the same underlying logic)",
+        "Integration test: emit PRE_EXECUTE event, verify checkpoint created"
+      ],
+      "priority": 9,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-007. This is the proof-of-concept: existing up-cli safety features running as plugins."
+    },
+    {
+      "id": "US-010",
+      "title": "Builtin verify plugin: test/lint/typecheck hooks",
+      "description": "Refactor existing verification logic into a builtin plugin with confidence-based scoring instead of binary pass/fail.",
+      "acceptanceCriteria": [
+        "Create .up/plugins/builtin/verify/ with plugin.json and hooks/",
+        "Post-tool-use hook: runs configured test/lint/typecheck commands after file modifications",
+        "VerifyResult includes confidence score (0-100) based on: all pass=100, lint warnings=80, test failures=20, crash=0",
+        "Configurable threshold in .up/config.json: verify.min_confidence (default 70)",
+        "Below threshold: blocks commit. Above threshold: allows with warnings logged.",
+        "Hook reads verification commands from .up/config.json (test_cmd, lint_cmd, typecheck_cmd)",
+        "Unit tests in tests/test_verify_plugin.py"
+      ],
+      "priority": 10,
+      "effort": "medium",
+      "passes": false,
+      "notes": "Depends on US-007. Upgrades binary pass/fail to confidence scoring (from claude-code's code-reviewer pattern)."
+    },
+    {
+      "id": "US-011",
+      "title": "Plugin install command: up plugin install <path>",
+      "description": "Add 'up plugin install' that copies a plugin from a local path into .up/plugins/installed/ and registers it.",
+      "acceptanceCriteria": [
+        "Add 'install' subcommand to plugin group",
+        "'up plugin install /path/to/my-plugin' copies directory to .up/plugins/installed/",
+        "'up plugin install ./my-plugin' works with relative paths",
+        "Validates plugin.json exists and is valid before copying",
+        "Auto-registers in registry as enabled",
+        "Error if plugin with same name already installed (suggest --force flag)",
+        "Shows success message with plugin name and component summary"
+      ],
+      "priority": 11,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-003. Simple file copy + registry update. Remote install (git URLs) is a future enhancement."
+    },
+    {
+      "id": "US-012",
+      "title": "up init generates plugin directory structure",
+      "description": "Update the existing 'up init' command to create the .up/plugins/ directory structure and install builtin plugins.",
+      "acceptanceCriteria": [
+        "Modify src/up/commands/init.py to create .up/plugins/installed/ and .up/plugins/builtin/ directories",
+        "Copy builtin plugins (safety, verify) into .up/plugins/builtin/ on init",
+        "Create initial registry.json with builtin plugins enabled",
+        "Existing init functionality (state.json, config.json, docs/) unchanged",
+        "Idempotent: running init again doesn't duplicate plugins",
+        "Update init output to show plugin count"
+      ],
+      "priority": 12,
+      "effort": "low",
+      "passes": false,
+      "notes": "Depends on US-009 and US-010. Final integration step that ties everything together."
     }
   ]
 }

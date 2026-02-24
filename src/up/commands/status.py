@@ -19,7 +19,12 @@ console = Console()
     is_flag=True,
     help="Output as JSON",
 )
-def status_cmd(as_json: bool):
+@click.option(
+    "--verbose", "-v",
+    is_flag=True,
+    help="Include provenance summary",
+)
+def status_cmd(as_json: bool, verbose: bool):
     """Show current status of all up systems.
     
     Displays health information for:
@@ -27,17 +32,21 @@ def status_cmd(as_json: bool):
     - Circuit breaker states
     - Product loop progress
     - Learning system state
+    
+    Use --verbose for provenance summary.
     """
     cwd = Path.cwd()
     
     status = collect_status(cwd)
+
+    if verbose:
+        status["provenance"] = _collect_provenance_summary(cwd)
     
     if as_json:
         console.print(json.dumps(status, indent=2))
         return
     
-    # Display rich formatted output
-    display_status(status)
+    display_status(status, verbose=verbose)
 
 
 def collect_status(workspace: Path) -> dict:
@@ -323,7 +332,7 @@ def display_status(status: dict) -> None:
         commit = mem.get("commit", "unknown")
         console.print(f"  📚 {total} entries | Branch: [cyan]{branch}[/] @ {commit}")
     else:
-        console.print("  [dim]Not initialized - run [cyan]up memory sync[/][/]")
+        console.print("  [dim]Not initialized — memory builds automatically via git hooks[/]")
     
     # Git Hooks
     console.print("\n[bold]Auto-Sync (Git Hooks)[/]")
@@ -340,10 +349,10 @@ def display_status(status: dict) -> None:
                 console.print("    • Missing: post-commit hook")
             if not post_checkout:
                 console.print("    • Missing: post-checkout hook")
-            console.print("\n  [dim]Run [cyan]up hooks[/] to install missing hooks[/]")
+            console.print("\n  [dim]Run [cyan]up init[/] to reinstall missing hooks[/]")
     else:
         console.print("  [yellow]✗ Not installed[/]")
-        console.print("  [dim]Run [cyan]up hooks[/] to enable auto-sync on commits[/]")
+        console.print("  [dim]Run [cyan]up init --hooks[/] to enable auto-sync on commits[/]")
     
     # Skills
     console.print("\n[bold]Skills[/]")

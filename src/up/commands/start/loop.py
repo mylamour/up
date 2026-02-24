@@ -8,6 +8,7 @@ import logging
 import signal
 import sys
 import time
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,7 @@ from tqdm import tqdm
 from up.ai_cli import run_ai_task
 from up.core.state import get_state_manager, StateManager
 from up.core.provenance import get_provenance_manager, ProvenanceEntry
+from up.core.prd_schema import load_prd, PRDValidationError
 from up.ui import ProductLoopDisplay, TaskStatus
 from up.ui.loop_display import LoopStatus
 
@@ -35,7 +37,7 @@ from up.commands.start.helpers import (
     build_implement_prompt,
 )
 from up.commands.start.verification import (
-    run_verification_with_results,
+    run_full_verification,
     get_modified_files,
     get_diff_summary,
     commit_changes,
@@ -267,18 +269,24 @@ def run_ai_product_loop(
         all_tasks = tasks_to_run
     elif task_source and task_source.endswith(".json"):
         prd_path = workspace / task_source
-        if prd_path.exists():
-            try:
-                data = json.loads(prd_path.read_text())
-                stories = data.get("userStories", [])
-                all_tasks = stories
-                for story in stories:
-                    if not story.get("passes", False):
-                        tasks_to_run.append(story)
-                        if not run_all:
-                            break
-            except json.JSONDecodeError:
-                pass
+        try:
+            prd = load_prd(prd_path)
+        except PRDValidationError as exc:
+            console.print(f"\n[red]PRD Error:[/] {exc}")
+            console.print("[dim]Fix the PRD file and retry: up start[/]")
+            return
+
+        if not prd.userStories:
+            console.print("\n[yellow]PRD has no user stories.[/]")
+            console.print(f"[dim]Add stories to {task_source} and retry.[/]")
+            return
+
+        all_tasks = [asdict(s) for s in prd.userStories]
+        for story in prd.userStories:
+            if not story.passes:
+                tasks_to_run.append(asdict(story))
+                if not run_all:
+                    break
 
     if not tasks_to_run:
         console.print("\n[green]✓[/] All tasks completed!")
@@ -314,7 +322,13 @@ def run_ai_product_loop(
             # Checkpoint
             display.log(f"Creating checkpoint for {task_id}...")
             checkpoint_name = f"cp-{task_id}-{_state_manager.state.loop.iteration}"
-            create_checkpoint(workspace, checkpoint_name, task_id=task_id)
+            cp_ok = create_checkpoint(workspace, checkpoint_name, task_id=task_id)
+            if not cp_ok:
+                display.log_error(f"Checkpoint failed for {task_id} — skipping (no safety net)")
+                failed += 1
+                display.update_task_status(task_id, TaskStatus.FAILED)
+                _state_manager.record_task_failed(task_id)
+                continue
             display.log_success(f"Checkpoint: {checkpoint_name}")
 
             # Phase 1: Research
@@ -411,22 +425,23 @@ def run_ai_product_loop(
                 verification_passed = True
                 tests_passed = None
                 lint_passed = None
+                type_check_passed = None
 
                 if verify:
                     display.set_phase("VERIFY")
                     display.set_status(LoopStatus.VERIFYING)
-                    display.log("Running tests and linting...")
-                    tests_passed, lint_passed = run_verification_with_results(workspace)
-                    verification_passed = tests_passed is not False
-                    
+                    display.log("Running verification (tests + lint + types)...")
+                    vresult = run_full_verification(workspace)
+                    tests_passed = vresult.tests_passed
+                    lint_passed = vresult.lint_passed
+                    type_check_passed = vresult.type_check_passed
+
+                    required = _state_manager.config.verify_required_checks
+                    verification_passed = vresult.all_required_passed(required)
+
                     if verification_passed:
-                        parts = []
-                        if tests_passed:
-                            parts.append("tests passed")
-                        if lint_passed:
-                            parts.append("lint clean")
+                        parts = vresult.summary_parts()
                         display.log_success(f"Verification: {', '.join(parts) or 'ok'}")
-                    
 
                     if not verification_passed:
                         display.log_warning(f"Verification failed for {task_id}")
@@ -470,6 +485,7 @@ def run_ai_product_loop(
                             files_modified=modified_files,
                             tests_passed=tests_passed,
                             lint_passed=lint_passed,
+                            type_check_passed=type_check_passed,
                             status="accepted",
                         )
                     except Exception as exc:
