@@ -48,8 +48,8 @@ class UpConfig:
     
     # Context budget
     context_budget_tokens: int = 100_000
-    context_warning_threshold: float = 0.8  # 80%
-    context_critical_threshold: float = 0.9  # 90%
+    context_warning_threshold: float = 0.4  # 40%
+    context_critical_threshold: float = 0.8  # 80%
     
     # AI execution
     default_ai_timeout_seconds: int = 600  # 10 minutes

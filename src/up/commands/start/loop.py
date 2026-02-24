@@ -428,6 +428,22 @@ def run_ai_product_loop(
                 display.set_status(LoopStatus.RUNNING)
                 _state_manager.update_loop(phase="COMMIT", current_task=task_id)
 
+                # Intentional Compaction (V1-020)
+                from up.context import ContextManager
+                ctx_mgr = ContextManager(workspace)
+                if ctx_mgr.budget.usage_percent >= ctx_mgr.budget.warning_threshold * 100:
+                    display.log("Context budget high. Generating progress handoff...")
+                    progress_file = workspace / ".up/thoughts/progress.md"
+                    progress_file.parent.mkdir(parents=True, exist_ok=True)
+                    prompt = (
+                        f"We just completed task {task_id}. The context budget is at {ctx_mgr.budget.usage_percent:.1f}%.\n"
+                        "Please summarize our progress so far: what's done, what's next, and relevant files.\n"
+                        "Write this summary to '.up/thoughts/progress.md' so a new session can resume."
+                    )
+                    run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+                    display.log("Progress saved. Resetting context...")
+                    ctx_mgr.reset()
+
                 # Commit
                 if auto_commit:
                     should_commit = True

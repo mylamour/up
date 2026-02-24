@@ -601,8 +601,8 @@ def _create_loop_state(target_dir: Path, force: bool) -> None:
   "circuit_breaker_failure_threshold": 3,
   "checkpoint_retention_count": 50,
   "context_budget": 100000,
-  "context_warning_threshold": 0.8,
-  "context_critical_threshold": 0.9,
+  "context_warning_threshold": 0.4,
+  "context_critical_threshold": 0.8,
   "ai_timeout_seconds": 600,
   "parallel_max_workers": 3
 }

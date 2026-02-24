@@ -276,11 +276,16 @@ def build_research_prompt(workspace: Path, task: dict, task_source: str) -> str:
     task_title = task.get("title", "")
     task_desc = task.get("description", task_title)
 
+    progress_md = workspace / ".up/thoughts/progress.md"
+    progress_info = ""
+    if progress_md.exists():
+        progress_info = f"\n\nPrevious Progress Handoff:\n{progress_md.read_text()}\n"
+
     return f"""PHASE 1: RESEARCH
 
 Task ID: {task_id}
 Title: {task_title}
-Description: {task_desc}
+Description: {task_desc}{progress_info}
 
 Your objective is to thoroughly research the codebase to understand how to implement this task.
 Do NOT make any code changes yet.
