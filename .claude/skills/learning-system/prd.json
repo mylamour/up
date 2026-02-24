@@ -369,7 +369,8 @@
       "phase": "phase3",
       "priority": "medium",
       "effort": "low",
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-24"
     },
     {
       "id": "V1-020",
@@ -415,8 +416,8 @@
   },
   "metadata": {
     "total_tasks": 20,
-    "completed": 15,
-    "pending": 5,
+    "completed": 16,
+    "pending": 4,
     "phases": {
       "phase1": "8 tasks \u2014 Simplify CLI Surface",
       "phase2": "3 tasks \u2014 Stabilize Core Loop (+ ACE-FCA workflow)",

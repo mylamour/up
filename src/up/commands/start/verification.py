@@ -38,13 +38,21 @@ def run_verification_with_results(workspace: Path) -> Tuple[Optional[bool], Opti
     # Check if pytest exists and run tests
     try:
         pytest_result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--tb=no", "-q"],
+            [sys.executable, "-m", "pytest", "-x", "-q", "--tb=short"],
             cwd=workspace,
             capture_output=True,
+            text=True,
             timeout=300,
         )
         if pytest_result.returncode == 0:
-            console.print("  [green]✓[/] Tests passed")
+            passed_count = ""
+            for line in pytest_result.stdout.splitlines():
+                if " passed" in line and " in " in line:
+                    # e.g., "185 passed in 7.00s" -> "(185 passed)"
+                    count = line.split(" passed")[0].strip()
+                    passed_count = f" ({count} passed)"
+                    break
+            console.print(f"  [green]✓[/] Tests passed{passed_count}")
             tests_passed = True
         elif pytest_result.returncode == 5:
             # No tests collected - that's OK
@@ -52,6 +60,7 @@ def run_verification_with_results(workspace: Path) -> Tuple[Optional[bool], Opti
             tests_passed = None
         else:
             console.print("  [red]✗[/] Tests failed")
+            console.print(pytest_result.stdout)
             tests_passed = False
     except FileNotFoundError:
         console.print("  [dim]○[/] pytest not installed")
@@ -63,9 +72,10 @@ def run_verification_with_results(workspace: Path) -> Tuple[Optional[bool], Opti
     # Check for lint (optional - don't fail if not installed)
     try:
         ruff_result = subprocess.run(
-            [sys.executable, "-m", "ruff", "check", ".", "--quiet"],
+            [sys.executable, "-m", "ruff", "check", "."],
             cwd=workspace,
             capture_output=True,
+            text=True,
             timeout=60,
         )
         if ruff_result.returncode == 0:
@@ -73,6 +83,7 @@ def run_verification_with_results(workspace: Path) -> Tuple[Optional[bool], Opti
             lint_passed = True
         else:
             console.print("  [yellow]⚠[/] Lint warnings")
+            console.print(ruff_result.stdout)
             lint_passed = False  # Track but don't fail
     except FileNotFoundError:
         lint_passed = None  # ruff not installed, skip
