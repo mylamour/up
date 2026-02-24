@@ -2,7 +2,7 @@
 
 > AI Instructions for Claude Code
 
-**Version**: 0.5.0
+**Version**: 1.0.0
 **Updated**: 2026-02-04
 **Min Claude Version**: 2024.01
 
