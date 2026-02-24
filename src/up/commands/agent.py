@@ -332,7 +332,8 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
     if commits == 0:
         console.print("\n[yellow]No commits to merge[/]")
         if not keep:
-            if click.confirm("Remove worktree anyway?"):
+            from rich.prompt import Confirm
+            if Confirm.ask("Remove worktree anyway?", default=False):
                 _remove_worktree(cwd, name, agent_branch)
         return
     
@@ -471,7 +472,8 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
         branch = agent.branch if agent else make_branch_name(name)
         
         if not force:
-            if not click.confirm(f"Remove agent '{name}'?"):
+            from rich.prompt import Confirm
+            if not Confirm.ask(f"Remove agent '{name}'?", default=False):
                 return
         
         _remove_worktree(cwd, name, branch)
@@ -481,7 +483,8 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
     elif cleanup_all:
         # Remove all agents
         if not force:
-            if not click.confirm(f"Remove all {len(agents)} agents?"):
+            from rich.prompt import Confirm
+            if not Confirm.ask(f"Remove all {len(agents)} agents?", default=False):
                 return
         
         for task_id, agent in agents.items():

@@ -334,7 +334,8 @@ def run_ai_product_loop(
             if success and not auto_approve:
                 display.stop()
                 console.print(f"\n[bold]Plan for {task_id} generated at .up/thoughts/plan.md[/]")
-                if not click.confirm("Proceed with implementation?"):
+                from rich.prompt import Confirm
+                if not Confirm.ask("Proceed with implementation?", default=False):
                     console.print("[yellow]Rolling back...[/]")
                     rollback_checkpoint(workspace)
                     failed += 1
@@ -388,7 +389,8 @@ def run_ai_product_loop(
 
                         if interactive:
                             display.stop()
-                            if not click.confirm("Continue anyway?"):
+                            from rich.prompt import Confirm
+                            if not Confirm.ask("Continue anyway?", default=False):
                                 console.print("[yellow]Rolling back...[/]")
                                 rollback_checkpoint(workspace)
                                 failed += 1
@@ -451,7 +453,8 @@ def run_ai_product_loop(
                         display.stop()
                         console.print("\n[bold]Phase: COMMIT[/]")
                         console.print(get_diff_summary(workspace))
-                        should_commit = click.confirm("Commit changes?")
+                        from rich.prompt import Confirm
+                        should_commit = Confirm.ask("Commit changes?", default=True)
                         display.start()
 
                     if should_commit:

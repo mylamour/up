@@ -122,7 +122,8 @@ def start_cmd(
         raise SystemExit(1)
 
     if interactive and not dry_run:
-        if not click.confirm("\nStart the product loop?"):
+        from rich.prompt import Confirm
+        if not Confirm.ask("\nStart the product loop?", default=True):
             console.print("[dim]Cancelled[/]")
             return
 

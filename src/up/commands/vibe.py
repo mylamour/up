@@ -163,7 +163,8 @@ def reset_cmd(checkpoint_id: str, hard: bool, soft: bool, list_checkpoints: bool
         
         # Confirm
         if not yes:
-            if not click.confirm("Proceed with reset?"):
+            from rich.prompt import Confirm
+            if not Confirm.ask("Proceed with reset?", default=False):
                 console.print("[dim]Cancelled[/]")
                 return
         
