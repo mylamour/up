@@ -9,20 +9,20 @@ Usage:
 """
 
 from up.parallel.executor import (
-    TaskResult,
     ParallelExecutionManager,
-    get_pending_tasks,
+    TaskResult,
     execute_task_in_worktree,
-    verify_worktree,
+    get_pending_tasks,
     mark_task_complete_in_prd,
+    verify_worktree,
 )
 from up.parallel.scheduler import (
-    build_dependency_graph,
-    get_execution_waves,
-    TaskFileMap,
-    SharedKnowledge,
     AgentProgress,
     ParallelDashboard,
+    SharedKnowledge,
+    TaskFileMap,
+    build_dependency_graph,
+    get_execution_waves,
     partial_merge,
     run_enhanced_parallel_loop,
 )

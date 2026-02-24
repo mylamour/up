@@ -14,37 +14,32 @@ import json
 import subprocess
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from graphlib import TopologicalSorter, CycleError
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
+from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
-from typing import Optional, List, Dict, Set, Any
+from typing import Any
 
 from rich.console import Console
-from rich.live import Live
-from rich.table import Table
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.layout import Layout
-from rich.text import Text
+from rich.live import Live
+from rich.panel import Panel
+from rich.table import Table
 
+from up.ai_cli import check_ai_cli
+from up.git.utils import run_git
 from up.git.worktree import (
     create_worktree,
-    remove_worktree,
     merge_worktree,
-    WorktreeState,
 )
-from up.git.utils import run_git, is_git_repo, get_current_branch
-from up.ai_cli import check_ai_cli, run_ai_task
-from up.core.state import get_state_manager, AgentState
 from up.parallel.executor import (
     ParallelExecutionManager,
     TaskResult,
     execute_task_in_worktree,
-    verify_worktree,
-    mark_task_complete_in_prd,
     get_pending_tasks,
+    mark_task_complete_in_prd,
+    verify_worktree,
 )
 
 console = Console()
@@ -55,7 +50,7 @@ console = Console()
 # =============================================================================
 
 
-def build_dependency_graph(tasks: List[dict]) -> Dict[str, Set[str]]:
+def build_dependency_graph(tasks: list[dict]) -> dict[str, set[str]]:
     """Build a dependency graph from PRD tasks.
 
     Args:
@@ -78,7 +73,7 @@ def build_dependency_graph(tasks: List[dict]) -> Dict[str, Set[str]]:
     return graph
 
 
-def get_execution_waves(tasks: List[dict]) -> List[List[dict]]:
+def get_execution_waves(tasks: list[dict]) -> list[list[dict]]:
     """Schedule tasks into parallel execution waves respecting dependencies.
 
     Uses topological sort to find tasks that can run simultaneously.
@@ -131,24 +126,28 @@ class TaskFileMap:
     Uses heuristics from task descriptions and acceptance criteria
     to predict which files each task will touch.
     """
-    task_files: Dict[str, Set[str]] = field(default_factory=dict)
 
-    def analyze_task(self, task: dict, workspace: Path) -> Set[str]:
+    task_files: dict[str, set[str]] = field(default_factory=dict)
+
+    def analyze_task(self, task: dict, workspace: Path) -> set[str]:
         """Predict files a task will modify based on its description."""
         task_id = task.get("id", "")
         files = set()
 
-        text = " ".join([
-            task.get("description", ""),
-            task.get("title", ""),
-            " ".join(task.get("acceptanceCriteria", [])),
-        ])
+        text = " ".join(
+            [
+                task.get("description", ""),
+                task.get("title", ""),
+                " ".join(task.get("acceptanceCriteria", [])),
+            ]
+        )
 
         import re
-        path_patterns = re.findall(r'[\w/]+\.(?:py|ts|js|json|md|yaml|yml)', text)
+
+        path_patterns = re.findall(r"[\w/]+\.(?:py|ts|js|json|md|yaml|yml)", text)
         files.update(path_patterns)
 
-        dir_patterns = re.findall(r'(?:src|tests|docs)/[\w/]+', text)
+        dir_patterns = re.findall(r"(?:src|tests|docs)/[\w/]+", text)
         for d in dir_patterns:
             dir_path = workspace / d
             if dir_path.is_dir():
@@ -158,7 +157,7 @@ class TaskFileMap:
         self.task_files[task_id] = files
         return files
 
-    def find_conflicts(self, wave: List[dict]) -> List[tuple]:
+    def find_conflicts(self, wave: list[dict]) -> list[tuple]:
         """Find tasks in a wave that would touch the same files.
 
         Returns:
@@ -168,7 +167,7 @@ class TaskFileMap:
         task_ids = [t.get("id") for t in wave]
 
         for i, tid1 in enumerate(task_ids):
-            for tid2 in task_ids[i + 1:]:
+            for tid2 in task_ids[i + 1 :]:
                 files1 = self.task_files.get(tid1, set())
                 files2 = self.task_files.get(tid2, set())
                 overlap = files1 & files2
@@ -177,9 +176,7 @@ class TaskFileMap:
 
         return conflicts
 
-    def split_wave_by_conflicts(
-        self, wave: List[dict], max_workers: int
-    ) -> List[List[dict]]:
+    def split_wave_by_conflicts(self, wave: list[dict], max_workers: int) -> list[list[dict]]:
         """Split a wave into conflict-free sub-waves.
 
         Tasks that would touch the same files are placed in different sub-waves.
@@ -191,16 +188,15 @@ class TaskFileMap:
         if not conflicts:
             return [wave[:max_workers]]
 
-        conflict_graph: Dict[str, Set[str]] = {}
+        conflict_graph: dict[str, set[str]] = {}
         for t in wave:
             conflict_graph[t.get("id")] = set()
         for tid1, tid2, _ in conflicts:
             conflict_graph[tid1].add(tid2)
             conflict_graph[tid2].add(tid1)
 
-        sub_waves: List[List[dict]] = []
-        assigned: Dict[str, int] = {}
-        task_map = {t.get("id"): t for t in wave}
+        sub_waves: list[list[dict]] = []
+        assigned: dict[str, int] = {}
 
         for task in wave:
             tid = task.get("id")
@@ -237,9 +233,9 @@ class SharedKnowledge:
         self.workspace = workspace
         self.file = workspace / ".up" / "shared_knowledge.json"
         self._lock = threading.Lock()
-        self._data: Dict[str, Any] = self._load()
+        self._data: dict[str, Any] = self._load()
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         if self.file.exists():
             try:
                 return json.loads(self.file.read_text())
@@ -259,25 +255,29 @@ class SharedKnowledge:
     def add_entry(self, agent_id: str, entry_type: str, content: str):
         """Add a knowledge entry from an agent."""
         with self._lock:
-            self._data["entries"].append({
-                "agent": agent_id,
-                "type": entry_type,
-                "content": content,
-                "timestamp": datetime.now().isoformat(),
-            })
+            self._data["entries"].append(
+                {
+                    "agent": agent_id,
+                    "type": entry_type,
+                    "content": content,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
             self._save()
 
     def add_warning(self, agent_id: str, warning: str):
         """Add a warning for other agents."""
         with self._lock:
-            self._data["warnings"].append({
-                "agent": agent_id,
-                "warning": warning,
-                "timestamp": datetime.now().isoformat(),
-            })
+            self._data["warnings"].append(
+                {
+                    "agent": agent_id,
+                    "warning": warning,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
             self._save()
 
-    def claim_files(self, agent_id: str, files: Set[str]) -> Set[str]:
+    def claim_files(self, agent_id: str, files: set[str]) -> set[str]:
         """Claim files for exclusive modification. Returns files already claimed."""
         with self._lock:
             conflicts = set()
@@ -294,9 +294,7 @@ class SharedKnowledge:
         """Release all file claims for an agent."""
         with self._lock:
             self._data["file_locks"] = {
-                f: owner
-                for f, owner in self._data["file_locks"].items()
-                if owner != agent_id
+                f: owner for f, owner in self._data["file_locks"].items() if owner != agent_id
             }
             self._save()
 
@@ -338,13 +336,14 @@ class SharedKnowledge:
 @dataclass
 class AgentProgress:
     """Tracks progress of a single agent."""
+
     task_id: str
     task_title: str
     status: str = "pending"  # pending, creating, executing, verifying, merging, done, failed
-    started_at: Optional[str] = None
+    started_at: str | None = None
     duration: float = 0
     commits: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class ParallelDashboard:
@@ -352,13 +351,13 @@ class ParallelDashboard:
 
     def __init__(self, console: Console):
         self._console = console
-        self._agents: Dict[str, AgentProgress] = {}
+        self._agents: dict[str, AgentProgress] = {}
         self._lock = threading.Lock()
-        self._live: Optional[Live] = None
+        self._live: Live | None = None
         self._wave_num: int = 0
         self._total_waves: int = 0
         self._start_time: float = 0
-        self._log_lines: List[str] = []
+        self._log_lines: list[str] = []
 
     def start(self, total_waves: int):
         self._total_waves = total_waves
@@ -448,12 +447,15 @@ class ParallelDashboard:
 
         layout = Layout()
         layout.split_column(
-            Layout(Panel(
-                f"Wave [cyan]{self._wave_num}[/]/{self._total_waves} | "
-                f"Elapsed: [cyan]{elapsed:.0f}s[/] | "
-                f"Agents: [cyan]{len(self._agents)}[/]",
-                style="blue",
-            ), size=3),
+            Layout(
+                Panel(
+                    f"Wave [cyan]{self._wave_num}[/]/{self._total_waves} | "
+                    f"Elapsed: [cyan]{elapsed:.0f}s[/] | "
+                    f"Agents: [cyan]{len(self._agents)}[/]",
+                    style="blue",
+                ),
+                size=3,
+            ),
             Layout(table, name="agents"),
             Layout(Panel(log_text, title="Log", border_style="dim"), size=13),
         )
@@ -466,7 +468,7 @@ class ParallelDashboard:
 # =============================================================================
 
 
-def get_modified_files_in_worktree(worktree_path: Path, base: str = "main") -> List[str]:
+def get_modified_files_in_worktree(worktree_path: Path, base: str = "main") -> list[str]:
     """Get list of files modified in worktree compared to base."""
     try:
         result = subprocess.run(
@@ -487,8 +489,8 @@ def partial_merge(
     task_id: str,
     workspace: Path,
     target_branch: str = "main",
-    exclude_patterns: List[str] = None,
-) -> tuple[bool, List[str]]:
+    exclude_patterns: list[str] = None,
+) -> tuple[bool, list[str]]:
     """Cherry-pick individual passing files from a failed agent.
 
     When an agent fails verification but some files are good,
@@ -517,10 +519,8 @@ def partial_merge(
         return False, []
 
     import fnmatch
-    filtered = [
-        f for f in modified
-        if not any(fnmatch.fnmatch(f, pat) for pat in exclude)
-    ]
+
+    filtered = [f for f in modified if not any(fnmatch.fnmatch(f, pat) for pat in exclude)]
 
     if not filtered:
         return False, []
@@ -533,7 +533,10 @@ def partial_merge(
     for file_path in filtered:
         try:
             result = run_git(
-                "checkout", branch, "--", file_path,
+                "checkout",
+                branch,
+                "--",
+                file_path,
                 cwd=workspace,
             )
             if result.returncode == 0:
@@ -544,7 +547,8 @@ def partial_merge(
     if merged_files:
         run_git("add", *merged_files, cwd=workspace)
         run_git(
-            "commit", "-m",
+            "commit",
+            "-m",
             f"partial({task_id}): Cherry-pick {len(merged_files)} passing files",
             cwd=workspace,
         )
@@ -665,8 +669,7 @@ def run_enhanced_parallel_loop(
                 sub_waves = file_map.split_wave_by_conflicts(wave, max_workers)
                 if len(sub_waves) > 1:
                     dashboard.log(
-                        f"Wave {wave_num} split into {len(sub_waves)} "
-                        f"sub-waves to avoid conflicts"
+                        f"Wave {wave_num} split into {len(sub_waves)} sub-waves to avoid conflicts"
                     )
             else:
                 sub_waves = [wave[:max_workers]]
@@ -702,7 +705,7 @@ def run_enhanced_parallel_loop(
 
 def _execute_wave(
     workspace: Path,
-    tasks: List[dict],
+    tasks: list[dict],
     cli_name: str,
     timeout: int,
     max_workers: int,
@@ -739,9 +742,9 @@ def _execute_wave(
     if not worktrees:
         return
 
-    results: Dict[str, TaskResult] = {}
+    results: dict[str, TaskResult] = {}
     with ThreadPoolExecutor(max_workers=min(max_workers, len(worktrees))) as executor:
-        futures: Dict[Future, str] = {}
+        futures: dict[Future, str] = {}
         for wt in worktrees:
             tid = wt["task"].get("id")
             future = executor.submit(
@@ -802,13 +805,13 @@ def _execute_wave(
                 success, files = partial_merge(tid, workspace)
                 if success:
                     dashboard.update_agent(tid, "partial")
-                    dashboard.log(
-                        f"[yellow]{tid}: partial merge ({len(files)} files)[/]"
+                    dashboard.log(f"[yellow]{tid}: partial merge ({len(files)} files)[/]")
+                    summary["partial_merged"].append(
+                        {
+                            "task_id": tid,
+                            "files": files,
+                        }
                     )
-                    summary["partial_merged"].append({
-                        "task_id": tid,
-                        "files": files,
-                    })
                 else:
                     summary["failed"].append(tid)
                     state_mgr.record_task_failed(tid)
@@ -842,8 +845,6 @@ def _print_enhanced_summary(summary: dict):
         console.print(f"\n[green]Completed:[/] {', '.join(summary['completed'])}")
     if summary["partial_merged"]:
         for pm in summary["partial_merged"]:
-            console.print(
-                f"[yellow]Partial ({pm['task_id']}):[/] {len(pm['files'])} files merged"
-            )
+            console.print(f"[yellow]Partial ({pm['task_id']}):[/] {len(pm['files'])} files merged")
     if summary["failed"]:
         console.print(f"[red]Failed:[/] {', '.join(summary['failed'])}")
