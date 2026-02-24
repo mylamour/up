@@ -347,7 +347,10 @@ def run_ai_product_loop(
                 display.log(f"Phase 2/3: Planning implementation...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_plan_prompt(workspace, task, task_source)
-                success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+                success, output = run_ai_task(
+                    workspace, prompt, cli_name, timeout=timeout,
+                    continue_session=True,
+                )
                 if success:
                     display.log_success("Plan complete")
                 else:
@@ -383,7 +386,10 @@ def run_ai_product_loop(
                 display.log(f"Phase 3/3: Implementing code changes...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_implement_prompt(workspace, task, task_source)
-                success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+                success, output = run_ai_task(
+                    workspace, prompt, cli_name, timeout=timeout,
+                    continue_session=True,
+                )
                 if success:
                     display.log_success("Implementation complete")
                 else:

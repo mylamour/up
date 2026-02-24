@@ -130,8 +130,32 @@ def count_tasks(workspace: Path, task_source: str) -> int:
     return 0
 
 
-def check_circuit_breaker(state: dict) -> dict:
-    """Check circuit breaker status."""
+def check_circuit_breaker(state: dict, workspace: Path = None) -> dict:
+    """Check circuit breaker status.
+
+    Uses the StateManager's CircuitBreakerState objects so that
+    cooldown-based auto-reset (OPEN → HALF_OPEN) is honoured.
+    Falls back to raw dict check when no workspace is available.
+    """
+    if workspace:
+        try:
+            manager = get_state_manager(workspace)
+            for name, cb in manager.state.circuit_breakers.items():
+                if not cb.can_execute():
+                    return {
+                        "open": True,
+                        "circuit": name,
+                        "reason": f"{name} circuit opened after {cb.failures} failures",
+                        "can_retry": False,
+                    }
+                # can_execute() may have transitioned OPEN → HALF_OPEN; persist it
+                if cb.state == "HALF_OPEN":
+                    manager.save()
+            return {"open": False}
+        except Exception:
+            pass  # Fall through to dict-based check
+
+    # Fallback: raw dict check (no cooldown support)
     cb = state.get("circuit_breaker", {})
 
     for name, circuit in cb.items():
@@ -270,11 +294,33 @@ def mark_task_complete(workspace: Path, task_source: str, task_id: str) -> None:
         logger.warning("Failed to mark task complete in PRD (%s): %s", task_id, exc)
 
 
+def _format_prd_extras(task: dict) -> str:
+    """Format acceptance criteria, file hints, and dependencies from a PRD task."""
+    parts = []
+
+    criteria = task.get("acceptanceCriteria", [])
+    if criteria:
+        lines = "\n".join(f"  - {c}" for c in criteria)
+        parts.append(f"Acceptance Criteria:\n{lines}")
+
+    files = task.get("files", [])
+    if files:
+        lines = "\n".join(f"  - {f}" for f in files)
+        parts.append(f"Relevant Files:\n{lines}")
+
+    depends = task.get("depends_on", [])
+    if depends:
+        parts.append(f"Depends On: {', '.join(depends)}")
+
+    return ("\n\n" + "\n\n".join(parts)) if parts else ""
+
+
 def build_research_prompt(workspace: Path, task: dict, task_source: str) -> str:
     """Build a prompt for the AI to research the task."""
     task_id = task.get("id", "unknown")
     task_title = task.get("title", "")
     task_desc = task.get("description", task_title)
+    extras = _format_prd_extras(task)
 
     progress_md = workspace / ".up/thoughts/progress.md"
     progress_info = ""
@@ -285,7 +331,7 @@ def build_research_prompt(workspace: Path, task: dict, task_source: str) -> str:
 
 Task ID: {task_id}
 Title: {task_title}
-Description: {task_desc}{progress_info}
+Description: {task_desc}{extras}{progress_info}
 
 Your objective is to thoroughly research the codebase to understand how to implement this task.
 Do NOT make any code changes yet.
@@ -303,11 +349,14 @@ def build_plan_prompt(workspace: Path, task: dict, task_source: str) -> str:
     """Build a prompt for the AI to plan the task implementation."""
     task_id = task.get("id", "unknown")
     task_title = task.get("title", "")
+    task_desc = task.get("description", task_title)
+    extras = _format_prd_extras(task)
 
     return f"""PHASE 2: PLAN
 
 Task ID: {task_id}
 Title: {task_title}
+Description: {task_desc}{extras}
 
 Your objective is to create a step-by-step implementation plan based on your previous research.
 Do NOT make any code changes yet.
@@ -325,11 +374,14 @@ def build_implement_prompt(workspace: Path, task: dict, task_source: str) -> str
     """Build a prompt for the AI to implement the task based on the plan."""
     task_id = task.get("id", "unknown")
     task_title = task.get("title", "")
+    task_desc = task.get("description", task_title)
+    extras = _format_prd_extras(task)
 
     return f"""PHASE 3: IMPLEMENT
 
 Task ID: {task_id}
 Title: {task_title}
+Description: {task_desc}{extras}
 
 Your objective is to implement the task according to the agreed plan.
 

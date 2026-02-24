@@ -43,11 +43,15 @@ def run_ai_prompt(
     prompt: str,
     cli_name: str,
     timeout: int = 180,
-    silent: bool = False
+    silent: bool = False,
+    continue_session: bool = False,
 ) -> Optional[str]:
     """Run a prompt through AI CLI and return the response."""
     engine = _get_engine(cli_name)
-    return engine.execute_prompt(workspace, prompt, timeout=timeout, silent=silent)
+    return engine.execute_prompt(
+        workspace, prompt, timeout=timeout, silent=silent,
+        continue_session=continue_session,
+    )
 
 
 def run_ai_task(
@@ -56,11 +60,15 @@ def run_ai_task(
     cli_name: str,
     timeout: int = 600,
     max_tokens: int = 0,
-    raise_on_error: bool = False
+    raise_on_error: bool = False,
+    continue_session: bool = False,
 ) -> Tuple[bool, str]:
     """Run an AI task (like implementing code) and return success status."""
     engine = _get_engine(cli_name)
-    return engine.execute_task(workspace, prompt, timeout=timeout, raise_on_error=raise_on_error)
+    return engine.execute_task(
+        workspace, prompt, timeout=timeout, raise_on_error=raise_on_error,
+        continue_session=continue_session,
+    )
 
 
 def get_ai_cli_install_instructions() -> str:

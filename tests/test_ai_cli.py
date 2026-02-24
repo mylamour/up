@@ -154,6 +154,43 @@ class TestRunAiTask:
             assert "timed out" in output
 
 
+class TestContinueSession:
+    """Tests for --continue flag support."""
+
+    def test_claude_continue_adds_flag(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/claude"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            run_ai_task(tmp_path, "phase 2", "claude", continue_session=True)
+            cmd = mock_run.call_args[0][0]
+            assert cmd == ["claude", "--continue", "-p", "phase 2"]
+
+    def test_claude_no_continue_by_default(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/claude"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            run_ai_task(tmp_path, "phase 1", "claude")
+            cmd = mock_run.call_args[0][0]
+            assert cmd == ["claude", "-p", "phase 1"]
+
+    def test_agent_ignores_continue_flag(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/agent"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            run_ai_task(tmp_path, "phase 2", "agent", continue_session=True)
+            cmd = mock_run.call_args[0][0]
+            assert "--continue" not in cmd
+            assert cmd == ["agent", "-p", "phase 2", "--output-format", "text"]
+
+    def test_prompt_continue_adds_flag(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/claude"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="response", stderr="")
+            run_ai_prompt(tmp_path, "follow up", "claude", continue_session=True)
+            cmd = mock_run.call_args[0][0]
+            assert cmd == ["claude", "--continue", "-p", "follow up"]
+
+
 class TestGetInstallInstructions:
     """Tests for install instructions."""
 

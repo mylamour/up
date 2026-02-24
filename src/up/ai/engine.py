@@ -41,6 +41,7 @@ class AIEngine(abc.ABC):
         prompt: str,
         timeout: int = 180,
         silent: bool = False,
+        continue_session: bool = False,
     ) -> Optional[str]:
         """Execute a prompt and return the response."""
         pass
@@ -52,6 +53,7 @@ class AIEngine(abc.ABC):
         prompt: str,
         timeout: int = 600,
         raise_on_error: bool = False,
+        continue_session: bool = False,
     ) -> Tuple[bool, str]:
         """Execute an implementation task and return success status and output."""
         pass
@@ -85,12 +87,29 @@ class CliEngine(AIEngine):
     def name(self) -> str:
         return self._cli_name or ""
 
+    def _build_command(self, prompt: str, continue_session: bool = False) -> list:
+        """Build the CLI command list.
+
+        Args:
+            prompt: The prompt text.
+            continue_session: If True and CLI is claude, add --continue flag.
+        """
+        if self.name() == "claude":
+            cmd = ["claude"]
+            if continue_session:
+                cmd.append("--continue")
+            cmd.extend(["-p", prompt])
+        else:
+            cmd = ["agent", "-p", prompt, "--output-format", "text"]
+        return cmd
+
     def execute_prompt(
         self,
         workspace: Path,
         prompt: str,
         timeout: int = 180,
         silent: bool = False,
+        continue_session: bool = False,
     ) -> Optional[str]:
         if not self.is_available():
             if not silent:
@@ -98,10 +117,7 @@ class CliEngine(AIEngine):
             return None
 
         try:
-            if self.name() == "claude":
-                cmd = ["claude", "-p", prompt]
-            else:
-                cmd = ["agent", "-p", prompt, "--output-format", "text"]
+            cmd = self._build_command(prompt, continue_session=continue_session)
 
             result = subprocess.run(
                 cmd,
@@ -133,6 +149,7 @@ class CliEngine(AIEngine):
         prompt: str,
         timeout: int = 600,
         raise_on_error: bool = False,
+        continue_session: bool = False,
     ) -> Tuple[bool, str]:
         if not self.is_available():
             error_msg = f"AI CLI '{self.name()}' not found in PATH"
@@ -141,10 +158,7 @@ class CliEngine(AIEngine):
             return False, error_msg
 
         try:
-            if self.name() == "claude":
-                cmd = ["claude", "-p", prompt]
-            else:
-                cmd = ["agent", "-p", prompt, "--output-format", "text"]
+            cmd = self._build_command(prompt, continue_session=continue_session)
 
             result = subprocess.run(
                 cmd,

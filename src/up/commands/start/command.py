@@ -96,7 +96,7 @@ def start_cmd(
         time.sleep(0.2)
 
         pbar.set_description("Checking circuits")
-        cb_status = check_circuit_breaker(state)
+        cb_status = check_circuit_breaker(state, workspace=cwd)
         pbar.update(1)
         time.sleep(0.1)
 
