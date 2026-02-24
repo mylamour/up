@@ -42,10 +42,11 @@ console = Console(theme=THEME)
 @click.option("--parallel", is_flag=True, help="Run tasks in parallel Git worktrees")
 @click.option("--jobs", "-j", default=3, help="Number of parallel tasks (default: 3)")
 @click.option("--auto-commit", is_flag=True, help="Auto-commit after each successful task")
+@click.option("--auto-approve", is_flag=True, help="Skip human review gate between plan and implementation")
 @click.option("--verify/--no-verify", default=True, help="Run tests before commit (default: True)")
 def start_cmd(
     resume, dry_run, task, prd, interactive, no_ai, run_all,
-    timeout, parallel, jobs, auto_commit, verify,
+    timeout, parallel, jobs, auto_commit, auto_approve, verify,
 ):
     """Start the product loop for autonomous development.
 
@@ -174,7 +175,7 @@ def start_cmd(
     if use_ai:
         run_ai_product_loop(
             cwd, state, task_source, task, cli_name,
-            run_all, timeout, auto_commit, verify, interactive,
+            run_all, timeout, auto_commit, auto_approve, verify, interactive,
         )
     else:
         run_manual_loop(cwd, state, task_source, task, resume)

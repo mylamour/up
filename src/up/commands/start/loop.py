@@ -30,6 +30,9 @@ from up.commands.start.helpers import (
     rollback_checkpoint,
     mark_task_complete,
     build_implementation_prompt,
+    build_research_prompt,
+    build_plan_prompt,
+    build_implement_prompt,
 )
 from up.commands.start.verification import (
     run_verification_with_results,
@@ -224,6 +227,7 @@ def run_ai_product_loop(
     run_all: bool = False,
     timeout: int = 600,
     auto_commit: bool = False,
+    auto_approve: bool = False,
     verify: bool = True,
     interactive: bool = False,
 ):
@@ -297,14 +301,16 @@ def run_ai_product_loop(
             checkpoint_name = f"cp-{task_id}-{_state_manager.state.loop.iteration}"
             create_checkpoint(workspace, checkpoint_name, task_id=task_id)
 
-            # Build prompt
-            prompt = build_implementation_prompt(workspace, task, task_source)
+            # Phase 1: Research
+            display.set_phase("RESEARCH")
+            display.log("Phase 1: Research...")
+            prompt = build_research_prompt(workspace, task, task_source)
 
             # Start provenance tracking
             try:
                 _current_provenance_entry = provenance_manager.start_operation(
                     task_id=task_id,
-                    task_title=task_title,
+                    task_title=f"{task_title} (Research/Plan/Impl)",
                     prompt=prompt,
                     ai_model=cli_name,
                     context_files=[task_source] if task_source else [],
@@ -314,10 +320,45 @@ def run_ai_product_loop(
                 _current_provenance_entry = None
                 logger.debug("Failed to start provenance tracking: %s", exc)
 
-            # Run AI
-            display.set_phase("EXECUTE")
-            display.log(f"Running {cli_name}...")
+            # Run Phase 1
             success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+
+            # Phase 2: Plan
+            if success:
+                display.set_phase("PLAN")
+                display.log("Phase 2: Plan...")
+                prompt = build_plan_prompt(workspace, task, task_source)
+                success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+
+            # Human Review Gate
+            if success and not auto_approve:
+                display.stop()
+                console.print(f"\n[bold]Plan for {task_id} generated at .up/thoughts/plan.md[/]")
+                if not click.confirm("Proceed with implementation?"):
+                    console.print("[yellow]Rolling back...[/]")
+                    rollback_checkpoint(workspace)
+                    failed += 1
+                    _state_manager.record_task_failed(task_id)
+                    display.start()
+                    display.update_task_status(task_id, TaskStatus.ROLLED_BACK)
+                    
+                    if _current_provenance_entry:
+                        try:
+                            provenance_manager.reject_operation(
+                                _current_provenance_entry.id, reason="Human review rejected plan"
+                            )
+                        except Exception:
+                            pass
+                        _current_provenance_entry = None
+                    continue
+                display.start()
+
+            # Phase 3: Implement
+            if success:
+                display.set_phase("IMPLEMENT")
+                display.log("Phase 3: Implement...")
+                prompt = build_implement_prompt(workspace, task, task_source)
+                success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
 
             if success:
                 display.log_success(f"Task {task_id} implemented")

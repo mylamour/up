@@ -270,6 +270,74 @@ def mark_task_complete(workspace: Path, task_source: str, task_id: str) -> None:
         logger.warning("Failed to mark task complete in PRD (%s): %s", task_id, exc)
 
 
+def build_research_prompt(workspace: Path, task: dict, task_source: str) -> str:
+    """Build a prompt for the AI to research the task."""
+    task_id = task.get("id", "unknown")
+    task_title = task.get("title", "")
+    task_desc = task.get("description", task_title)
+
+    return f"""PHASE 1: RESEARCH
+
+Task ID: {task_id}
+Title: {task_title}
+Description: {task_desc}
+
+Your objective is to thoroughly research the codebase to understand how to implement this task.
+Do NOT make any code changes yet.
+
+Instructions:
+1. Search and read relevant files to understand the current architecture and data flow.
+2. Identify all files that will need to be created or modified.
+3. Identify any potential edge cases or conflicts.
+4. Summarize your findings and save them to '.up/thoughts/research.md'.
+
+When you have saved your findings, end your turn."""
+
+
+def build_plan_prompt(workspace: Path, task: dict, task_source: str) -> str:
+    """Build a prompt for the AI to plan the task implementation."""
+    task_id = task.get("id", "unknown")
+    task_title = task.get("title", "")
+
+    return f"""PHASE 2: PLAN
+
+Task ID: {task_id}
+Title: {task_title}
+
+Your objective is to create a step-by-step implementation plan based on your previous research.
+Do NOT make any code changes yet.
+
+Instructions:
+1. Read your findings from '.up/thoughts/research.md'.
+2. Create a detailed, step-by-step plan of exact changes needed.
+3. Include specific files, functions to modify, and how to test.
+4. Save this detailed plan to '.up/thoughts/plan.md'.
+
+When you have saved the plan, end your turn so a human can review it."""
+
+
+def build_implement_prompt(workspace: Path, task: dict, task_source: str) -> str:
+    """Build a prompt for the AI to implement the task based on the plan."""
+    task_id = task.get("id", "unknown")
+    task_title = task.get("title", "")
+
+    return f"""PHASE 3: IMPLEMENT
+
+Task ID: {task_id}
+Title: {task_title}
+
+Your objective is to implement the task according to the agreed plan.
+
+Instructions:
+1. Read the plan from '.up/thoughts/plan.md'.
+2. Execute the plan step-by-step.
+3. Make minimal, focused changes.
+4. Follow existing code style and patterns.
+5. Add or update tests if appropriate.
+6. When implementation is complete, summarize your progress and write it to '.up/thoughts/progress.md' to compact context.
+7. End your turn when all changes are made and tests pass."""
+
+
 def build_implementation_prompt(workspace: Path, task: dict, task_source: str) -> str:
     """Build a prompt for the AI to implement the task."""
     task_id = task.get("id", "unknown")

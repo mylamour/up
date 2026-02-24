@@ -113,7 +113,9 @@ def get_modified_files(workspace: Path) -> List[str]:
             return result.stdout.strip().split("\n")
 
         return []
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return []
 
 
