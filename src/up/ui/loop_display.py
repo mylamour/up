@@ -85,8 +85,9 @@ class DisplayState:
     current_phase: str = "INIT"
     tasks: list[TaskInfo] = field(default_factory=list)
     stats: LoopStats = field(default_factory=LoopStats)
-    log_entries: deque = field(default_factory=lambda: deque(maxlen=6))
+    log_entries: deque = field(default_factory=lambda: deque(maxlen=12))
     start_time: Optional[datetime] = None
+    phase_start_time: Optional[datetime] = None
 
 
 class ProductLoopDisplay:
@@ -197,6 +198,7 @@ class ProductLoopDisplay:
     def set_current_task(self, task_id: str, phase: str = "EXECUTE") -> None:
         """Set the current task being processed."""
         self.state.current_phase = phase
+        self.state.phase_start_time = datetime.now()
         
         for task in self.state.tasks:
             if task.id == task_id:
@@ -228,11 +230,12 @@ class ProductLoopDisplay:
         self.update()
         
     def set_phase(self, phase: str) -> None:
-        """Set the current phase."""
+        """Set the current phase and reset the phase timer."""
         self.state.current_phase = phase
+        self.state.phase_start_time = datetime.now()
         if phase == "VERIFY":
             self.state.status = LoopStatus.VERIFYING
-        elif phase == "EXECUTE":
+        elif phase in ("EXECUTE", "RESEARCH", "PLAN", "IMPLEMENT"):
             self.state.status = LoopStatus.RUNNING
         self.update()
         
@@ -325,11 +328,20 @@ class ProductLoopDisplay:
         parts.append(self._render_compact_progress())
         parts.append("")
         
-        # Current task (one line)
+        # Current task with phase timer
         if self.state.current_task:
             task = self.state.current_task
+            phase = self.state.current_phase
+            spinner = Symbols.SPINNER[self._spinner_frame]
+            
             parts.append(Text(f"  Current: {task.id} {task.title[:30]}...", style="task.progress"))
-            parts.append(Text(f"  Phase:   {self.state.current_phase}", style="text.dim"))
+            
+            phase_line = Text()
+            phase_line.append(f"  Phase:   {spinner} {phase}", style="status.running")
+            if self.state.phase_start_time:
+                delta = (datetime.now() - self.state.phase_start_time).total_seconds()
+                phase_line.append(f"  ({self._format_duration(delta)})", style="primary")
+            parts.append(phase_line)
         else:
             parts.append(Text("  Current: None", style="text.dim"))
             
@@ -448,7 +460,7 @@ class ProductLoopDisplay:
         return bar
         
     def _render_current_task(self) -> Panel:
-        """Render current task panel."""
+        """Render current task panel with live phase timer."""
         task = self.state.current_task
         
         if not task:
@@ -466,21 +478,61 @@ class ProductLoopDisplay:
         lines.append(Text(f"  Priority: {task.priority}  │  Effort: {task.effort}  │  Phase: {task.phase}", style="text.dim"))
         lines.append("")
         
-        # Current phase indicator
         phase = self.state.current_phase
-        phase_icon = {
-            "INIT": "○",
-            "CHECKPOINT": "◐",
-            "EXECUTE": Symbols.SPINNER[self._spinner_frame],
-            "VERIFY": "◑",
-            "COMMIT": "◒",
-        }.get(phase, "○")
+        spinner = Symbols.SPINNER[self._spinner_frame]
         
-        lines.append(Text(f"  Status: {phase_icon} {phase}", style="status.running"))
+        phase_icons = {
+            "INIT": "○", "CHECKPOINT": "◐", "RESEARCH": spinner,
+            "PLAN": spinner, "IMPLEMENT": spinner, "EXECUTE": spinner,
+            "VERIFY": "◑", "COMMIT": "◒",
+        }
+        phase_icon = phase_icons.get(phase, "○")
+        
+        phase_elapsed = ""
+        if self.state.phase_start_time:
+            delta = (datetime.now() - self.state.phase_start_time).total_seconds()
+            phase_elapsed = f"  ({self._format_duration(delta)})"
+        
+        status_line = Text()
+        status_line.append(f"  Status: {phase_icon} {phase}", style="status.running")
+        status_line.append(phase_elapsed, style="primary")
+        lines.append(status_line)
+        lines.append("")
+        
+        # Phase pipeline showing progression
+        all_phases = ["CHECKPOINT", "RESEARCH", "PLAN", "IMPLEMENT", "VERIFY", "COMMIT"]
+        pipeline = Text("  ")
+        current_idx = all_phases.index(phase) if phase in all_phases else -1
+        for i, p in enumerate(all_phases):
+            if i < current_idx:
+                pipeline.append(f"✓", style="task.complete")
+            elif i == current_idx:
+                pipeline.append(f"{spinner}", style="status.running")
+            else:
+                pipeline.append(f"○", style="text.dim")
+            if i < len(all_phases) - 1:
+                style = "task.complete" if i < current_idx else "text.dim"
+                pipeline.append("─", style=style)
+        pipeline.append("  ", style="text")
+        lines.append(pipeline)
+        
+        # Phase labels
+        labels = Text("  ")
+        for i, p in enumerate(all_phases):
+            short = p[:3]
+            if i == current_idx:
+                labels.append(short, style="status.running")
+            elif i < current_idx:
+                labels.append(short, style="task.complete")
+            else:
+                labels.append(short, style="text.muted")
+            if i < len(all_phases) - 1:
+                labels.append(" ", style="text")
+        lines.append(labels)
         lines.append("")
         
         if task.description:
-            desc = task.description[:60] + "..." if len(task.description) > 60 else task.description
+            desc = task.description[:80] + "..." if len(task.description) > 80 else task.description
             lines.append(Text(f"  {desc}", style="text.dim"))
             
         return Panel(
@@ -489,8 +541,44 @@ class ProductLoopDisplay:
             border_style=Style(color=CyberTheme.PRIMARY),
         )
         
+    def _get_visible_tasks(self, max_visible: int = 8) -> tuple[list[TaskInfo], int, int]:
+        """Get a window of tasks centered around the current task.
+        
+        Returns (visible_tasks, skipped_before, skipped_after).
+        """
+        tasks = self.state.tasks
+        if len(tasks) <= max_visible:
+            return tasks, 0, 0
+        
+        current_idx = -1
+        if self.state.current_task:
+            for i, t in enumerate(tasks):
+                if t.id == self.state.current_task.id:
+                    current_idx = i
+                    break
+        
+        if current_idx == -1:
+            first_pending = next(
+                (i for i, t in enumerate(tasks) if t.status == TaskStatus.PENDING),
+                0,
+            )
+            current_idx = first_pending
+        
+        # Center the window: show 2 completed before current, rest after
+        before_count = min(2, current_idx)
+        window_start = max(0, current_idx - before_count)
+        window_end = min(len(tasks), window_start + max_visible)
+        
+        if window_end - window_start < max_visible:
+            window_start = max(0, window_end - max_visible)
+        
+        visible = tasks[window_start:window_end]
+        skipped_before = window_start
+        skipped_after = len(tasks) - window_end
+        return visible, skipped_before, skipped_after
+
     def _render_task_queue(self) -> Panel:
-        """Render task queue panel."""
+        """Render task queue panel centered around the current task."""
         table = Table(
             show_header=False,
             box=None,
@@ -512,7 +600,17 @@ class ProductLoopDisplay:
             TaskStatus.ROLLED_BACK: (Symbols.ROLLBACK, "task.skipped"),
         }
         
-        for task in self.state.tasks[:8]:  # Show max 8 tasks
+        visible, skipped_before, skipped_after = self._get_visible_tasks()
+        
+        if skipped_before > 0:
+            table.add_row(
+                Text("", style="text.dim"),
+                Text("", style="text.dim"),
+                Text(f"... {skipped_before} completed above", style="text.dim"),
+                Text("", style="text.dim"),
+            )
+        
+        for task in visible:
             symbol, style = status_symbols.get(task.status, (Symbols.PENDING, "task.pending"))
             
             title = task.title[:30] + "..." if len(task.title) > 30 else task.title
@@ -524,25 +622,23 @@ class ProductLoopDisplay:
                 Text(title, style=style if task.status == TaskStatus.IN_PROGRESS else "text"),
                 Text(state_label, style=style),
             )
-            
-        # Show count if more tasks
-        remaining = len(self.state.tasks) - 8
-        if remaining > 0:
+        
+        if skipped_after > 0:
             table.add_row(
                 Text("", style="text.dim"),
                 Text("", style="text.dim"),
-                Text(f"... +{remaining} more tasks", style="text.dim"),
+                Text(f"... +{skipped_after} more tasks", style="text.dim"),
                 Text("", style="text.dim"),
             )
             
         return Panel(
             table,
-            title="[title]Task Queue[/]",
+            title=f"[title]Task Queue[/] [text.dim]({self.state.stats.completed}/{self.state.stats.total})[/]",
             border_style=Style(color=CyberTheme.BORDER_DIM),
         )
         
     def _render_compact_tasks(self) -> Text:
-        """Render compact task indicators."""
+        """Render compact task indicators centered around current task."""
         status_symbols = {
             TaskStatus.COMPLETE: (Symbols.COMPLETE, CyberTheme.TASK_COMPLETE),
             TaskStatus.IN_PROGRESS: (Symbols.IN_PROGRESS, CyberTheme.TASK_IN_PROGRESS),
@@ -552,10 +648,16 @@ class ProductLoopDisplay:
             TaskStatus.ROLLED_BACK: (Symbols.ROLLBACK, CyberTheme.TASK_SKIPPED),
         }
         
+        visible, skipped_before, skipped_after = self._get_visible_tasks(max_visible=12)
+        
         text = Text("  ")
-        for task in self.state.tasks[:12]:
+        if skipped_before > 0:
+            text.append(f"…  ", style=Style(color=CyberTheme.TEXT_DIM))
+        for task in visible:
             symbol, color = status_symbols.get(task.status, (Symbols.PENDING, CyberTheme.TASK_PENDING))
             text.append(f"{symbol} {task.id}  ", style=Style(color=color))
+        if skipped_after > 0:
+            text.append(f"… +{skipped_after}", style=Style(color=CyberTheme.TEXT_DIM))
             
         return text
         

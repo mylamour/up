@@ -297,13 +297,15 @@ def run_ai_product_loop(
             )
 
             # Checkpoint
-            display.log("Creating checkpoint...")
+            display.log(f"Creating checkpoint for {task_id}...")
             checkpoint_name = f"cp-{task_id}-{_state_manager.state.loop.iteration}"
             create_checkpoint(workspace, checkpoint_name, task_id=task_id)
+            display.log_success(f"Checkpoint: {checkpoint_name}")
 
             # Phase 1: Research
             display.set_phase("RESEARCH")
-            display.log("Phase 1: Research...")
+            display.log(f"Phase 1/3: Researching {task_id}...")
+            display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
             prompt = build_research_prompt(workspace, task, task_source)
 
             # Start provenance tracking
@@ -322,13 +324,22 @@ def run_ai_product_loop(
 
             # Run Phase 1
             success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+            if success:
+                display.log_success("Research complete")
+            else:
+                display.log_error("Research failed")
 
             # Phase 2: Plan
             if success:
                 display.set_phase("PLAN")
-                display.log("Phase 2: Plan...")
+                display.log(f"Phase 2/3: Planning implementation...")
+                display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_plan_prompt(workspace, task, task_source)
                 success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+                if success:
+                    display.log_success("Plan complete")
+                else:
+                    display.log_error("Plan failed")
 
             # Human Review Gate
             if success and not auto_approve:
@@ -357,9 +368,14 @@ def run_ai_product_loop(
             # Phase 3: Implement
             if success:
                 display.set_phase("IMPLEMENT")
-                display.log("Phase 3: Implement...")
+                display.log(f"Phase 3/3: Implementing code changes...")
+                display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_implement_prompt(workspace, task, task_source)
                 success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+                if success:
+                    display.log_success("Implementation complete")
+                else:
+                    display.log_error("Implementation failed")
 
             if success:
                 display.log_success(f"Task {task_id} implemented")
@@ -372,9 +388,18 @@ def run_ai_product_loop(
                 if verify:
                     display.set_phase("VERIFY")
                     display.set_status(LoopStatus.VERIFYING)
-                    display.log("Running verification...")
+                    display.log("Running tests and linting...")
                     tests_passed, lint_passed = run_verification_with_results(workspace)
                     verification_passed = tests_passed is not False
+                    
+                    if verification_passed:
+                        parts = []
+                        if tests_passed:
+                            parts.append("tests passed")
+                        if lint_passed:
+                            parts.append("lint clean")
+                        display.log_success(f"Verification: {', '.join(parts) or 'ok'}")
+                    
 
                     if not verification_passed:
                         display.log_warning(f"Verification failed for {task_id}")
