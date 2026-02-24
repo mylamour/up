@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from up.ai_cli import check_ai_cli, run_ai_prompt
+from up.core.state import get_state_manager
 from up.learn.utils import find_skill_dir, safe_filename, record_to_memory
 from up.learn.analyzer import analyze_project, analyze_project_structure
 
@@ -489,7 +490,7 @@ Be concise. Format with markdown headers."""
 {analysis_instructions}"""
     else:
         # Embed text content in the prompt (for regular text files)
-        max_chars = 12000
+        max_chars = get_state_manager(workspace).config.ai_max_prompt_chars
         if len(content) > max_chars:
             half = max_chars // 2
             # Truncate at line boundaries to avoid splitting mid-line

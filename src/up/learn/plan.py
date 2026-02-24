@@ -11,6 +11,7 @@ from rich.table import Table
 from tqdm import tqdm
 
 from up.ai_cli import check_ai_cli, run_ai_prompt
+from up.core.state import get_state_manager
 from up.learn.utils import find_skill_dir, load_profile
 
 console = Console()
@@ -74,7 +75,7 @@ def analyze_research_file(file_path: Path, workspace: Path) -> dict:
     """Analyze a single research file using AI CLI."""
     content = file_path.read_text()
     
-    max_chars = 10000
+    max_chars = get_state_manager(workspace).config.ai_max_prompt_chars
     if len(content) > max_chars:
         content = content[:max_chars] + "\n\n[... truncated ...]"
     
@@ -271,8 +272,9 @@ def learn_plan(workspace: Path, output: Optional[str] = None, use_ai: bool = Tru
         console.print(f"\n[yellow]Generating tasks with {cli_name}...[/]")
         
         all_insights = "\n\n".join(insights_content)
-        if len(all_insights) > 10000:
-            all_insights = all_insights[:10000] + "\n\n[... truncated ...]"
+        max_chars = get_state_manager(workspace).config.ai_max_prompt_chars
+        if len(all_insights) > max_chars:
+            all_insights = all_insights[:max_chars] + "\n\n[... truncated ...]"
         
         prompt = f"""Based on these insights, generate 5-10 actionable improvement tasks.
 

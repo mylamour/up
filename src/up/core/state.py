@@ -53,6 +53,7 @@ class UpConfig:
     
     # AI execution
     default_ai_timeout_seconds: int = 600  # 10 minutes
+    ai_max_prompt_chars: int = 10000  # Truncation limit for prompt content
     
     # Parallel execution
     default_parallel_workers: int = 3
