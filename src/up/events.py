@@ -329,8 +329,8 @@ def _update_context_md(workspace: Path, recent_change: str = None, files: List[s
         
         context_file.write_text(content)
         
-    except Exception:
-        pass  # Don't fail on docs update errors
+    except Exception as e:
+        logger.debug("Docs update failed: %s", e)
 
 
 def _update_handoff_md(

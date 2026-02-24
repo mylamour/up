@@ -347,8 +347,8 @@ def run_ai_product_loop(
                             provenance_manager.reject_operation(
                                 _current_provenance_entry.id, reason="Human review rejected plan"
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("Failed to reject provenance: %s", e)
                         _current_provenance_entry = None
                     continue
                 display.start()

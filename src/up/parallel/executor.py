@@ -8,6 +8,7 @@ Uses the unified state system in .up/state.json for consistency.
 """
 
 import json
+import logging
 import subprocess
 import threading
 import time
@@ -26,6 +27,7 @@ from up.git.worktree import (
 )
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -150,8 +152,8 @@ def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None)
             try:
                 sm = get_state_manager(workspace)
                 completed_in_state = set(sm.state.loop.tasks_completed)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Ignored exception: %s", e)
 
         # A task is pending only if BOTH:
         # 1. PRD says passes != true
@@ -174,8 +176,8 @@ def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None)
             try:
                 prd_path.write_text(json.dumps(data, indent=2))
                 console.print(f"[dim]Auto-synced {synced_count} completed tasks in PRD[/]")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Ignored exception: %s", e)
 
         if limit:
             pending = pending[:limit]

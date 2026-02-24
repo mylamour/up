@@ -2,6 +2,7 @@
 
 import os
 import re
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,7 @@ from rich.console import Console
 from up.learn.utils import find_skill_dir, display_profile, save_profile, load_profile, record_to_memory
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def analyze_project(workspace: Path) -> dict:
@@ -77,8 +79,8 @@ def analyze_project(workspace: Path) -> dict:
                 for key, name in framework_indicators.items():
                     if key in content:
                         found_frameworks.add(name)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to read config file %s: %s", config, e)
     
     profile["frameworks"] = sorted(found_frameworks)
     
@@ -133,9 +135,11 @@ def analyze_project(workspace: Path) -> dict:
                     found_patterns.add("Unit Tests")
                 if "Protocol" in content:
                     found_patterns.add("Protocol Pattern")
-            except Exception:
+            except Exception as e:
+                logger.debug("Regex fallback failed for %s: %s", py_file, e)
                 continue
-        except Exception:
+        except Exception as e:
+            logger.debug("AST parsing failed for %s: %s", py_file, e)
             continue
     
     profile["patterns_detected"] = sorted(found_patterns)

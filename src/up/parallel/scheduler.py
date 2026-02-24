@@ -11,6 +11,7 @@ Uses Python's built-in graphlib.TopologicalSorter for DAG scheduling.
 """
 
 import json
+import logging
 import subprocess
 import threading
 import time
@@ -41,6 +42,8 @@ from up.parallel.executor import (
     mark_task_complete_in_prd,
     verify_worktree,
 )
+
+logger = logging.getLogger(__name__)
 
 console = Console()
 
@@ -480,8 +483,8 @@ def get_modified_files_in_worktree(worktree_path: Path, base: str = "main") -> l
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip().split("\n")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to get modified files: %s", e)
     return []
 
 
@@ -541,7 +544,8 @@ def partial_merge(
             )
             if result.returncode == 0:
                 merged_files.append(file_path)
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to cherry-pick %s: %s", file_path, e)
             continue
 
     if merged_files:
