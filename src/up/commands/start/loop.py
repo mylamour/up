@@ -44,6 +44,17 @@ from up.commands.start.verification import (
 console = Console()
 logger = logging.getLogger(__name__)
 
+
+def _restore_terminal():
+    """Restore terminal to sane state after Rich Live display."""
+    try:
+        import os
+        if os.isatty(sys.stdin.fileno()):
+            os.system("stty sane 2>/dev/null")
+    except Exception:
+        pass
+
+
 # Global state for interrupt handling
 _state_manager: StateManager = None
 _checkpoint_manager = None
@@ -64,6 +75,7 @@ def handle_interrupt(signum, frame):
         _current_display.stop()
         _current_display = None
 
+    _restore_terminal()
     console.print("\n\n[yellow]Interrupted! Saving state...[/]")
 
     if _state_manager and _current_workspace:
@@ -492,6 +504,16 @@ def run_ai_product_loop(
                 display.log_error(f"Task {task_id} failed")
                 failed += 1
 
+                if output:
+                    for line in output.strip().splitlines()[-3:]:
+                        display.log_error(f"  {line[:100]}")
+                    error_log = workspace / ".up" / "logs" / f"{task_id}-error.log"
+                    error_log.parent.mkdir(parents=True, exist_ok=True)
+                    error_log.write_text(output)
+                    display.log(f"Full error log: .up/logs/{task_id}-error.log")
+                else:
+                    display.log_error("No output from AI CLI (timeout or crash)")
+
                 if _current_provenance_entry:
                     try:
                         provenance_manager.reject_operation(
@@ -529,6 +551,7 @@ def run_ai_product_loop(
         time.sleep(0.5)
         display.stop()
         _current_display = None
+        _restore_terminal()
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
