@@ -15,6 +15,7 @@ from up.commands.done import done_cmd
 from up.commands.agent import agent as agent_group
 from up.commands.provenance import provenance as provenance_group
 from up.commands.review import review_cmd
+from up.commands.plugin import plugin_group
 
 console = Console()
 
@@ -90,6 +91,9 @@ main.add_command(provenance_group, name="provenance")
 main.add_command(memory_cmd, name="memory")
 main.add_command(agent_group, name="agent")
 main.add_command(learn_cmd, name="learn")
+
+# Plugins
+main.add_command(plugin_group, name="plugin")
 
 
 if __name__ == "__main__":
