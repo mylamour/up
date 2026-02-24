@@ -189,8 +189,9 @@ up-cli/
 │   ├── context.py          # Context budget management
 │   ├── events.py           # Event-driven integration
 │   ├── summarizer.py       # Conversation analysis
-│   ├── parallel.py         # Parallel task execution
-│   ├── parallel_scheduler.py # Dependency-aware scheduling
+│   ├── parallel/           # Parallel execution system
+│   │   ├── executor.py     # Parallel task execution
+│   │   └── scheduler.py    # Dependency-aware scheduling
 │   ├── core/               # Core modules
 │   │   ├── state.py        # Unified state management
 │   │   ├── checkpoint.py   # Git checkpoint operations
