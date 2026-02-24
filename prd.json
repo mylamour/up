@@ -34,7 +34,7 @@
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "This is the core discovery mechanism. No execution yet — just finding and cataloging plugins."
     },
     {
