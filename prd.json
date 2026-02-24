@@ -52,7 +52,7 @@
       ],
       "priority": 3,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001 and US-002. Uses same atomic write pattern as core/state.py."
     },
     {
