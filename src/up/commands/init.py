@@ -237,16 +237,24 @@ def _write_hook(path: Path, content: str):
 
 def _print_next_steps(systems: tuple, hooks_installed: bool):
     """Print next steps after initialization."""
-    console.print("\n[bold]Next steps:[/]")
+    console.print("\n[bold]Next steps: Core Safety Workflow[/]")
+    console.print("  1. [cyan]up save[/]      Create a checkpoint before asking AI to code")
+    console.print("  2. [dim](AI codes)[/]   Let Claude/Cursor do the work")
+    console.print("  3. [cyan]up diff[/]      Review changes")
+    console.print("  4. [cyan]up reset[/]     Rollback instantly if the AI broke something")
+    
+    console.print("\n[bold]Other Commands:[/]")
 
     if "docs" in systems:
         console.print("  • Edit [cyan]docs/roadmap/vision/PRODUCT_VISION.md[/]")
 
     if "learn" in systems:
-        console.print("  • Run [cyan]up learn auto[/] to analyze your project")
+        console.print("  • Run [cyan]up learn[/] to analyze your project")
 
     if "loop" in systems:
-        console.print("  • Run [cyan]up start[/] to start development")
+        console.print("  • Run [cyan]up start[/] to run autonomous development")
+        
+    console.print("  • Run [cyan]up memory search <query>[/] to search past decisions and bugs")
     
     if hooks_installed:
         console.print("\n[dim]Auto-sync enabled: commits will be indexed automatically[/]")
