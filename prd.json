@@ -87,7 +87,7 @@
       ],
       "priority": 5,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-003. Lowers barrier to creating plugins."
     },
     {

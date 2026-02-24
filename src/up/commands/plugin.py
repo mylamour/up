@@ -4,8 +4,10 @@ Commands:
 - up plugin list: Show all plugins and their status
 - up plugin enable <name>: Enable a plugin
 - up plugin disable <name>: Disable a plugin
+- up plugin create <name>: Scaffold a new plugin
 """
 
+import json
 from pathlib import Path
 
 import click
@@ -100,3 +102,53 @@ def disable_cmd(name: str):
     else:
         console.print(f"[red]Plugin '{name}' not found.[/red]")
         console.print("[dim]Run 'up plugin list' to see available plugins.[/dim]")
+
+
+@plugin_group.command("create")
+@click.argument("name")
+def create_cmd(name: str):
+    """Scaffold a new plugin directory."""
+    from up.plugins.manifest import KEBAB_CASE_RE
+
+    if not KEBAB_CASE_RE.match(name):
+        console.print(f"[red]Invalid plugin name '{name}'. Must be kebab-case.[/red]")
+        return
+
+    workspace = Path.cwd()
+    plugin_dir = workspace / ".up" / "plugins" / "installed" / name
+
+    if plugin_dir.exists():
+        console.print(f"[red]Plugin '{name}' already exists.[/red]")
+        return
+
+    # Create directory structure
+    plugin_dir.mkdir(parents=True)
+    for subdir in ("commands", "hooks", "rules"):
+        (plugin_dir / subdir).mkdir()
+
+    # Write plugin.json
+    manifest = {
+        "name": name,
+        "version": "0.1.0",
+        "description": "",
+        "author": "",
+        "category": "productivity",
+    }
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps(manifest, indent=2) + "\n"
+    )
+
+    # Write README
+    readme = f"# {name}\n\nA custom UP plugin.\n\n"
+    readme += "## Directories\n\n"
+    readme += "- `commands/` — Markdown command definitions\n"
+    readme += "- `hooks/` — Hook scripts and hooks.json\n"
+    readme += "- `rules/` — Markdown rule definitions\n"
+    (plugin_dir / "README.md").write_text(readme)
+
+    # Auto-register in registry
+    reg = _get_registry()
+    reg.save()
+
+    console.print(f"[green]Created plugin '{name}'[/green]")
+    console.print(f"[dim]  {plugin_dir}[/dim]")
