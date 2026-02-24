@@ -28,34 +28,44 @@ def main():
     stable, high-performance, and modern software engineering.
     
     \b
-    Quick Start:
+    Setup:
       up init                 Initialize in existing project
-      up new my-project       Create new project
-      up start                Start the product loop
-      up status               Show system health
-
+      up new <name>           Create new project
+    
     \b
-    Safety Rails:
+    Safety:
       up save                 Checkpoint before AI work
-      up reset                Restore to checkpoint
       up diff                 Review AI changes
-
+      up reset                Restore to checkpoint
+    
+    \b
+    Workflow:
+      up start                Start the product loop
+      up done                 Mark task as completed
+    
     \b
     Quality:
       up review               AI adversarial code review
-      up provenance show      View AI operation history
-
+      up status               Show system health
+    
     \b
-    Context & Memory:
+    Context:
       up memory search <q>    Search across sessions
       up memory record        Record learnings/decisions
       up memory status        Memory statistics
-
+    
     \b
-    Agents & Learning:
+    Agents:
       up agent spawn <name>   Create parallel agent
       up agent merge <name>   Merge agent work
-      up learn                Auto-analyze and generate PRD
+    
+    \b
+    Learning:
+      up learn                Analyze and generate PRD
+    
+    \b
+    Tracing:
+      up provenance show      View AI operation history
     """
     pass
 

@@ -43,63 +43,84 @@ pip install up-cli[all]
 
 ## 🚀 Quick Start
 
-### 1. Scaffold a new project
+### 1. Initialize Up-CLI in your project
 ```bash
-up new my-project --template fastapi
-cd my-project
+up init
 ```
 
-### 2. Check System Safety Rails
+### 2. The Core Safety Workflow
+Create a checkpoint before asking the AI to write code:
 ```bash
-up status
+up save
 ```
 
-### 3. Start the Autonomous Loop
+After the AI finishes, review the changes:
 ```bash
-# Write your tasks in TODO.md or prd.json, then run:
-up start --auto-commit
+up diff
+```
 
-# Or run multiple AI agents in parallel!
-up start --parallel --jobs 3
+If the AI broke something or you're not happy, instantly rollback:
+```bash
+up reset
+```
+
+### 3. Start the Autonomous Product Loop
+```bash
+# Write your tasks in prd.json, then run:
+up start
 ```
 
 ---
 
 ## 🛠️ Commands Reference
 
-### Vibe Coding Safety Rails
+### Setup
+| Command | Description |
+|---------|-------------|
+| `up init` | Initialize up-cli in an existing repository |
+| `up new <name>` | Scaffold a new project from template |
+
+### Safety
 | Command | Description |
 |---------|-------------|
 | `up save` | Create a Git checkpoint before risky AI work |
-| `up reset` | Instantly restore workspace to the last checkpoint |
 | `up diff` | Review AI changes before accepting |
+| `up reset` | Instantly restore workspace to the last checkpoint |
+
+### Workflow
+| Command | Description |
+|---------|-------------|
+| `up start` | Start the autonomous product loop |
+| `up done` | Mark a task as completed |
+
+### Quality
+| Command | Description |
+|---------|-------------|
 | `up review` | Run an AI adversarial code review |
+| `up status` | Show system health (circuit breakers, context budget, active agents) |
 
-### Autonomous Development (Product Loop)
+### Context
 | Command | Description |
 |---------|-------------|
-| `up start` | Start the SESRC autonomous product loop |
-| `up start --parallel` | Run multi-agent execution in isolated git worktrees |
-| `up agent spawn/status` | Manage isolated agent worktrees manually |
-| `up bisect` | Find bug-introducing commits automatically |
-| `up provenance list` | View AI operation lineage and audit trail |
-
-### Knowledge & Memory System
-| Command | Description |
-|---------|-------------|
-| `up learn auto` | Auto-improve project using AST analysis (Requires Vision Map) |
-| `up learn "topic"` | Command AI to research and document a specific tech topic |
 | `up memory search <q>` | Semantic search across historical decisions and bugs |
 | `up memory record` | Manually record learnings/decisions to Long-Term Memory |
+| `up memory status` | Show memory system statistics |
 
-### System & Scaffolding
+### Agents
 | Command | Description |
 |---------|-------------|
-| `up new <name> -t <type>`| Scaffold a new project (minimal, full, fastapi, nextjs) |
-| `up init` | Initialize up-cli in an existing repository |
-| `up status` | Show health of Circuit Breakers and Context Budgets |
-| `up dashboard` | Launch the live interactive TUI dashboard |
-| `up hooks` | Install git hooks for automatic memory indexing |
+| `up agent spawn` | Spawn an agent in an isolated worktree |
+| `up agent merge` | Merge an agent's work back to main |
+
+### Learning
+| Command | Description |
+|---------|-------------|
+| `up learn` | Analyze project and generate PRD for improvements |
+
+### Tracing
+| Command | Description |
+|---------|-------------|
+| `up provenance show` | View detailed audit trail for an AI operation |
 
 ---
 

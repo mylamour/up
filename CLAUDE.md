@@ -87,10 +87,10 @@ If something fails twice:
 
 This project tracks context window usage:
 - **Budget**: 100,000 tokens
-- **Warning**: At 80% usage
-- **Action**: Summarize and checkpoint at 90%
+- **Warning**: At 40% usage
+- **Action**: Summarize to `.up/thoughts/progress.md` and reset context at 40%
 
-See `.claude/context_budget.json` for current usage.
+See `.up/state.json` for current usage.
 
 ## Code Style
 
