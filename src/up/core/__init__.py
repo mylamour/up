@@ -30,6 +30,14 @@ from up.core.checkpoint import (
     get_diff,
 )
 
+from up.core.prd_schema import (
+    PRD,
+    UserStory,
+    PRDValidationError,
+    load_prd,
+    save_prd,
+)
+
 from up.core.provenance import (
     ProvenanceEntry,
     ProvenanceManager,

@@ -1,9 +1,9 @@
 # Patterns Extracted
 
 **Generated**: 2026-02-04
-**Updated**: 2026-02-06
-**Files Analyzed**: 4 (2 original research + 1 hardening research + full code audit)
-**Method**: Deep code audit + targeted research
+**Updated**: 2026-02-24
+**Files Analyzed**: 5 (2 original + 1 hardening + full code audit + ACE-FCA research)
+**Method**: Deep code audit + targeted research + external best practices
 
 ---
 
@@ -178,3 +178,34 @@ tests/
 3. **Proper logging** - logging module, not print()
 4. **Type hints** - On all public functions
 5. **Delete dead code** - Don't leave deprecated files
+
+---
+
+## Part G: Context Engineering Patterns (ACE-FCA - 2026-02-24)
+
+### Frequent Intentional Compaction (FIC)
+
+| Pattern | Description | When to Use |
+|---------|-------------|-------------|
+| **Research → Plan → Implement** | Three-phase workflow with human review gates | Every non-trivial task |
+| **Intentional Compaction** | Write specific progress file to onboard next agent | At context limits (~40%) |
+| **Sub-Agent Delegation** | Offload search/analysis to sub-agents | Codebase exploration |
+| **Backpressure** | Swallow output on success, show on failure | Test/build/lint runs |
+| **Context Budget ≤40%** | Keep utilization under 40% for capacity | Throughout all phases |
+
+### Hierarchy of Effort
+
+| Level | Impact of Error | Review Priority |
+|-------|----------------|-----------------|
+| **Research** | Bad research → 1000s of bad code lines | Highest leverage |
+| **Plan** | Bad plan → 100s of bad code lines | High leverage |
+| **Code** | Bad code → fixable locally | Lower leverage |
+
+### Output Optimization
+
+| Technique | Description |
+|-----------|-------------|
+| **failFast flags** | `pytest -x`, `jest --bail`, `go test -failfast` |
+| **Success compression** | Replace 200+ lines with single ✓ |
+| **Failure-only detail** | Full output only on errors |
+| **Deterministic truncation** | Filter with grep/sed, not model decisions |

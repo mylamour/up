@@ -152,7 +152,7 @@ def check_circuit_breaker(state: dict) -> dict:
 
 def get_next_task_from_prd(prd_path: Path, workspace: Path = None, auto_sync: bool = False) -> dict:
     """Get next incomplete task from PRD.
-    
+
     Cross-checks against state.tasks_completed to skip tasks
     that were implemented manually (e.g., in Cursor) but not
     marked in the PRD.
@@ -160,49 +160,44 @@ def get_next_task_from_prd(prd_path: Path, workspace: Path = None, auto_sync: bo
     By default this function is read-only. Set auto_sync=True to
     persist PRD pass-state updates for tasks already completed in state.
     """
-    if not prd_path.exists():
-        return None
+    from dataclasses import asdict
+    from up.core.prd_schema import load_prd, save_prd, PRDValidationError
 
     try:
-        data = json.loads(prd_path.read_text())
-        stories = data.get("userStories", [])
-
-        # Get completed tasks from state for cross-check
-        completed_in_state = set()
-        if workspace:
-            try:
-                from up.core.state import get_state_manager
-                sm = get_state_manager(workspace)
-                completed_in_state = set(sm.state.loop.tasks_completed)
-            except Exception as exc:
-                logger.debug("Failed to read completed tasks from state: %s", exc)
-
-        # Find first truly incomplete task
-        updated = False
-        for story in sorted(stories, key=lambda s: s.get("priority", 999)):
-            if story.get("passes", False):
-                continue
-            task_id = story.get("id", "")
-            if task_id in completed_in_state:
-                # Skip tasks already completed in state.
-                # Optional side-effect sync when explicitly enabled.
-                if auto_sync:
-                    story["passes"] = True
-                    story["completedAt"] = story.get("completedAt", time.strftime("%Y-%m-%d"))
-                    updated = True
-                continue
-            return story
-
-        # Persist auto-sync updates only when requested.
-        if auto_sync and updated:
-            try:
-                prd_path.write_text(json.dumps(data, indent=2))
-            except Exception as exc:
-                logger.warning("Failed to persist PRD auto-sync updates: %s", exc)
-
+        prd = load_prd(prd_path)
+    except PRDValidationError:
         return None
-    except json.JSONDecodeError:
-        return None
+
+    # Get completed tasks from state for cross-check
+    completed_in_state = set()
+    if workspace:
+        try:
+            from up.core.state import get_state_manager
+            sm = get_state_manager(workspace)
+            completed_in_state = set(sm.state.loop.tasks_completed)
+        except Exception as exc:
+            logger.debug("Failed to read completed tasks from state: %s", exc)
+
+    # Find first truly incomplete task
+    synced = False
+    for story in prd.userStories:
+        if story.passes:
+            continue
+        if story.id in completed_in_state:
+            if auto_sync:
+                story.passes = True
+                story.completedAt = story.completedAt or time.strftime("%Y-%m-%d")
+                synced = True
+            continue
+        return asdict(story)
+
+    if auto_sync and synced:
+        try:
+            save_prd(prd, prd_path)
+        except Exception as exc:
+            logger.warning("Failed to persist PRD auto-sync updates: %s", exc)
+
+    return None
 
 
 def display_status_table(state: dict, task_source: str, workspace: Path, resume: bool):
@@ -267,16 +262,10 @@ def mark_task_complete(workspace: Path, task_source: str, task_id: str) -> None:
         return
 
     try:
-        data = json.loads(prd_path.read_text())
-        stories = data.get("userStories", [])
-
-        for story in stories:
-            if story.get("id") == task_id:
-                story["passes"] = True
-                story["completedAt"] = time.strftime("%Y-%m-%d")
-                break
-
-        prd_path.write_text(json.dumps(data, indent=2))
+        from up.core.prd_schema import load_prd, save_prd
+        prd = load_prd(prd_path)
+        if prd.mark_complete(task_id, date=time.strftime("%Y-%m-%d")):
+            save_prd(prd, prd_path)
     except Exception as exc:
         logger.warning("Failed to mark task complete in PRD (%s): %s", task_id, exc)
 

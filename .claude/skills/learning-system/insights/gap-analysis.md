@@ -51,3 +51,29 @@ Memory is the answer to context fragmentation — the #1 large-project problem. 
 ## Gap 7: Event System Wiring (LOW)
 
 18 event types exist. For large projects, events connecting memory ↔ learn ↔ loop would be valuable. But handlers aren't wired yet. Low priority for v1.0 — wire 3-4 key events, not all 18.
+
+---
+
+## ACE-FCA Gaps (Added 2026-02-24)
+
+Source: HumanLayer "Advanced Context Engineering for Coding Agents"
+
+### Gap 8: No Research → Plan → Implement Enforcement (HIGH)
+
+Product loop jumps straight to implementation from PRD tasks. ACE-FCA prescribes three phases with human review gates between each. Without structured phases, AI generates code from incomplete understanding.
+
+### Gap 9: No Intentional Compaction Action (HIGH)
+
+`context.py` tracks budget but only warns. ACE-FCA says: at ~40% utilization, write a deliberate progress file to onboard the next agent. Currently no handoff mechanism between agent sessions.
+
+### Gap 10: No Output Backpressure (MEDIUM)
+
+Full test/build output flows into context regardless of pass/fail. ACE-FCA pattern: compress success to ✓, only show detail on failure. Use `failFast` flags (`pytest -x`, `jest --bail`).
+
+### Gap 11: No Sub-Agent Delegation (MEDIUM)
+
+Single agent does all work (search, analyze, implement). ACE-FCA delegates exploration/search to sub-agents to preserve parent context budget.
+
+### Gap 12: Context Budget Thresholds Too High (LOW)
+
+Warning at 80%, critical at 90%. ACE-FCA targets ≤40% utilization, never exceed 60%. By the time current warnings fire, context quality has already degraded.

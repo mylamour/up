@@ -297,25 +297,28 @@ Focus on practical improvements. No explanation, just the JSON array."""
                 "priority": priority,
                 "effort": "medium"
             })
-        
+
         if user_stories:
             console.print(f"[green]✓[/] Extracted {len(user_stories)} tasks")
-    
-    # Generate PRD
-    prd = {
-        "name": profile.get("name", workspace.name),
-        "version": "1.0.0",
-        "generated": date.today().isoformat(),
-        "source": "up learn plan",
-        "userStories": user_stories,
-        "metadata": {
+
+    # Generate PRD using shared schema
+    from up.core.prd_schema import PRD, UserStory, save_prd
+
+    stories = [UserStory(**s) for s in user_stories]
+    prd = PRD(
+        userStories=stories,
+        name=profile.get("name", workspace.name),
+        version="1.0.0",
+        generated=date.today().isoformat(),
+        source="up learn plan",
+        metadata={
             "insights_count": len(insights_content),
             "ai_generated": cli_available and len(user_stories) > 0,
-        }
-    }
-    
+        },
+    )
+
     output_path = Path(output) if output else skill_dir / "prd.json"
-    output_path.write_text(json.dumps(prd, indent=2))
+    save_prd(prd, output_path)
     
     console.print(f"\n[green]✓[/] PRD generated: [cyan]{output_path}[/]")
     

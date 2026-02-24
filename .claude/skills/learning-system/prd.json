@@ -2,7 +2,7 @@
   "name": "up-cli",
   "version": "1.0.0",
   "generated": "2026-02-23",
-  "revised": "Large-project focus — features stay, interface simplifies",
+  "revised": "Large-project focus \u2014 features stay, interface simplifies",
   "source": "Codebase audit + large-project vibe coding research + gap analysis",
   "description": "Ship v1.0 for large-project vibe coding: simplify CLI from 28 to 14 commands, stabilize core loop, add schema validation, consolidate parallel modules, and wire memory for context retention.",
   "vision": "Make AI-assisted development on large codebases safe, traceable, and context-aware. Solve the 7 failure modes of vibe coding at scale: context loss, architectural debt, security gaps, accountability holes, review bottlenecks, agent coordination, and shared context fragmentation.",
@@ -14,21 +14,45 @@
   },
   "target_audience": "Teams using AI assistants (Claude Code, Cursor) on large codebases (50k+ LOC) where context loss, coordination, and accountability are real problems.",
   "v1_command_surface": {
-    "setup": ["init", "new"],
-    "safety": ["save", "reset", "diff"],
-    "workflow": ["start", "done"],
-    "quality": ["review", "status"],
-    "context": ["memory search", "memory record", "memory status"],
-    "agents": ["agent spawn", "agent merge"],
-    "learning": ["learn"],
-    "tracing": ["provenance show"],
+    "setup": [
+      "init",
+      "new"
+    ],
+    "safety": [
+      "save",
+      "reset",
+      "diff"
+    ],
+    "workflow": [
+      "start",
+      "done"
+    ],
+    "quality": [
+      "review",
+      "status"
+    ],
+    "context": [
+      "memory search",
+      "memory record",
+      "memory status"
+    ],
+    "agents": [
+      "agent spawn",
+      "agent merge"
+    ],
+    "learning": [
+      "learn"
+    ],
+    "tracing": [
+      "provenance show"
+    ],
     "total": 14
   },
   "cut_commands": {
     "branch_group": "Remove 4 subcmds. Git handles branch rules.",
-    "memory_collapse": "11 → 3 subcmds. Remove: recall, branch, sync, session, list, clear, reset, migrate.",
-    "agent_collapse": "4 → 2 subcmds. Remove: status (fold into up status), cleanup (automatic).",
-    "provenance_collapse": "4 → 1 subcmd. Remove: list/stats (fold into status --verbose), verify.",
+    "memory_collapse": "11 \u2192 3 subcmds. Remove: recall, branch, sync, session, list, clear, reset, migrate.",
+    "agent_collapse": "4 \u2192 2 subcmds. Remove: status (fold into up status), cleanup (automatic).",
+    "provenance_collapse": "4 \u2192 1 subcmd. Remove: list/stats (fold into status --verbose), verify.",
     "dashboard": "Remove. status is sufficient.",
     "summarize": "Remove. Research feature.",
     "bisect": "Remove. Users know git bisect.",
@@ -37,7 +61,7 @@
     "sync": "Automatic via post-commit hook."
   },
   "phases": {
-    "phase1": "Simplify CLI Surface (28 → 14 commands)",
+    "phase1": "Simplify CLI Surface (28 \u2192 14 commands)",
     "phase2": "Stabilize Core Loop (tests + PRD schema)",
     "phase3": "Consolidate Architecture (parallel, JSON, truncation)",
     "phase4": "Polish & Ship (docs, UX, version bump)"
@@ -50,14 +74,14 @@
       "acceptanceCriteria": [
         "up memory search works",
         "up memory record works",
-        "up memory status works (new — shows stats + branch info)",
+        "up memory status works (new \u2014 shows stats + branch info)",
         "Removed subcommands return helpful error",
         "Internal auto-indexing unchanged"
       ],
       "phase": "phase1",
       "priority": "high",
       "effort": "medium",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-002",
@@ -72,7 +96,7 @@
       "phase": "phase1",
       "priority": "high",
       "effort": "low",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-003",
@@ -86,7 +110,7 @@
       "phase": "phase1",
       "priority": "high",
       "effort": "low",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-004",
@@ -100,7 +124,7 @@
       "phase": "phase1",
       "priority": "high",
       "effort": "low",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-005",
@@ -114,7 +138,7 @@
       "phase": "phase1",
       "priority": "high",
       "effort": "low",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-006",
@@ -128,7 +152,7 @@
       "phase": "phase1",
       "priority": "medium",
       "effort": "low",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-007",
@@ -142,7 +166,7 @@
       "phase": "phase1",
       "priority": "medium",
       "effort": "low",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-008",
@@ -157,7 +181,7 @@
       "phase": "phase1",
       "priority": "medium",
       "effort": "medium",
-      "passes": false
+      "passes": true
     },
     {
       "id": "V1-009",
@@ -212,7 +236,7 @@
       "acceptanceCriteria": [
         "Handles brackets inside strings",
         "Extracts from ```json blocks first",
-        "Fallback chain: fenced → json.loads → bracket-depth",
+        "Fallback chain: fenced \u2192 json.loads \u2192 bracket-depth",
         "Tests with edge cases"
       ],
       "phase": "phase3",
@@ -253,7 +277,7 @@
       "title": "Update README and help for 14-command surface",
       "description": "Rewrite README quick-start. Update up --help with grouped commands. Remove references to cut commands.",
       "acceptanceCriteria": [
-        "README shows core workflow: init → save → diff → reset",
+        "README shows core workflow: init \u2192 save \u2192 diff \u2192 reset",
         "up --help shows 14 commands in groups",
         "CLAUDE.md updated"
       ],
@@ -268,7 +292,7 @@
       "description": "up init prints next-steps showing the safety workflow + memory setup.",
       "acceptanceCriteria": [
         "up init prints next-steps guide",
-        "Shows: save → AI work → diff workflow",
+        "Shows: save \u2192 AI work \u2192 diff workflow",
         "Mentions memory search for context retention"
       ],
       "phase": "phase4",
@@ -290,35 +314,118 @@
       "priority": "high",
       "effort": "low",
       "passes": false,
-      "depends_on": ["V1-001", "V1-002", "V1-003", "V1-004", "V1-005", "V1-006", "V1-007", "V1-008", "V1-009", "V1-010", "V1-011", "V1-012", "V1-013", "V1-014", "V1-015", "V1-016"]
+      "depends_on": [
+        "V1-001",
+        "V1-002",
+        "V1-003",
+        "V1-004",
+        "V1-005",
+        "V1-006",
+        "V1-007",
+        "V1-008",
+        "V1-009",
+        "V1-010",
+        "V1-011",
+        "V1-012",
+        "V1-013",
+        "V1-014",
+        "V1-015",
+        "V1-016"
+      ]
+    },
+    {
+      "id": "V1-018",
+      "title": "Add Research \u2192 Plan \u2192 Implement phases to product loop",
+      "description": "Restructure the product loop to enforce three phases per task: (1) Research - understand relevant files and information flow, (2) Plan - outline exact changes with human review gate, (3) Implement - execute plan. Each phase starts a fresh context. Based on ACE-FCA 'Frequent Intentional Compaction' pattern.",
+      "acceptanceCriteria": [
+        "up start runs research phase first, saves findings to .up/thoughts/research.md",
+        "Plan phase reads research, generates step-by-step plan to .up/thoughts/plan.md",
+        "Human review gate between plan and implement (--auto-approve to skip)",
+        "Implementation reads plan, executes phase-by-phase",
+        "Each phase compacts context by writing progress file"
+      ],
+      "phase": "phase2",
+      "priority": "high",
+      "effort": "high",
+      "passes": false
+    },
+    {
+      "id": "V1-019",
+      "title": "Add output backpressure to verification step",
+      "description": "Compress test/build/lint output on success to a single checkmark. Only show full output on failure. Use failFast flags. Based on ACE-FCA backpressure pattern.",
+      "acceptanceCriteria": [
+        "Passing tests show \u2713 Tests passed (N passed)",
+        "Failing tests show full output of first failure only",
+        "pytest runs with -x flag (fail fast)",
+        "Build output compressed on success"
+      ],
+      "phase": "phase3",
+      "priority": "medium",
+      "effort": "low",
+      "passes": false
+    },
+    {
+      "id": "V1-020",
+      "title": "Add intentional compaction to context manager",
+      "description": "When context budget hits 40%, auto-generate a progress/handoff file (.up/thoughts/progress.md) summarizing current state, then signal for context reset. Based on ACE-FCA compaction pattern.",
+      "acceptanceCriteria": [
+        "Context warning threshold lowered to 40%",
+        "At 40%, writes .up/thoughts/progress.md with current task state",
+        "Progress file includes: what's done, what's next, relevant files",
+        "New agent session reads progress file to resume"
+      ],
+      "phase": "phase3",
+      "priority": "medium",
+      "effort": "medium",
+      "passes": false
     }
   ],
   "success_metrics": {
-    "command_count": {"current": 28, "target": 14},
-    "memory_subcommands": {"current": 11, "target": 3},
-    "core_loop_test_coverage": {"current": "0%", "target": "60%+"},
-    "prd_schema_validated": {"current": false, "target": true},
-    "parallel_modules": {"current": 2, "target": 1},
-    "silent_exception_handlers": {"current": "5+", "target": 0}
+    "command_count": {
+      "current": 28,
+      "target": 14
+    },
+    "memory_subcommands": {
+      "current": 11,
+      "target": 3
+    },
+    "core_loop_test_coverage": {
+      "current": "0%",
+      "target": "60%+"
+    },
+    "prd_schema_validated": {
+      "current": false,
+      "target": true
+    },
+    "parallel_modules": {
+      "current": 2,
+      "target": 1
+    },
+    "silent_exception_handlers": {
+      "current": "5+",
+      "target": 0
+    }
   },
   "metadata": {
-    "total_tasks": 17,
-    "completed": 0,
-    "pending": 17,
+    "total_tasks": 20,
+    "completed": 8,
+    "pending": 12,
     "phases": {
-      "phase1": "8 tasks — Simplify CLI Surface",
-      "phase2": "2 tasks — Stabilize Core Loop",
-      "phase3": "4 tasks — Consolidate Architecture",
-      "phase4": "3 tasks — Polish & Ship"
+      "phase1": "8 tasks \u2014 Simplify CLI Surface",
+      "phase2": "3 tasks \u2014 Stabilize Core Loop (+ ACE-FCA workflow)",
+      "phase3": "6 tasks \u2014 Consolidate Architecture (+ ACE-FCA backpressure/compaction)",
+      "phase4": "3 tasks \u2014 Polish & Ship"
     },
     "large_project_problems_addressed": [
-      "Context fragmentation → memory system (3 commands)",
-      "Architectural debt → learn system + PRD schema",
-      "Security vulnerabilities → review command",
-      "Accountability gap → provenance show",
-      "Review bottleneck → diff + review",
-      "Multi-agent coordination → agent spawn/merge + parallel scheduler",
-      "Shared context loss → memory auto-indexing via hooks"
+      "Context fragmentation \u2192 memory system (3 commands)",
+      "Architectural debt \u2192 learn system + PRD schema",
+      "Security vulnerabilities \u2192 review command",
+      "Accountability gap \u2192 provenance show",
+      "Review bottleneck \u2192 diff + review",
+      "Multi-agent coordination \u2192 agent spawn/merge + parallel scheduler",
+      "Shared context loss \u2192 memory auto-indexing via hooks",
+      "Context degradation \u2192 intentional compaction + backpressure (ACE-FCA)",
+      "Unstructured AI work \u2192 research/plan/implement phases (ACE-FCA)"
     ],
     "previous_prd_version": "3.0.0 (hardening, 52 tasks, all complete)",
     "ai_generated": true
