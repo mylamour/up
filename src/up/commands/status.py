@@ -170,6 +170,16 @@ def collect_status(workspace: Path) -> dict:
     return status
 
 
+def _collect_provenance_summary(workspace: Path) -> dict:
+    """Collect provenance statistics for --verbose output."""
+    try:
+        from up.core.provenance import get_provenance_manager
+        prov = get_provenance_manager(workspace)
+        return prov.get_stats()
+    except Exception:
+        return {}
+
+
 def _collect_legacy_status(workspace: Path, status: dict) -> None:
     """Collect status from legacy state files."""
     # Context budget (old location)
@@ -198,7 +208,7 @@ def _collect_legacy_status(workspace: Path, status: dict) -> None:
             status["loop_state"] = {"error": "Invalid JSON"}
 
 
-def display_status(status: dict) -> None:
+def display_status(status: dict, verbose: bool = False) -> None:
     """Display status in rich format."""
     
     # Header
@@ -361,6 +371,27 @@ def display_status(status: dict) -> None:
             console.print(f"  • {skill}")
     else:
         console.print("  [dim]No skills installed[/]")
+    
+    # Provenance (verbose only)
+    if verbose and status.get("provenance"):
+        prov = status["provenance"]
+        console.print("\n[bold]Provenance Summary[/]")
+        total = prov.get("total_operations", 0)
+        accepted = prov.get("accepted", 0)
+        rejected = prov.get("rejected", 0)
+        pending = prov.get("pending", 0)
+        rate = prov.get("acceptance_rate", 0)
+        console.print(f"  Operations: {total} (accepted: {accepted}, rejected: {rejected}, pending: {pending})")
+        console.print(f"  Acceptance Rate: {rate*100:.0f}%")
+        test_rate = prov.get("test_pass_rate", 0)
+        console.print(f"  Test Pass Rate: {test_rate*100:.0f}%")
+        models = prov.get("models_used", {})
+        if models:
+            model_str = ", ".join(f"{m}: {c}" for m, c in models.items())
+            console.print(f"  Models: {model_str}")
+    elif verbose:
+        console.print("\n[bold]Provenance Summary[/]")
+        console.print("  [dim]No provenance data — run [cyan]up start[/] to generate[/]")
 
 
 if __name__ == "__main__":

@@ -54,8 +54,8 @@ def show_cmd(entry_id: str, task: str):
 
 
 
-# Removed in v1.0: list, stats, verify
-# Provenance stats available via 'up status --verbose'
+# In v1.0 minimal surface: list, stats, verify were removed.
+# Provenance summary is available via: up status --verbose
 
 
 def _display_entry(entry: ProvenanceEntry) -> None:
