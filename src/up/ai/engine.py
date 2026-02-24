@@ -7,8 +7,10 @@ Allows decoupling from specific AI CLI implementations.
 import abc
 import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 
 from rich.console import Console
 
@@ -54,8 +56,14 @@ class AIEngine(abc.ABC):
         timeout: int = 600,
         raise_on_error: bool = False,
         continue_session: bool = False,
+        on_output: Optional[Callable[[str], None]] = None,
     ) -> Tuple[bool, str]:
-        """Execute an implementation task and return success status and output."""
+        """Execute an implementation task and return success status and output.
+
+        Args:
+            on_output: Optional callback invoked with each line of output
+                       so callers can show live progress.
+        """
         pass
 
 
@@ -150,6 +158,7 @@ class CliEngine(AIEngine):
         timeout: int = 600,
         raise_on_error: bool = False,
         continue_session: bool = False,
+        on_output: Optional[Callable[[str], None]] = None,
     ) -> Tuple[bool, str]:
         if not self.is_available():
             error_msg = f"AI CLI '{self.name()}' not found in PATH"
@@ -160,31 +169,65 @@ class CliEngine(AIEngine):
         try:
             cmd = self._build_command(prompt, continue_session=continue_session)
 
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout,
-                cwd=workspace
+                cwd=workspace,
             )
 
-            if result.returncode == 0:
-                return True, result.stdout
+            stdout_lines: list[str] = []
+            stderr_lines: list[str] = []
+
+            def _read_stderr():
+                for line in proc.stderr:
+                    stderr_lines.append(line)
+
+            stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+            stderr_thread.start()
+
+            deadline = time.monotonic() + timeout
+            for line in proc.stdout:
+                stdout_lines.append(line)
+                if on_output:
+                    stripped = line.rstrip()
+                    if stripped:
+                        on_output(stripped)
+                if time.monotonic() > deadline:
+                    proc.kill()
+                    proc.wait()
+                    error_msg = f"AI task timed out ({timeout}s)"
+                    if raise_on_error:
+                        raise AICliTimeoutError(error_msg, timeout=timeout)
+                    return False, error_msg
+
+            proc.wait()
+            stderr_thread.join(timeout=5)
+
+            # Check if we exceeded deadline while waiting
+            if time.monotonic() > deadline:
+                proc.kill()
+                error_msg = f"AI task timed out ({timeout}s)"
+                if raise_on_error:
+                    raise AICliTimeoutError(error_msg, timeout=timeout)
+                return False, error_msg
+
+            stdout = "".join(stdout_lines)
+            stderr = "".join(stderr_lines)
+
+            if proc.returncode == 0:
+                return True, stdout
             else:
-                stderr = result.stderr or "Unknown error"
+                error = stderr or "Unknown error"
                 if raise_on_error:
                     raise AICliExecutionError(
-                        f"AI task failed with exit code {result.returncode}",
-                        returncode=result.returncode,
-                        stderr=stderr
+                        f"AI task failed with exit code {proc.returncode}",
+                        returncode=proc.returncode,
+                        stderr=error,
                     )
-                return False, stderr
+                return False, error
 
-        except subprocess.TimeoutExpired:
-            error_msg = f"AI task timed out ({timeout}s)"
-            if raise_on_error:
-                raise AICliTimeoutError(error_msg, timeout=timeout)
-            return False, error_msg
         except (AICliNotFoundError, AICliTimeoutError, AICliExecutionError):
             raise
         except Exception as e:

@@ -338,7 +338,13 @@ def run_ai_product_loop(
                 logger.debug("Failed to start provenance tracking: %s", exc)
 
             # Run Phase 1
-            success, output = run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+            def _on_ai_output(line: str):
+                display.log(f"  {line[:120]}")
+
+            success, output = run_ai_task(
+                workspace, prompt, cli_name, timeout=timeout,
+                on_output=_on_ai_output,
+            )
             if success:
                 display.log_success("Research complete")
             else:
@@ -352,7 +358,7 @@ def run_ai_product_loop(
                 prompt = build_plan_prompt(workspace, task, task_source)
                 success, output = run_ai_task(
                     workspace, prompt, cli_name, timeout=timeout,
-                    continue_session=True,
+                    continue_session=True, on_output=_on_ai_output,
                 )
                 if success:
                     display.log_success("Plan complete")
@@ -391,7 +397,7 @@ def run_ai_product_loop(
                 prompt = build_implement_prompt(workspace, task, task_source)
                 success, output = run_ai_task(
                     workspace, prompt, cli_name, timeout=timeout,
-                    continue_session=True,
+                    continue_session=True, on_output=_on_ai_output,
                 )
                 if success:
                     display.log_success("Implementation complete")

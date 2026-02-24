@@ -4,7 +4,7 @@ This module now wraps the AIEngine abstraction for backward compatibility.
 """
 
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from up.ai.engine import CliEngine
 from up.exceptions import (  # noqa: F401
@@ -62,12 +62,13 @@ def run_ai_task(
     max_tokens: int = 0,
     raise_on_error: bool = False,
     continue_session: bool = False,
+    on_output: Optional[Callable[[str], None]] = None,
 ) -> Tuple[bool, str]:
     """Run an AI task (like implementing code) and return success status."""
     engine = _get_engine(cli_name)
     return engine.execute_task(
         workspace, prompt, timeout=timeout, raise_on_error=raise_on_error,
-        continue_session=continue_session,
+        continue_session=continue_session, on_output=on_output,
     )
 
 

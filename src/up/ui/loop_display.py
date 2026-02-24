@@ -85,7 +85,7 @@ class DisplayState:
     current_phase: str = "INIT"
     tasks: list[TaskInfo] = field(default_factory=list)
     stats: LoopStats = field(default_factory=LoopStats)
-    log_entries: deque = field(default_factory=lambda: deque(maxlen=12))
+    log_entries: deque = field(default_factory=lambda: deque(maxlen=30))
     start_time: Optional[datetime] = None
     phase_start_time: Optional[datetime] = None
 
@@ -289,8 +289,8 @@ class ProductLoopDisplay:
         layout.split_column(
             Layout(name="header", size=3),
             Layout(name="progress", size=3),
-            Layout(name="main", ratio=1),
-            Layout(name="log", size=10),
+            Layout(name="main", size=14),
+            Layout(name="log", ratio=1, minimum_size=12),
             Layout(name="stats", size=3),
             Layout(name="footer", size=1),
         )
@@ -350,7 +350,19 @@ class ProductLoopDisplay:
         # Compact task list
         parts.append(self._render_compact_tasks())
         parts.append("")
-        
+
+        # Recent log entries (last 6 in compact mode)
+        if self.state.log_entries:
+            width, _ = self._get_terminal_size()
+            max_msg_len = max(30, width - 18)
+            recent = list(self.state.log_entries)[-6:]
+            for timestamp, message, style in recent:
+                line = Text()
+                line.append(f"  {timestamp} ", style="text.dim")
+                line.append(message[:max_msg_len], style=style or "text")
+                parts.append(line)
+            parts.append("")
+
         # Stats line
         stats = self.state.stats
         elapsed = self._format_duration(stats.elapsed_seconds)
@@ -662,19 +674,23 @@ class ProductLoopDisplay:
         return text
         
     def _render_log(self) -> Panel:
-        """Render activity log panel."""
+        """Render activity log panel with terminal-width-aware truncation."""
+        width, _ = self._get_terminal_size()
+        # Account for panel border (2), padding (2), timestamp prefix (~12)
+        max_msg_len = max(40, width - 20)
+
         lines = []
-        
+
         for timestamp, message, style in self.state.log_entries:
             line = Text()
             line.append(f"  {timestamp}  ", style="text.dim")
-            line.append(message[:60], style=style or "text")
+            line.append(message[:max_msg_len], style=style or "text")
             lines.append(line)
-            
+
         # Pad with empty lines if needed
-        while len(lines) < 6:
+        while len(lines) < 8:
             lines.append(Text(""))
-            
+
         return Panel(
             Group(*lines),
             title="[title]Activity Log[/]",
