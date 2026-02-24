@@ -38,12 +38,13 @@ from up.git.worktree import (
 from up.git.utils import run_git, is_git_repo, get_current_branch
 from up.ai_cli import check_ai_cli, run_ai_task
 from up.core.state import get_state_manager, AgentState
-from up.parallel import (
+from up.parallel.executor import (
     ParallelExecutionManager,
     TaskResult,
     execute_task_in_worktree,
     verify_worktree,
     mark_task_complete_in_prd,
+    get_pending_tasks,
 )
 
 console = Console()
@@ -70,7 +71,6 @@ def build_dependency_graph(tasks: List[dict]) -> Dict[str, Set[str]]:
         task_id = task.get("id", "")
         deps = set()
         for dep in task.get("depends_on", []):
-            # Only include deps that are in our task set
             if dep in task_ids:
                 deps.add(dep)
         graph[task_id] = deps
@@ -106,7 +106,6 @@ def get_execution_waves(tasks: List[dict]) -> List[List[dict]]:
 
     waves = []
     while sorter.is_active():
-        # get_ready() returns all nodes with no pending dependencies
         ready = list(sorter.get_ready())
         if not ready:
             break
@@ -114,7 +113,6 @@ def get_execution_waves(tasks: List[dict]) -> List[List[dict]]:
         wave = [task_map[tid] for tid in ready if tid in task_map]
         waves.append(wave)
 
-        # Mark all as done so next wave can proceed
         for tid in ready:
             sorter.done(tid)
 
@@ -140,20 +138,16 @@ class TaskFileMap:
         task_id = task.get("id", "")
         files = set()
 
-        # Extract file paths from description and criteria
         text = " ".join([
             task.get("description", ""),
             task.get("title", ""),
             " ".join(task.get("acceptanceCriteria", [])),
         ])
 
-        # Look for file path patterns
         import re
-        # Match patterns like src/up/core/state.py, tests/test_foo.py
         path_patterns = re.findall(r'[\w/]+\.(?:py|ts|js|json|md|yaml|yml)', text)
         files.update(path_patterns)
 
-        # Match directory patterns like src/up/commands/
         dir_patterns = re.findall(r'(?:src|tests|docs)/[\w/]+', text)
         for d in dir_patterns:
             dir_path = workspace / d
@@ -197,7 +191,6 @@ class TaskFileMap:
         if not conflicts:
             return [wave[:max_workers]]
 
-        # Greedy coloring: assign tasks to sub-waves avoiding conflicts
         conflict_graph: Dict[str, Set[str]] = {}
         for t in wave:
             conflict_graph[t.get("id")] = set()
@@ -211,7 +204,6 @@ class TaskFileMap:
 
         for task in wave:
             tid = task.get("id")
-            # Find the first sub-wave where this task has no conflicts
             placed = False
             for i, sw in enumerate(sub_waves):
                 sw_ids = {t.get("id") for t in sw}
@@ -419,7 +411,6 @@ class ParallelDashboard:
     def _render(self) -> Panel:
         elapsed = time.time() - self._start_time if self._start_time else 0
 
-        # Agent table
         table = Table(show_header=True, header_style="bold", expand=True)
         table.add_column("Agent", style="cyan", width=12)
         table.add_column("Task", width=35)
@@ -453,10 +444,8 @@ class ParallelDashboard:
                     dur,
                 )
 
-        # Log panel
         log_text = "\n".join(self._log_lines[-10:]) if self._log_lines else "[dim]Waiting...[/]"
 
-        # Layout
         layout = Layout()
         layout.split_column(
             Layout(Panel(
@@ -523,12 +512,10 @@ def partial_merge(
     if not worktree_path.exists():
         return False, []
 
-    # Get modified files
     modified = get_modified_files_in_worktree(worktree_path)
     if not modified:
         return False, []
 
-    # Filter out excluded patterns
     import fnmatch
     filtered = [
         f for f in modified
@@ -538,12 +525,10 @@ def partial_merge(
     if not filtered:
         return False, []
 
-    # Checkout target branch in main workspace
     result = run_git("checkout", target_branch, cwd=workspace)
     if result.returncode != 0:
         return False, []
 
-    # Cherry-pick individual files from the agent branch
     merged_files = []
     for file_path in filtered:
         try:
@@ -557,7 +542,6 @@ def partial_merge(
             continue
 
     if merged_files:
-        # Stage and commit
         run_git("add", *merged_files, cwd=workspace)
         run_git(
             "commit", "-m",
@@ -618,16 +602,13 @@ def run_enhanced_parallel_loop(
 
     start_time = time.time()
 
-    # Load all pending tasks (cross-checked against state)
     if not prd_path.exists():
         console.print("[red]PRD file not found[/]")
         return summary
 
     try:
-        from up.parallel import get_pending_tasks
         all_tasks = get_pending_tasks(prd_path, workspace=workspace)
     except Exception:
-        # Fallback: direct read
         try:
             data = json.loads(prd_path.read_text())
             all_tasks = [s for s in data.get("userStories", []) if not s.get("passes", False)]
@@ -639,7 +620,6 @@ def run_enhanced_parallel_loop(
         console.print("[green]All tasks complete![/]")
         return summary
 
-    # Build dependency-aware execution waves
     waves = get_execution_waves(all_tasks)
     console.print(f"\n[bold]Scheduling:[/] {len(all_tasks)} tasks in {len(waves)} waves")
 
@@ -649,7 +629,6 @@ def run_enhanced_parallel_loop(
 
     if dry_run:
         console.print("\n[yellow]DRY RUN[/] - No changes made")
-        # Show file conflict analysis
         if enable_conflict_check:
             file_map = TaskFileMap()
             for task in all_tasks:
@@ -662,19 +641,16 @@ def run_enhanced_parallel_loop(
                         console.print(f"    {t1} <-> {t2}: {', '.join(files)}")
         return summary
 
-    # Check AI availability
     cli_name, cli_available = check_ai_cli()
     if not cli_available:
         console.print("[red]No AI CLI found[/]")
         return summary
 
-    # File conflict analysis
     file_map = TaskFileMap()
     if enable_conflict_check:
         for task in all_tasks:
             file_map.analyze_task(task, workspace)
 
-    # Start dashboard
     dashboard = ParallelDashboard(console)
     dashboard.start(total_waves=len(waves))
 
@@ -685,7 +661,6 @@ def run_enhanced_parallel_loop(
             summary["waves"] += 1
             dashboard.log(f"Starting wave {wave_num}/{len(waves)} ({len(wave)} tasks)")
 
-            # Split wave by file conflicts if enabled
             if enable_conflict_check:
                 sub_waves = file_map.split_wave_by_conflicts(wave, max_workers)
                 if len(sub_waves) > 1:
@@ -720,7 +695,6 @@ def run_enhanced_parallel_loop(
 
     summary["total_duration"] = time.time() - start_time
 
-    # Print summary
     _print_enhanced_summary(summary)
 
     return summary
@@ -740,7 +714,6 @@ def _execute_wave(
     enable_partial_merge: bool,
 ):
     """Execute a single wave of tasks in parallel."""
-    # Phase 1: Create worktrees
     worktrees = []
     for task in tasks:
         task_id = task.get("id")
@@ -753,7 +726,6 @@ def _execute_wave(
             worktrees.append({"path": wt_path, "state": wt_state, "task": task})
             state_mgr.add_active_worktree(task_id)
 
-            # Write shared context into worktree
             context = knowledge.get_context_for_agent(task_id)
             if context:
                 ctx_file = wt_path / ".agent_context.md"
@@ -767,7 +739,6 @@ def _execute_wave(
     if not worktrees:
         return
 
-    # Phase 2: Execute in parallel
     results: Dict[str, TaskResult] = {}
     with ThreadPoolExecutor(max_workers=min(max_workers, len(worktrees))) as executor:
         futures: Dict[Future, str] = {}
@@ -795,7 +766,6 @@ def _execute_wave(
                 results[tid] = TaskResult(tid, False, "failed", 0, error=str(e))
                 dashboard.update_agent(tid, "failed", error=str(e))
 
-    # Phase 3: Verify passing tasks
     for wt in worktrees:
         tid = wt["task"].get("id")
         if results.get(tid, TaskResult("", False, "failed", 0)).success:
@@ -808,7 +778,6 @@ def _execute_wave(
                 dashboard.update_agent(tid, "failed")
                 dashboard.log(f"[yellow]{tid}: verification failed[/]")
 
-    # Phase 4: Merge passing tasks + partial merge for failures
     for wt in worktrees:
         tid = wt["task"].get("id")
         result = results.get(tid)
@@ -828,7 +797,6 @@ def _execute_wave(
                 summary["failed"].append(tid)
                 state_mgr.record_task_failed(tid)
         else:
-            # Try partial merge if enabled
             if enable_partial_merge and result and result.error != "merge conflict":
                 dashboard.log(f"Attempting partial merge for {tid}...")
                 success, files = partial_merge(tid, workspace)
@@ -848,16 +816,15 @@ def _execute_wave(
                 summary["failed"].append(tid)
                 state_mgr.record_task_failed(tid)
 
-        # Cleanup
         state_mgr.remove_active_worktree(tid)
         knowledge.release_files(tid)
 
 
 def _print_enhanced_summary(summary: dict):
     """Print enhanced execution summary."""
-    console.print(f"\n{'═' * 55}")
+    console.print(f"\n{'=' * 55}")
     console.print("[bold]PARALLEL EXECUTION SUMMARY[/]")
-    console.print("═" * 55)
+    console.print("=" * 55)
 
     table = Table(show_header=False, box=None)
     table.add_column("Metric", style="dim")

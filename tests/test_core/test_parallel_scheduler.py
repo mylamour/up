@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from up.parallel_scheduler import (
+from up.parallel import (
     build_dependency_graph,
     get_execution_waves,
     TaskFileMap,

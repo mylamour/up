@@ -165,8 +165,6 @@ def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None)
             if s.get("passes", False):
                 continue  # Already marked done in PRD
             if task_id in completed_in_state:
-                # Task was completed (e.g., manually in Cursor) but PRD not updated
-                # Auto-sync: mark it as done in the PRD
                 s["passes"] = True
                 s["completedAt"] = s.get("completedAt", datetime.now().strftime("%Y-%m-%d"))
                 synced_count += 1
@@ -210,13 +208,11 @@ def execute_task_in_worktree(
     start_time = time.time()
     
     try:
-        # Update state to executing
         state = WorktreeState.load(worktree_path)
         state.status = "executing"
         state.phase = "CHECKPOINT"
         state.save(worktree_path)
         
-        # Create checkpoint
         checkpoint = create_checkpoint(worktree_path, f"{task_id}-start")
         state.checkpoints.append({
             "name": checkpoint,
@@ -224,10 +220,8 @@ def execute_task_in_worktree(
         })
         state.save(worktree_path)
         
-        # Build implementation prompt
         prompt = _build_task_prompt(task)
         
-        # Run AI implementation
         state.phase = "AI_IMPL"
         state.save(worktree_path)
         
@@ -258,7 +252,6 @@ def execute_task_in_worktree(
                 error=state.error
             )
         
-        # Commit AI changes
         subprocess.run(
             ["git", "add", "-A"],
             cwd=worktree_path,
@@ -318,7 +311,6 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
         "type_check": None
     }
     
-    # Run pytest if available
     result = subprocess.run(
         ["pytest", "-q", "--tb=no"],
         cwd=worktree_path,
@@ -327,7 +319,6 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
     )
     test_results["tests"] = result.returncode == 0
     
-    # Run ruff if available
     result = subprocess.run(
         ["ruff", "check", "src/", "--quiet"],
         cwd=worktree_path,
@@ -336,7 +327,6 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
     )
     test_results["lint"] = result.returncode == 0
     
-    # Run mypy if available
     result = subprocess.run(
         ["mypy", "src/", "--ignore-missing-imports", "--no-error-summary"],
         cwd=worktree_path,
@@ -345,7 +335,6 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
     )
     test_results["type_check"] = result.returncode == 0
     
-    # All must pass (None counts as pass - tool not available)
     passed = all(
         v is None or v is True
         for v in test_results.values()

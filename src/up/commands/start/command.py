@@ -127,7 +127,7 @@ def start_cmd(
 
     # Parallel mode
     if parallel:
-        from up.parallel_scheduler import run_enhanced_parallel_loop
+        from up.parallel import run_enhanced_parallel_loop
         from up.git.utils import is_git_repo
 
         if not is_git_repo(cwd):

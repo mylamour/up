@@ -12,8 +12,8 @@ from up.parallel import (
     TaskResult,
     get_pending_tasks,
     mark_task_complete_in_prd,
-    _build_task_prompt,
 )
+from up.parallel.executor import _build_task_prompt
 from up.core.state import StateManager
 
 

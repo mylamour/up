@@ -17,12 +17,47 @@ console = Console()
 
 
 def _extract_json_array(text: str) -> Optional[list]:
-    """Extract a JSON array from text using bracket-depth matching."""
+    """Extract a JSON array from text.
+
+    Fallback chain: fenced ```json block → json.loads → bracket-depth.
+    """
+    import re
+
+    # 1. Try fenced code block
+    m = re.search(r'```(?:json)?\s*(\[[\s\S]*?\])\s*```', text)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # 2. Try raw json.loads on the whole text
+    stripped = text.strip()
+    if stripped.startswith('['):
+        try:
+            return json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Bracket-depth fallback (handles surrounding prose)
     start = text.find('[')
     if start == -1:
         return None
     depth = 0
+    in_string = False
+    escape = False
     for i, ch in enumerate(text[start:], start):
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
         if ch == '[':
             depth += 1
         elif ch == ']':

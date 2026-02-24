@@ -197,7 +197,8 @@
       "phase": "phase2",
       "priority": "critical",
       "effort": "high",
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-24"
     },
     {
       "id": "V1-010",
@@ -212,7 +213,8 @@
       "phase": "phase2",
       "priority": "critical",
       "effort": "medium",
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-24"
     },
     {
       "id": "V1-011",
@@ -242,7 +244,8 @@
       "phase": "phase3",
       "priority": "high",
       "effort": "low",
-      "passes": false
+      "passes": true,
+      "completedAt": "2026-02-24"
     },
     {
       "id": "V1-013",
@@ -408,8 +411,8 @@
   },
   "metadata": {
     "total_tasks": 20,
-    "completed": 8,
-    "pending": 12,
+    "completed": 11,
+    "pending": 9,
     "phases": {
       "phase1": "8 tasks \u2014 Simplify CLI Surface",
       "phase2": "3 tasks \u2014 Stabilize Core Loop (+ ACE-FCA workflow)",
