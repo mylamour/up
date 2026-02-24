@@ -239,11 +239,14 @@ def run_ai_product_loop(
     run_all: bool = False,
     timeout: int = 600,
     auto_commit: bool = False,
-    auto_approve: bool = False,
     verify: bool = True,
     interactive: bool = False,
 ):
-    """Run the product loop with AI auto-implementation."""
+    """Run the product loop with AI auto-implementation.
+
+    By default runs autonomously (no prompts). When ``interactive=True``,
+    pauses for human review after the plan phase and on verification failure.
+    """
     global _state_manager, _checkpoint_manager, _current_workspace
     global _current_provenance_entry, _current_display
 
@@ -356,12 +359,12 @@ def run_ai_product_loop(
                 else:
                     display.log_error("Plan failed")
 
-            # Human Review Gate
-            if success and not auto_approve:
+            # Human Review Gate (only in interactive mode)
+            if success and interactive:
                 display.stop()
-                console.print(f"\n[bold]Plan for {task_id} generated at .up/thoughts/plan.md[/]")
+                console.print(f"\n[bold]Plan for {task_id}:[/] .up/thoughts/plan.md")
                 from rich.prompt import Confirm
-                if not Confirm.ask("Proceed with implementation?", default=False):
+                if not Confirm.ask("Proceed with implementation?", default=True):
                     console.print("[yellow]Rolling back...[/]")
                     rollback_checkpoint(workspace)
                     failed += 1

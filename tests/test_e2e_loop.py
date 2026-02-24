@@ -90,9 +90,8 @@ def test_successful_loop_execution(git_workspace, test_prd, mock_ai_engine):
             specific_task="US-E2E-01",
             cli_name="claude",
             auto_commit=True,
-            auto_approve=True,
             verify=True,
-            interactive=False
+            interactive=False,
         )
 
     # 1. Check state manager updates
@@ -135,9 +134,8 @@ def test_failure_loop_triggers_rollback(git_workspace, test_prd, mock_ai_engine)
             specific_task="US-E2E-02",
             cli_name="claude",
             auto_commit=True,
-            auto_approve=True,
             verify=True,
-            interactive=False
+            interactive=False,
         )
 
     # 1. Check state manager updates
@@ -174,9 +172,8 @@ def test_doom_loop_circuit_breaker(git_workspace, test_prd, mock_ai_engine):
                 specific_task="US-E2E-02",
                 cli_name="claude",
                 auto_commit=True,
-                auto_approve=True,
                 verify=True,
-                interactive=False
+                interactive=False,
             )
 
     sm = get_state_manager(git_workspace)

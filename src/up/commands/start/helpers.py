@@ -130,6 +130,23 @@ def count_tasks(workspace: Path, task_source: str) -> int:
     return 0
 
 
+def reset_circuit_breaker(workspace: Path) -> None:
+    """Reset all circuit breakers to CLOSED state.
+
+    Called by ``--resume`` so the user can retry after fixing an issue.
+    """
+    try:
+        manager = get_state_manager(workspace)
+        for cb in manager.state.circuit_breakers.values():
+            cb.failures = 0
+            cb.state = "CLOSED"
+            cb.opened_at = None
+        manager.state.loop.consecutive_failures = 0
+        manager.save()
+    except Exception as exc:
+        logger.debug("Failed to reset circuit breakers: %s", exc)
+
+
 def check_circuit_breaker(state: dict, workspace: Path = None) -> dict:
     """Check circuit breaker status.
 

@@ -3,13 +3,11 @@
 Routes to parallel, dry-run, AI, or manual mode based on options.
 """
 
-import time
 from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.panel import Panel
-from tqdm import tqdm
 
 from up.ai_cli import check_ai_cli, get_ai_cli_install_instructions
 from up.ui import THEME
@@ -19,6 +17,7 @@ from up.commands.start.helpers import (
     find_task_source,
     load_loop_state,
     check_circuit_breaker,
+    reset_circuit_breaker,
     display_status_table,
 )
 from up.commands.start.loop import (
@@ -31,74 +30,53 @@ console = Console(theme=THEME)
 
 
 @click.command()
-@click.option("--resume", "-r", is_flag=True, help="Resume from last checkpoint")
+@click.option("--resume", "-r", is_flag=True, help="Resume from last checkpoint (resets circuit breaker)")
 @click.option("--dry-run", is_flag=True, help="Preview without executing")
 @click.option("--task", "-t", help="Start with specific task ID")
 @click.option("--prd", "-p", type=click.Path(exists=True), help="Path to PRD file")
-@click.option("--interactive", "-i", is_flag=True, help="Interactive mode with confirmations")
+@click.option("--interactive", "-i", is_flag=True, help="Interactive mode: confirm plan before implementation")
 @click.option("--no-ai", is_flag=True, help="Disable auto AI implementation")
 @click.option("--all", "run_all", is_flag=True, help="Run all tasks automatically")
 @click.option("--timeout", default=600, help="AI task timeout in seconds (default: 600)")
 @click.option("--parallel", is_flag=True, help="Run tasks in parallel Git worktrees")
 @click.option("--jobs", "-j", default=3, help="Number of parallel tasks (default: 3)")
 @click.option("--auto-commit", is_flag=True, help="Auto-commit after each successful task")
-@click.option("--auto-approve", is_flag=True, help="Skip human review gate between plan and implementation")
 @click.option("--verify/--no-verify", default=True, help="Run tests before commit (default: True)")
 def start_cmd(
     resume, dry_run, task, prd, interactive, no_ai, run_all,
-    timeout, parallel, jobs, auto_commit, auto_approve, verify,
+    timeout, parallel, jobs, auto_commit, verify,
 ):
     """Start the product loop for autonomous development.
 
-    Uses Claude/Cursor AI by default to implement tasks automatically.
+    By default runs autonomously with no prompts. Use -i for interactive
+    mode which adds a human review gate before implementation.
 
-    The product loop implements SESRC principles:
-    - Stable: Graceful degradation
-    - Efficient: Token budgets
-    - Safe: Input validation
-    - Reliable: Checkpoints & rollback
-    - Cost-effective: Early termination
-
-    \\b
+    \b
     Examples:
-      up start                  # Auto-implement next task with AI
+      up start                  # Auto-implement next task
+      up start -i               # Interactive: review plan before implementing
       up start --all            # Auto-implement ALL tasks
-      up start --resume         # Resume from checkpoint
+      up start --resume         # Resume after failure (resets circuit breaker)
       up start --task US-003    # Implement specific task
       up start --dry-run        # Preview mode
       up start --no-ai          # Manual mode (show instructions only)
-      up start --parallel       # Run 3 tasks in parallel worktrees
-      up start --parallel -j 5  # Run 5 tasks in parallel
-      up start --parallel --all # Run ALL tasks in parallel batches
+      up start --parallel -j 5  # Run 5 tasks in parallel worktrees
     """
     cwd = Path.cwd()
 
-    # Check if initialized with progress
-    console.print()
-    with tqdm(total=4, desc="Initializing", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}") as pbar:
-        pbar.set_description("Checking project")
-        if not is_initialized(cwd):
-            pbar.close()
-            console.print("\n[red]Error:[/] Project not initialized.")
-            console.print("Run [cyan]up init[/] first.")
-            raise SystemExit(1)
-        pbar.update(1)
-        time.sleep(0.2)
+    # Initialization
+    if not is_initialized(cwd):
+        console.print("[red]Error:[/] Project not initialized. Run [cyan]up init[/] first.")
+        raise SystemExit(1)
 
-        pbar.set_description("Finding tasks")
-        task_source = find_task_source(cwd, prd)
-        pbar.update(1)
-        time.sleep(0.2)
+    task_source = find_task_source(cwd, prd)
+    state = load_loop_state(cwd)
 
-        pbar.set_description("Loading state")
-        state = load_loop_state(cwd)
-        pbar.update(1)
-        time.sleep(0.2)
+    # Resume resets circuit breaker so you can retry after fixing issues
+    if resume:
+        reset_circuit_breaker(cwd)
 
-        pbar.set_description("Checking circuits")
-        cb_status = check_circuit_breaker(state, workspace=cwd)
-        pbar.update(1)
-        time.sleep(0.1)
+    cb_status = check_circuit_breaker(state, workspace=cwd)
 
     console.print()
     console.print(Panel.fit(
@@ -110,22 +88,13 @@ def start_cmd(
 
     if not task_source and not resume:
         console.print("\n[yellow]Warning:[/] No task source found.")
-        console.print("\nCreate one of:")
-        console.print("  • [cyan]prd.json[/] - Structured user stories")
-        console.print("  • [cyan]TODO.md[/] - Task list")
-        console.print("\nOr run [cyan]up learn plan[/] to generate a PRD.")
+        console.print("  Create [cyan]prd.json[/] or run [cyan]up learn plan[/] to generate one.")
         raise SystemExit(1)
 
     if cb_status.get("open"):
         console.print(f"\n[red]Circuit breaker OPEN:[/] {cb_status.get('reason')}")
-        console.print("Run [cyan]up start --resume[/] after fixing the issue.")
+        console.print("Run [cyan]up start --resume[/] to reset and retry.")
         raise SystemExit(1)
-
-    if interactive and not dry_run:
-        from rich.prompt import Confirm
-        if not Confirm.ask("\nStart the product loop?", default=True):
-            console.print("[dim]Cancelled[/]")
-            return
 
     # Parallel mode
     if parallel:
@@ -134,17 +103,14 @@ def start_cmd(
 
         if not is_git_repo(cwd):
             console.print("\n[red]Error:[/] Parallel mode requires a Git repository.")
-            console.print("Run [cyan]git init[/] first.")
             raise SystemExit(1)
 
         prd_path = cwd / (prd or task_source or "prd.json")
         if not prd_path.exists():
             console.print(f"\n[red]Error:[/] PRD file not found: {prd_path}")
-            console.print("Run [cyan]up learn plan[/] to generate one.")
             raise SystemExit(1)
 
         console.print(f"\n[bold cyan]PARALLEL MODE[/] - {jobs} workers")
-        console.print(f"PRD: {prd_path}")
 
         run_enhanced_parallel_loop(
             workspace=cwd,
@@ -171,12 +137,10 @@ def start_cmd(
         console.print(get_ai_cli_install_instructions())
         use_ai = False
 
-    console.print("\n[bold green]Starting product loop...[/]")
-
     if use_ai:
         run_ai_product_loop(
             cwd, state, task_source, task, cli_name,
-            run_all, timeout, auto_commit, auto_approve, verify, interactive,
+            run_all, timeout, auto_commit, verify, interactive,
         )
     else:
         run_manual_loop(cwd, state, task_source, task, resume)
