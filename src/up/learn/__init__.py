@@ -24,7 +24,8 @@ console = Console()
 @click.option("--workspace", "-w", type=click.Path(exists=True), help="Workspace path")
 @click.option("--no-ai", is_flag=True, help="Disable AI analysis")
 @click.option("--status", "show_status", is_flag=True, help="Show learning system status")
-def learn_cmd(topic_or_path: str, workspace: str, no_ai: bool, show_status: bool):
+@click.option("--auto-start", is_flag=True, help="Auto-start product loop after PRD generation")
+def learn_cmd(topic_or_path: str, workspace: str, no_ai: bool, show_status: bool, auto_start: bool):
     """Analyze project, research topics, and generate improvement PRD.
 
     \b
@@ -74,7 +75,44 @@ def learn_cmd(topic_or_path: str, workspace: str, no_ai: bool, show_status: bool
     console.print("\n[bold]Step 3:[/] Generating PRD...")
     learn_plan(ws, output=None, use_ai=use_ai)
 
-    console.print("\n[green]✓[/] Pipeline complete. Run [cyan]up start[/] to begin development.")
+    console.print("\n[green]✓[/] Pipeline complete.")
+
+    # US-007: Pipeline orchestration — learn -> product-loop
+    prd_path = ws / "prd.json"
+    if prd_path.exists():
+        from up.events import EventBridge, EventType
+        try:
+            bridge = EventBridge(ws)
+            bridge.emit_simple(EventType.LEARNING_COMPLETE, source="learn")
+        except Exception:
+            pass
+
+        if auto_start:
+            console.print("\n[bold]Auto-starting product loop...[/]")
+            _start_product_loop(ws)
+        else:
+            from rich.prompt import Confirm
+            if Confirm.ask("\nPRD ready. Start product loop?", default=False):
+                _start_product_loop(ws)
+            else:
+                console.print("[dim]Run [cyan]up start[/] to begin development.[/dim]")
+    else:
+        console.print("[dim]No prd.json generated. Run [cyan]up start[/] manually.[/dim]")
+
+
+def _start_product_loop(workspace: Path) -> None:
+    """Hand off to the product loop."""
+    import subprocess
+    import sys
+
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "up", "start", "--prd", str(workspace / "prd.json")],
+            cwd=workspace,
+        )
+    except Exception as e:
+        console.print(f"[red]Failed to start product loop:[/red] {e}")
+        console.print("[dim]Run [cyan]up start[/] manually.[/dim]")
 
 
 # Export for external use

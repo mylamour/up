@@ -1,0 +1,8 @@
+{
+  "name": "git-workflow",
+  "version": "1.0.0",
+  "description": "Git workflow plugin: AI-powered commit messages and PR creation",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "productivity"
+}

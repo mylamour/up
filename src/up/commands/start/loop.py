@@ -47,6 +47,52 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+def _get_memory_hint(workspace: Path, task: dict) -> Optional[str]:
+    """Check for memory hints from auto-recall for the current task.
+
+    Returns a formatted hint string to prepend to the AI prompt, or None.
+    """
+    try:
+        from up.memory.patterns import ErrorPatternExtractor
+        from up.memory import MemoryManager
+
+        # Check if there's a recent error for this task in state
+        state_file = workspace / ".up" / "state.json"
+        if not state_file.exists():
+            return None
+
+        state_data = json.loads(state_file.read_text())
+        last_error = state_data.get("loop", {}).get("last_error", "")
+        if not last_error:
+            return None
+
+        extractor = ErrorPatternExtractor()
+        keywords = extractor.extract(last_error)
+        if not keywords:
+            return None
+
+        query = " ".join(keywords)
+        manager = MemoryManager(workspace, use_vectors=False)
+        results = manager.search(query, limit=3, entry_type="error")
+
+        if not results:
+            return None
+
+        best = results[0]
+        content = best.content if hasattr(best, "content") else str(best)
+        ts = best.timestamp if hasattr(best, "timestamp") else "unknown"
+
+        logger.info("Memory recall: applied hint from %s", ts)
+        return (
+            f"Past solution found:\n"
+            f"Previously, a similar error was solved by: {content}\n"
+            f"Consider this approach."
+        )
+    except Exception as exc:
+        logger.debug("Memory hint lookup failed: %s", exc)
+        return None
+
+
 def _restore_terminal():
     """Restore terminal to sane state after Rich Live display."""
     try:
@@ -411,6 +457,13 @@ def run_ai_product_loop(
                 display.log(f"Phase 3/3: Implementing code changes...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_implement_prompt(workspace, task, task_source)
+
+                # Memory hint injection (US-005)
+                memory_hint = _get_memory_hint(workspace, task)
+                if memory_hint:
+                    prompt = f"{memory_hint}\n\n{prompt}"
+                    display.log("Memory recall: applied hint from past solution")
+
                 success, output = run_ai_task(
                     workspace, prompt, cli_name, timeout=timeout,
                     continue_session=True, on_output=_on_ai_output,

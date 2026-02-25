@@ -1,0 +1,22 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 hooks/auto_recall.py",
+      "matcher": "task_failed|verify_fail",
+      "timeout": 10
+    },
+    {
+      "type": "command",
+      "command": "python3 hooks/auto_record.py",
+      "matcher": "task_failed|task_complete",
+      "timeout": 10
+    },
+    {
+      "type": "command",
+      "command": "python3 hooks/auto_index.py",
+      "matcher": "git_commit",
+      "timeout": 15
+    }
+  ]
+}

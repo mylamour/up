@@ -1,0 +1,16 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 hooks/auto_record.py",
+      "matcher": "task_complete|task_failed",
+      "timeout": 10
+    },
+    {
+      "type": "command",
+      "command": "python3 hooks/context_capture.py",
+      "matcher": "pre_execute|post_execute",
+      "timeout": 10
+    }
+  ]
+}

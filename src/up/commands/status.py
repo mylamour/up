@@ -64,6 +64,8 @@ def collect_status(workspace: Path) -> dict:
         "skills": [],
         "hooks": None,
         "memory": None,
+        "plugins": None,
+        "provenance_chain": None,
     }
     
     # Check if initialized
@@ -166,7 +168,50 @@ def collect_status(workspace: Path) -> dict:
             for skill_dir in skills_dir.iterdir():
                 if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
                     status["skills"].append(skill_dir.name)
-    
+
+    # Plugins
+    try:
+        from up.plugins.registry import PluginRegistry
+        reg = PluginRegistry(workspace)
+        reg.load()
+        all_plugins = reg.list_all()
+        enabled = [p for p in all_plugins if p.get("enabled", True)]
+        status["plugins"] = {
+            "total": len(all_plugins),
+            "enabled": len(enabled),
+            "names": [p.get("name", "?") for p in enabled],
+        }
+    except Exception:
+        # Fallback: count plugin dirs
+        builtin = workspace / ".up" / "plugins" / "builtin"
+        installed = workspace / ".up" / "plugins" / "installed"
+        count = 0
+        if builtin.exists():
+            count += sum(1 for d in builtin.iterdir() if d.is_dir() and (d / "plugin.json").exists())
+        if installed.exists():
+            count += sum(1 for d in installed.iterdir() if d.is_dir() and (d / "plugin.json").exists())
+        if count:
+            status["plugins"] = {"total": count, "enabled": count, "names": []}
+
+    # Provenance chain health
+    try:
+        from up.core.provenance import get_provenance_manager
+        prov = get_provenance_manager(workspace)
+        entries = prov.list_entries(limit=1000)
+        if entries:
+            by_id = {e.id for e in entries}
+            broken = sum(1 for e in entries if e.parent_id and e.parent_id not in by_id)
+            last = max(entries, key=lambda e: e.created_at)
+            status["provenance_chain"] = {
+                "length": len(entries),
+                "integrity": "pass" if broken == 0 else "fail",
+                "broken_links": broken,
+                "last_operation": last.task_id,
+                "last_status": last.status,
+            }
+    except Exception:
+        pass
+
     return status
 
 
@@ -363,7 +408,30 @@ def display_status(status: dict, verbose: bool = False) -> None:
     else:
         console.print("  [yellow]✗ Not installed[/]")
         console.print("  [dim]Run [cyan]up init --hooks[/] to enable auto-sync on commits[/]")
-    
+
+    # Plugins
+    console.print("\n[bold]Plugins[/]")
+    if status.get("plugins"):
+        plug = status["plugins"]
+        console.print(f"  Installed: {plug['total']} | Enabled: {plug['enabled']}")
+        if plug.get("names"):
+            console.print(f"  Active: {', '.join(plug['names'][:8])}")
+    else:
+        console.print("  [dim]No plugins installed[/]")
+
+    # Provenance Chain
+    console.print("\n[bold]Provenance Chain[/]")
+    if status.get("provenance_chain"):
+        pc = status["provenance_chain"]
+        integrity = pc["integrity"]
+        icon = "[green]✓[/]" if integrity == "pass" else "[red]✗[/]"
+        console.print(f"  {icon} Integrity: {integrity.upper()} | Length: {pc['length']}")
+        if pc.get("broken_links", 0) > 0:
+            console.print(f"  [red]Broken links: {pc['broken_links']}[/]")
+        console.print(f"  Last: {pc.get('last_operation', '?')} ({pc.get('last_status', '?')})")
+    else:
+        console.print("  [dim]No provenance data[/]")
+
     # Skills
     console.print("\n[bold]Skills[/]")
     if status["skills"]:

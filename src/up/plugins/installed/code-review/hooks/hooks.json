@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 hooks/post_verify.py",
+      "matcher": "post_verify|post_execute",
+      "timeout": 30
+    }
+  ]
+}

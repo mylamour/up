@@ -1,0 +1,8 @@
+{
+  "name": "bisect",
+  "version": "1.0.0",
+  "description": "Bisect plugin: walk UP checkpoints to find which change broke tests",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "productivity"
+}

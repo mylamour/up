@@ -17,7 +17,7 @@
       ],
       "priority": 1,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Foundation for auto-recall. Quality of extraction determines recall accuracy."
     },
     {
@@ -36,7 +36,7 @@
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. Uses Phase 1 hook pipeline for event integration."
     },
     {
@@ -54,7 +54,7 @@
       ],
       "priority": 3,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. Pairs with auto-recall to create a learning loop."
     },
     {
@@ -73,7 +73,7 @@
       ],
       "priority": 4,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Refactors existing auto-index logic from events.py into plugin hook format."
     },
     {
@@ -90,7 +90,7 @@
       ],
       "priority": 5,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-002. This closes the loop: error → record → recall → inject → fix."
     },
     {
@@ -108,7 +108,7 @@
       ],
       "priority": 6,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-002, US-003, US-004. Packaging step."
     }
   ]

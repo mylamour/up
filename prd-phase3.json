@@ -17,7 +17,7 @@
       ],
       "priority": 1,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Foundation for all renderers. Keep templates as Python f-strings, no Jinja dependency needed."
     },
     {
@@ -35,7 +35,7 @@
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. This replaces manually maintained CLAUDE.md files."
     },
     {
@@ -51,7 +51,7 @@
       ],
       "priority": 3,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. Similar to CLAUDE.md but adapted for Cursor format."
     },
     {
@@ -68,7 +68,7 @@
       ],
       "priority": 4,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001 and Phase 1 hook system. Bridges UP plugins to Claude Code native hooks."
     },
     {
@@ -86,7 +86,7 @@
       ],
       "priority": 5,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-002, US-003, US-004. Main user-facing command."
     },
     {
@@ -102,7 +102,7 @@
       ],
       "priority": 6,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-005 and Phase 1 plugin commands."
     },
     {
@@ -118,7 +118,7 @@
       ],
       "priority": 7,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-005 and Phase 1 US-012. Ties init and sync together."
     }
   ]

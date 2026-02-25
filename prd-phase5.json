@@ -19,7 +19,7 @@
       ],
       "priority": 1,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Refactors existing provenance logic into plugin hook format."
     },
     {
@@ -36,7 +36,7 @@
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. Adds the 'what was the AI thinking' dimension to provenance."
     },
     {
@@ -53,7 +53,7 @@
       ],
       "priority": 3,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. Simple chain walk + hash verification."
     },
     {
@@ -71,7 +71,7 @@
       ],
       "priority": 4,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001. Useful for enterprise compliance and team retrospectives."
     },
     {
@@ -88,7 +88,7 @@
       ],
       "priority": 5,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001, US-002. Packaging step."
     },
     {
@@ -105,7 +105,7 @@
       ],
       "priority": 6,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on Phase 1 plugin registry. Enhances existing status command."
     }
   ]

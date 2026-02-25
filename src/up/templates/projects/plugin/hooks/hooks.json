@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 hooks/example_hook.py",
+      "matcher": "post_execute",
+      "timeout": 10
+    }
+  ]
+}

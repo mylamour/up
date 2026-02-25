@@ -1,219 +1,112 @@
 {
-  "project": "UP Platform Phase 1: Plugin System & Hook Pipeline",
-  "branchName": "feature/plugin-system",
-  "description": "Add a declarative plugin system with auto-discovery, polyglot hook pipeline, and Markdown rules engine to up-cli. This transforms up-cli from a closed Python tool into an extensible platform.",
+  "project": "UP Platform Phase 5: Provenance Plugin & Observability",
+  "branchName": "feature/provenance-plugin",
+  "description": "Refactor provenance tracking into a plugin with hooks, add confidence-based quality scoring, and create a status dashboard skill for Claude Code.",
   "createdAt": "2026-02-24T12:00:00Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Plugin manifest schema and directory structure",
-      "description": "Define the plugin.json schema and standard directory layout. Create the PluginManifest dataclass and validation logic. Plugins live in .up/plugins/ with auto-discovery by convention.",
+      "title": "Provenance hook: auto-record on task completion",
+      "description": "Create a plugin hook that automatically records provenance entries after every AI operation, capturing model, files changed, verification results, and chain links.",
       "acceptanceCriteria": [
-        "Create src/up/plugins/__init__.py and src/up/plugins/manifest.py",
-        "PluginManifest dataclass with fields: name, version, description, author, engines (list), category (enum: safety|productivity|quality|learning)",
-        "Validation: name must be kebab-case, version must be semver, engines defaults to ['all']",
-        "from_json(path) class method that reads and validates plugin.json",
-        "Unit tests in tests/test_plugin_manifest.py"
+        "Create .up/plugins/builtin/provenance/hooks/auto_record.py",
+        "Triggers on TASK_COMPLETE and TASK_FAILED events",
+        "Records: operation_id (content-addressed hash), parent_id (previous op), timestamp, task_title",
+        "Captures: ai_engine name, files_modified (list with line counts), verification_results (test/lint/type)",
+        "Chain integrity: each record includes hash of parent record (Merkle-style)",
+        "Uses existing ProvenanceManager from core/provenance.py",
+        "Unit tests verifying chain integrity across 3+ operations"
       ],
       "priority": 1,
-      "effort": "low",
+      "effort": "medium",
       "passes": true,
-      "notes": "Foundation for everything else. Keep it minimal — just the data model."
+      "notes": "Refactors existing provenance logic into plugin hook format."
     },
     {
       "id": "US-002",
-      "title": "Plugin loader with auto-discovery",
-      "description": "Create PluginLoader that scans .up/plugins/installed/ and .up/plugins/builtin/ directories, reads plugin.json from each, and builds a registry of available plugins with their components (commands/, hooks/, rules/, agents/, skills/).",
+      "title": "Provenance hook: capture AI prompt context",
+      "description": "Extend provenance recording to capture prompt hash and context files used in each AI operation, without storing full prompt content.",
       "acceptanceCriteria": [
-        "Create src/up/plugins/loader.py with PluginLoader class",
-        "discover_plugins(workspace: Path) -> List[LoadedPlugin] scans both installed/ and builtin/ dirs",
-        "LoadedPlugin dataclass holds: manifest, path, components dict (commands=[], hooks=[], rules=[], agents=[], skills=[])",
-        "Components auto-discovered by scanning subdirectories: *.md in commands/, hooks.json in hooks/, *.md in rules/",
-        "Graceful handling: skip plugins with invalid manifests, log warnings",
-        "Unit tests with temp directory fixtures in tests/test_plugin_loader.py"
+        "Add PRE_EXECUTE hook that captures: prompt hash (SHA-256 of prompt text), context_files (list of file paths referenced)",
+        "Store prompt hash in provenance record, NOT the full prompt (privacy/size)",
+        "Context files detected by scanning prompt for file path patterns",
+        "POST_EXECUTE hook links the pre-execute context to the completion record",
+        "Provenance record now includes: prompt_hash, context_files, duration_seconds",
+        "Unit tests verifying prompt hash consistency"
       ],
       "priority": 2,
       "effort": "medium",
       "passes": true,
-      "notes": "This is the core discovery mechanism. No execution yet — just finding and cataloging plugins."
+      "notes": "Depends on US-001. Adds the 'what was the AI thinking' dimension to provenance."
     },
     {
       "id": "US-003",
-      "title": "Plugin registry with enable/disable state",
-      "description": "Create PluginRegistry that persists plugin state (enabled/disabled) in .up/plugins/registry.json. Provides lookup methods for active plugins and their components.",
+      "title": "Chain integrity verification command",
+      "description": "Add 'up provenance verify' that walks the Merkle chain and reports any broken links or tampered records.",
       "acceptanceCriteria": [
-        "Create src/up/plugins/registry.py with PluginRegistry class",
-        "registry.json schema: {plugins: [{name, version, enabled, installed_at, source}]}",
-        "Methods: get_enabled() -> List[LoadedPlugin], is_enabled(name) -> bool, enable(name), disable(name)",
-        "load() reads registry.json + runs PluginLoader.discover_plugins(), merges state",
-        "save() writes registry.json atomically (temp file + os.replace, same pattern as StateManager)",
-        "New plugins found on disk are auto-registered as enabled",
-        "Unit tests in tests/test_plugin_registry.py"
+        "Add 'verify' subcommand to src/up/commands/provenance.py",
+        "Walks chain from latest record back to genesis, verifying each parent hash",
+        "Reports: total operations, chain length, integrity status (pass/fail)",
+        "If broken: shows exactly which record has mismatched hash",
+        "Rich output: green checkmarks for valid links, red X for broken",
+        "Exit code 0 if chain valid, 1 if broken (for CI integration)"
       ],
       "priority": 3,
-      "effort": "medium",
+      "effort": "low",
       "passes": true,
-      "notes": "Depends on US-001 and US-002. Uses same atomic write pattern as core/state.py."
+      "notes": "Depends on US-001. Simple chain walk + hash verification."
     },
     {
       "id": "US-004",
-      "title": "CLI commands: up plugin list|enable|disable",
-      "description": "Add 'up plugin' command group with list, enable, and disable subcommands. Uses Rich tables for display.",
+      "title": "Provenance export for compliance",
+      "description": "Add 'up provenance export' that generates a JSON or CSV report of all AI operations for audit/compliance purposes.",
       "acceptanceCriteria": [
-        "Create src/up/commands/plugin.py with Click command group",
-        "Register in cli.py: main.add_command(plugin_group)",
-        "'up plugin list' shows table: Name | Version | Status | Category | Components",
-        "'up plugin enable <name>' enables a disabled plugin",
-        "'up plugin disable <name>' disables an enabled plugin",
-        "Rich formatting: enabled=green, disabled=dim, component counts shown",
-        "Error handling: unknown plugin name shows helpful message"
+        "Add 'export' subcommand to src/up/commands/provenance.py",
+        "'up provenance export --format json' outputs structured JSON array",
+        "'up provenance export --format csv' outputs CSV with headers",
+        "Optional --since flag to filter by date range",
+        "Optional --output flag to write to file (default: stdout)",
+        "Includes all fields: operation_id, timestamp, task, files, verification, chain_hash",
+        "Unit tests verifying export format correctness"
       ],
       "priority": 4,
       "effort": "low",
       "passes": true,
-      "notes": "Depends on US-003. Simple CLI wrapper around PluginRegistry."
+      "notes": "Depends on US-001. Useful for enterprise compliance and team retrospectives."
     },
     {
       "id": "US-005",
-      "title": "Plugin scaffold command: up plugin create",
-      "description": "Add 'up plugin create <name>' that scaffolds a new plugin directory with plugin.json, empty component directories, and a README.",
+      "title": "Builtin provenance plugin manifest",
+      "description": "Package provenance hooks as a builtin plugin with proper manifest and hooks.json.",
       "acceptanceCriteria": [
-        "Add 'create' subcommand to plugin group in src/up/commands/plugin.py",
-        "'up plugin create my-plugin' creates .up/plugins/installed/my-plugin/ with: plugin.json, commands/, hooks/, rules/, README.md",
-        "plugin.json pre-filled with name, version 0.1.0, empty description",
-        "README.md has basic structure explaining each directory",
-        "Auto-registers in registry as enabled",
-        "Error if plugin name already exists"
+        "Create .up/plugins/builtin/provenance/plugin.json",
+        "Create hooks/hooks.json registering auto_record and context capture hooks",
+        "auto_record: matches TASK_COMPLETE, TASK_FAILED",
+        "context_capture: matches PRE_EXECUTE, POST_EXECUTE",
+        "Update up init to include provenance plugin in builtin setup",
+        "Integration test: run task, verify provenance recorded with chain link"
       ],
       "priority": 5,
       "effort": "low",
       "passes": true,
-      "notes": "Depends on US-003. Lowers barrier to creating plugins."
+      "notes": "Depends on US-001, US-002. Packaging step."
     },
     {
       "id": "US-006",
-      "title": "Hook pipeline runner with JSON I/O",
-      "description": "Create HookRunner that executes hook scripts (any language) via subprocess with JSON stdin and exit code semantics. This is the polyglot execution layer.",
+      "title": "Enhanced status dashboard with plugin awareness",
+      "description": "Upgrade 'up status' to show plugin status, hook activity, and provenance chain health alongside existing loop/circuit/memory info.",
       "acceptanceCriteria": [
-        "Create src/up/plugins/hooks.py with HookRunner class",
-        "HookSpec dataclass: type (command|prompt), command (str), timeout (int, default 10), matcher (optional regex)",
-        "run_hook(spec, event_data: dict) -> HookResult where HookResult has: allowed (bool), message (str), exit_code (int)",
-        "Passes event_data as JSON via stdin to subprocess",
-        "Exit code semantics: 0=allow, 1=warn (log stderr, continue), 2=block (log stderr, halt)",
-        "Timeout enforcement via subprocess timeout parameter",
-        "Handles missing commands, permission errors, and crashes gracefully",
-        "Unit tests with simple bash/python test hooks in tests/test_hook_runner.py"
+        "Modify src/up/commands/status.py to include plugin section",
+        "Plugin section shows: total installed, enabled count, recent hook executions (last 5)",
+        "Provenance section shows: chain length, last operation, integrity status",
+        "Memory section shows: total entries, last search, last record",
+        "All sections use Rich panels with consistent formatting",
+        "Sections gracefully degrade if subsystem unavailable (e.g., no ChromaDB)"
       ],
       "priority": 6,
       "effort": "medium",
-      "passes": false,
-      "notes": "Core execution engine for hooks. Language-agnostic via JSON stdin/stdout."
-    },
-    {
-      "id": "US-007",
-      "title": "Hook pipeline integration with EventBridge",
-      "description": "Wire HookRunner into the existing EventBridge so that plugin hooks are automatically invoked when matching events fire. Add new EventTypes for hook lifecycle.",
-      "acceptanceCriteria": [
-        "Add EventTypes to events.py: PRE_TOOL_USE, POST_TOOL_USE, PRE_EXECUTE, POST_EXECUTE",
-        "Create src/up/plugins/bridge.py with PluginEventBridge that connects PluginRegistry hooks to EventBridge",
-        "On EventBridge.emit(), matching plugin hooks are executed via HookRunner",
-        "Hook matcher field filters by event data (e.g., tool_name regex match)",
-        "If any hook returns exit_code=2, the event is marked as blocked",
-        "Hook results are logged to event_log for observability",
-        "Integration test: register a test hook, emit event, verify hook was called"
-      ],
-      "priority": 7,
-      "effort": "high",
-      "passes": false,
-      "notes": "Depends on US-003 and US-006. This is the key integration point between the plugin system and up-cli's existing event architecture."
-    },
-    {
-      "id": "US-008",
-      "title": "Markdown rules engine",
-      "description": "Create RulesEngine that parses Markdown rule files (YAML frontmatter + body) and converts them into hook-like event handlers. Rules are the simplest extension point — no code required.",
-      "acceptanceCriteria": [
-        "Create src/up/plugins/rules.py with RulesEngine class",
-        "RuleSpec dataclass: name, event (str), pattern (regex), action (block|warn|allow), confidence (int 0-100), message (str from markdown body)",
-        "parse_rule(path: Path) -> RuleSpec reads .md file, extracts YAML frontmatter and body",
-        "evaluate(rule: RuleSpec, event_data: dict) -> HookResult applies regex pattern to event data, returns result based on action",
-        "RulesEngine.load_rules(plugin_path) discovers all .md files in rules/ directory",
-        "Integration with PluginEventBridge: rules are treated as lightweight hooks",
-        "Unit tests with sample rule files in tests/test_rules_engine.py"
-      ],
-      "priority": 8,
-      "effort": "medium",
-      "passes": false,
-      "notes": "Depends on US-006. Uses same HookResult type. YAML frontmatter parsing via PyYAML (already a dependency)."
-    },
-    {
-      "id": "US-009",
-      "title": "Builtin safety plugin: checkpoint and circuit breaker hooks",
-      "description": "Refactor existing checkpoint and circuit breaker logic into a builtin plugin that ships with UP. This proves the plugin system works with real functionality.",
-      "acceptanceCriteria": [
-        "Create .up/plugins/builtin/safety/ with plugin.json and hooks/",
-        "Pre-execute hook: auto-creates checkpoint before AI operations (wraps existing checkpoint.py logic)",
-        "Post-execute hook: checks circuit breaker state, blocks if OPEN (wraps existing state.py logic)",
-        "Hook implementations in Python, invoked via HookRunner",
-        "Existing up save/reset/start commands still work (they call the same underlying logic)",
-        "Integration test: emit PRE_EXECUTE event, verify checkpoint created"
-      ],
-      "priority": 9,
-      "effort": "medium",
-      "passes": false,
-      "notes": "Depends on US-007. This is the proof-of-concept: existing up-cli safety features running as plugins."
-    },
-    {
-      "id": "US-010",
-      "title": "Builtin verify plugin: test/lint/typecheck hooks",
-      "description": "Refactor existing verification logic into a builtin plugin with confidence-based scoring instead of binary pass/fail.",
-      "acceptanceCriteria": [
-        "Create .up/plugins/builtin/verify/ with plugin.json and hooks/",
-        "Post-tool-use hook: runs configured test/lint/typecheck commands after file modifications",
-        "VerifyResult includes confidence score (0-100) based on: all pass=100, lint warnings=80, test failures=20, crash=0",
-        "Configurable threshold in .up/config.json: verify.min_confidence (default 70)",
-        "Below threshold: blocks commit. Above threshold: allows with warnings logged.",
-        "Hook reads verification commands from .up/config.json (test_cmd, lint_cmd, typecheck_cmd)",
-        "Unit tests in tests/test_verify_plugin.py"
-      ],
-      "priority": 10,
-      "effort": "medium",
-      "passes": false,
-      "notes": "Depends on US-007. Upgrades binary pass/fail to confidence scoring (from claude-code's code-reviewer pattern)."
-    },
-    {
-      "id": "US-011",
-      "title": "Plugin install command: up plugin install <path>",
-      "description": "Add 'up plugin install' that copies a plugin from a local path into .up/plugins/installed/ and registers it.",
-      "acceptanceCriteria": [
-        "Add 'install' subcommand to plugin group",
-        "'up plugin install /path/to/my-plugin' copies directory to .up/plugins/installed/",
-        "'up plugin install ./my-plugin' works with relative paths",
-        "Validates plugin.json exists and is valid before copying",
-        "Auto-registers in registry as enabled",
-        "Error if plugin with same name already installed (suggest --force flag)",
-        "Shows success message with plugin name and component summary"
-      ],
-      "priority": 11,
-      "effort": "low",
-      "passes": false,
-      "notes": "Depends on US-003. Simple file copy + registry update. Remote install (git URLs) is a future enhancement."
-    },
-    {
-      "id": "US-012",
-      "title": "up init generates plugin directory structure",
-      "description": "Update the existing 'up init' command to create the .up/plugins/ directory structure and install builtin plugins.",
-      "acceptanceCriteria": [
-        "Modify src/up/commands/init.py to create .up/plugins/installed/ and .up/plugins/builtin/ directories",
-        "Copy builtin plugins (safety, verify) into .up/plugins/builtin/ on init",
-        "Create initial registry.json with builtin plugins enabled",
-        "Existing init functionality (state.json, config.json, docs/) unchanged",
-        "Idempotent: running init again doesn't duplicate plugins",
-        "Update init output to show plugin count"
-      ],
-      "priority": 12,
-      "effort": "low",
-      "passes": false,
-      "notes": "Depends on US-009 and US-010. Final integration step that ties everything together."
+      "passes": true,
+      "notes": "Depends on Phase 1 plugin registry. Enhances existing status command."
     }
   ]
 }

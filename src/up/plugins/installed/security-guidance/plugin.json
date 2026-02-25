@@ -1,0 +1,8 @@
+{
+  "name": "security-guidance",
+  "version": "1.0.0",
+  "description": "Security guidance plugin: detects security anti-patterns in AI-generated code",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "safety"
+}

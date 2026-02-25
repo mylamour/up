@@ -1,0 +1,8 @@
+{
+  "name": "code-review",
+  "version": "1.0.0",
+  "description": "Adversarial code review plugin: second-opinion review of AI-generated changes with confidence scoring",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "quality"
+}

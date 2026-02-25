@@ -16,6 +16,7 @@ from up.commands.agent import agent as agent_group
 from up.commands.provenance import provenance as provenance_group
 from up.commands.review import review_cmd
 from up.commands.plugin import plugin_group
+from up.commands.sync_config import sync_config_cmd
 
 console = Console()
 
@@ -94,6 +95,9 @@ main.add_command(learn_cmd, name="learn")
 
 # Plugins
 main.add_command(plugin_group, name="plugin")
+
+# Config sync
+main.add_command(sync_config_cmd, name="sync-config")
 
 
 if __name__ == "__main__":

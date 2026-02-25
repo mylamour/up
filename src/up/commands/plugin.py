@@ -26,6 +26,24 @@ def _get_registry() -> PluginRegistry:
     return reg
 
 
+def _auto_sync(workspace: Path) -> None:
+    """Run config sync after plugin state changes."""
+    from up.commands.sync_config import run_sync
+    from up.events import EventBridge, EventType
+
+    try:
+        result = run_sync(workspace)
+        written = result["written"]
+        if written:
+            console.print(f"[dim]Config files updated (CLAUDE.md, .cursorrules)[/dim]")
+
+        # Emit SYNC_REQUESTED event
+        bridge = EventBridge(workspace)
+        bridge.emit_simple(EventType.SYNC_REQUESTED, source="plugin")
+    except Exception:
+        pass  # Don't fail plugin commands if sync fails
+
+
 @click.group("plugin")
 def plugin_group():
     """Manage plugins."""
@@ -80,12 +98,15 @@ def list_cmd():
 
 @plugin_group.command("enable")
 @click.argument("name")
-def enable_cmd(name: str):
+@click.option("--no-sync", is_flag=True, help="Skip auto-sync of config files")
+def enable_cmd(name: str, no_sync: bool):
     """Enable a disabled plugin."""
     reg = _get_registry()
     if reg.enable(name):
         reg.save()
         console.print(f"[green]Enabled plugin '{name}'[/green]")
+        if not no_sync:
+            _auto_sync(Path.cwd())
     else:
         console.print(f"[red]Plugin '{name}' not found.[/red]")
         console.print("[dim]Run 'up plugin list' to see available plugins.[/dim]")
@@ -93,12 +114,15 @@ def enable_cmd(name: str):
 
 @plugin_group.command("disable")
 @click.argument("name")
-def disable_cmd(name: str):
+@click.option("--no-sync", is_flag=True, help="Skip auto-sync of config files")
+def disable_cmd(name: str, no_sync: bool):
     """Disable an enabled plugin."""
     reg = _get_registry()
     if reg.disable(name):
         reg.save()
         console.print(f"[yellow]Disabled plugin '{name}'[/yellow]")
+        if not no_sync:
+            _auto_sync(Path.cwd())
     else:
         console.print(f"[red]Plugin '{name}' not found.[/red]")
         console.print("[dim]Run 'up plugin list' to see available plugins.[/dim]")
@@ -154,18 +178,88 @@ def create_cmd(name: str):
     console.print(f"[dim]  {plugin_dir}[/dim]")
 
 
-@plugin_group.command("install")
-@click.argument("path", type=click.Path(exists=True))
-@click.option("--force", is_flag=True, help="Overwrite existing plugin")
-def install_cmd(path: str, force: bool):
-    """Install a plugin from a local path."""
-    import shutil
+@plugin_group.command("search")
+@click.argument("query")
+@click.option("--category", "-c", help="Filter by category")
+def search_cmd(query: str, category: str):
+    """Search for available plugins."""
+    from up.plugins.marketplace import Marketplace
 
-    source = Path(path).resolve()
+    workspace = Path.cwd()
+    mp = Marketplace(workspace)
+    mp.load()
+
+    if category:
+        results = [
+            e for e in mp.search_by_category(category)
+            if query.lower() in e.name.lower() or query.lower() in e.description.lower()
+        ]
+    else:
+        results = mp.search(query)
+
+    if not results:
+        console.print(f"[dim]No plugins matching '{query}'.[/dim]")
+        if not category:
+            console.print("[dim]Try a broader search or check --category.[/dim]")
+        return
+
+    # Check installed status
+    reg = _get_registry()
+    installed_names = {e.name for e in reg.get_all_entries()}
+
+    table = Table(title="Plugin Search Results")
+    table.add_column("Name", style="bold")
+    table.add_column("Version")
+    table.add_column("Category")
+    table.add_column("Description")
+    table.add_column("Source")
+
+    for entry in results:
+        name_display = entry.name
+        if entry.name in installed_names:
+            name_display = f"{entry.name} [green][installed][/green]"
+        table.add_row(
+            name_display,
+            entry.version,
+            entry.category,
+            entry.description[:60],
+            entry.source,
+        )
+
+    console.print(table)
+
+
+@plugin_group.command("install")
+@click.argument("path")
+@click.option("--force", is_flag=True, help="Overwrite existing plugin")
+@click.option("--no-sync", is_flag=True, help="Skip auto-sync of config files")
+def install_cmd(path: str, force: bool, no_sync: bool):
+    """Install a plugin from a local path or git URL."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    # Detect git URL (https://, git://, github:user/repo)
+    is_git = (
+        path.startswith("https://")
+        or path.startswith("git://")
+        or path.startswith("github:")
+        or path.endswith(".git")
+    )
+
+    if is_git:
+        source = _clone_plugin(path)
+        if source is None:
+            return
+    else:
+        source = Path(path).resolve()
+
     manifest_path = source / "plugin.json"
 
     if not manifest_path.exists():
         console.print(f"[red]No plugin.json found in {source}[/red]")
+        if is_git:
+            shutil.rmtree(source, ignore_errors=True)
         return
 
     # Validate manifest
@@ -207,3 +301,44 @@ def install_cmd(path: str, force: bool):
     console.print(f"[green]Installed plugin '{manifest.name}' v{manifest.version}[/green]")
     if parts:
         console.print(f"[dim]  Components: {', '.join(parts)}[/dim]")
+
+    # Clean up git temp dir
+    if is_git:
+        import shutil as _shutil
+        _shutil.rmtree(source, ignore_errors=True)
+
+    if not no_sync:
+        _auto_sync(workspace)
+
+
+def _clone_plugin(url: str) -> Path | None:
+    """Clone a plugin from a git URL to a temp directory."""
+    import subprocess
+    import tempfile
+
+    # Expand github: shorthand
+    if url.startswith("github:"):
+        url = f"https://github.com/{url[7:]}.git"
+
+    tmp = Path(tempfile.mkdtemp(prefix="up-plugin-"))
+    try:
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", url, str(tmp / "plugin")],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]Git clone failed:[/red] {result.stderr.strip()}")
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+            return None
+        return tmp / "plugin"
+    except subprocess.TimeoutExpired:
+        console.print("[red]Git clone timed out.[/red]")
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None
+    except Exception as e:
+        console.print(f"[red]Clone error:[/red] {e}")
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None

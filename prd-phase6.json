@@ -20,7 +20,7 @@
       ],
       "priority": 1,
       "effort": "high",
-      "passes": false,
+      "passes": true,
       "notes": "First real plugin migration. Proves the plugin system works with complex functionality."
     },
     {
@@ -38,7 +38,7 @@
       ],
       "priority": 2,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Good test of the Markdown rules engine from Phase 1."
     },
     {
@@ -56,7 +56,7 @@
       ],
       "priority": 3,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Tests slash command system from Phase 1."
     },
     {
@@ -74,7 +74,7 @@
       ],
       "priority": 4,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Foundation for plugin ecosystem. Remote registry is optional — local-first."
     },
     {
@@ -91,7 +91,7 @@
       ],
       "priority": 5,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-004. Simple CLI wrapper around Marketplace.search()."
     },
     {
@@ -108,7 +108,7 @@
       ],
       "priority": 6,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Depends on Phase 1 US-011. Extends local install to support remote sources."
     },
     {
@@ -126,7 +126,7 @@
       ],
       "priority": 7,
       "effort": "medium",
-      "passes": false,
+      "passes": true,
       "notes": "Closes the gap between research and execution. The full pipeline: learn -> prd.json -> product-loop."
     },
     {
@@ -144,7 +144,7 @@
       ],
       "priority": 8,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Simple packaging of existing functionality as a plugin."
     },
     {
@@ -161,7 +161,7 @@
       ],
       "priority": 9,
       "effort": "low",
-      "passes": false,
+      "passes": true,
       "notes": "Lowers barrier to plugin creation. Template teaches by example."
     }
   ]

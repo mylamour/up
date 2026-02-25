@@ -1,0 +1,8 @@
+{
+  "name": "provenance",
+  "version": "1.0.0",
+  "description": "Builtin provenance plugin: auto-record AI operations, capture prompt context, Merkle chain integrity",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "safety"
+}

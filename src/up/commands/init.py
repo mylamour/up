@@ -86,6 +86,9 @@ def init_cmd(ai: str, systems: tuple, hooks: bool, memory: bool, force: bool):
     # Initialize plugin system
     plugin_count = _init_plugin_system(cwd)
 
+    # Run config sync to generate CLAUDE.md, .cursorrules from plugins
+    sync_result = _run_init_sync(cwd)
+
     console.print("\n[green]✓[/] Initialization complete!")
 
     if hooks_installed:
@@ -97,7 +100,22 @@ def init_cmd(ai: str, systems: tuple, hooks: bool, memory: bool, force: bool):
     if plugin_count:
         console.print(f"[green]✓[/] Plugin system initialized ({plugin_count} builtin plugins)")
 
+    if sync_result:
+        w = sync_result["written"]
+        p = sync_result["plugins"]
+        console.print(f"[green]✓[/] Generated CLAUDE.md, .cursorrules from {p} builtin plugin(s)")
+
     _print_next_steps(systems, hooks_installed)
+
+
+def _run_init_sync(workspace: Path) -> dict | None:
+    """Run config sync after init to generate initial config files."""
+    try:
+        from up.commands.sync_config import run_sync
+        return run_sync(workspace)
+    except Exception as e:
+        console.print(f"  [yellow]Warning: Config sync failed: {e}[/]")
+        return None
 
 
 def _init_plugin_system(workspace: Path) -> int:
