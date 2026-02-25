@@ -130,7 +130,7 @@ def run_sync(
     return {"written": written, "skipped": skipped, "plugins": len(plugins)}
 
 
-@click.command("sync-config")
+@click.command("sync")
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing")
 @click.option(
     "--target", "targets",
@@ -146,9 +146,9 @@ def sync_config_cmd(dry_run: bool, targets: tuple):
 
     \b
     Examples:
-      up sync-config                    # Generate all config files
-      up sync-config --dry-run          # Preview without writing
-      up sync-config --target claude-md # Only generate CLAUDE.md
+      up sync                    # Generate all config files
+      up sync --dry-run          # Preview without writing
+      up sync --target claude-md # Only generate CLAUDE.md
     """
     workspace = Path.cwd()
 

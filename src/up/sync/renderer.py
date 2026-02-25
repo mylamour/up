@@ -27,6 +27,8 @@ class HookSummary:
     event: str
     plugin: str
     action: str
+    plugin_dir: str = ""  # relative path from project root to plugin dir
+    tool_matcher: str = ""  # Claude Code tool matcher (e.g. "Write|Edit")
 
 
 @dataclass
@@ -102,11 +104,24 @@ def build_context(config: dict, plugins: list[LoadedPlugin]) -> TemplateContext:
         # Hooks summary
         for hook_path in plugin.components.hooks:
             if hook_path.name == "hooks.json":
+                # plugin root is parent of hooks/ dir
+                plugin_root = hook_path.parent.parent
+                # Find .up/ ancestor to compute relative path from project root
+                rel_plugin = ""
+                for parent in plugin_root.parents:
+                    up_dir = parent / ".up"
+                    if up_dir.exists() and plugin_root.is_relative_to(parent):
+                        rel_plugin = str(plugin_root.relative_to(parent))
+                        break
                 specs = load_hooks_from_json(hook_path)
                 for spec in specs:
                     event = spec.matcher or "all"
                     ctx.hooks_summary.append(
-                        HookSummary(event=event, plugin=pname, action=spec.command)
+                        HookSummary(
+                            event=event, plugin=pname,
+                            action=spec.command, plugin_dir=rel_plugin,
+                            tool_matcher=spec.tool_matcher or "",
+                        )
                     )
 
         # Rules → safety_rules and ai_rules

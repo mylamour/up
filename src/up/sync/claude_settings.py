@@ -9,14 +9,13 @@ from pathlib import Path
 
 from up.sync.renderer import ConfigRenderer, TemplateContext, HookSummary
 
-# Map UP event types to Claude Code hook types
+# Map UP event types to Claude Code hook types.
+# Only map events that have direct Claude Code equivalents.
+# UP-internal events (pre_execute, post_execute, task_start, task_complete)
+# are for the SESRC loop and should NOT fire on every Claude Code tool call.
 HOOK_TYPE_MAP = {
     "pre_tool_use": "PreToolUse",
     "post_tool_use": "PostToolUse",
-    "pre_execute": "PreToolUse",
-    "post_execute": "PostToolUse",
-    "task_start": "PreToolUse",
-    "task_complete": "PostToolUse",
 }
 
 
@@ -45,18 +44,36 @@ class ClaudeSettingsRenderer(ConfigRenderer):
         existing["hooks"] = hooks
         return json.dumps(existing, indent=2) + "\n"
 
+    def _resolve_command(self, action: str, plugin_dir: str) -> str:
+        """Resolve relative paths in hook commands to use $CLAUDE_PROJECT_DIR."""
+        if not plugin_dir:
+            return action
+        parts = action.split()
+        if len(parts) < 2:
+            return action
+        # Find the first arg that looks like a relative file path
+        # (contains / or ends with .py/.sh/.js), skip flags like -u
+        for i, part in enumerate(parts[1:], 1):
+            if part.startswith("-"):
+                continue
+            if "/" in part or part.endswith((".py", ".sh", ".js")):
+                parts[i] = f'"$CLAUDE_PROJECT_DIR/{plugin_dir}/{part}"'
+                break
+        return " ".join(parts)
+
     def _build_hooks(self, ctx: TemplateContext) -> dict[str, list[dict]]:
         hooks: dict[str, list[dict]] = {}
         for h in ctx.hooks_summary:
             claude_type = HOOK_TYPE_MAP.get(h.event)
             if not claude_type:
                 continue
+            command = self._resolve_command(h.action, h.plugin_dir)
             entry = {
-                "matcher": "",
+                "matcher": h.tool_matcher or "",
                 "hooks": [
                     {
                         "type": "command",
-                        "command": h.action,
+                        "command": command,
                         "description": f"UP plugin: {h.plugin}",
                     }
                 ],

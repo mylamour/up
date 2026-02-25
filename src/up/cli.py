@@ -97,7 +97,7 @@ main.add_command(learn_cmd, name="learn")
 main.add_command(plugin_group, name="plugin")
 
 # Config sync
-main.add_command(sync_config_cmd, name="sync-config")
+main.add_command(sync_config_cmd, name="sync")
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ def main():
     except (json.JSONDecodeError, EOFError):
         event_data = {}
 
-    workspace = Path(event_data.get("workspace", "."))
+    workspace = Path(event_data.get("cwd", event_data.get("workspace", ".")))
     tool_name = event_data.get("tool_name", "")
 
     # Only verify after file-modifying tools

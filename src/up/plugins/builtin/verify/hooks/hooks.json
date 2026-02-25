@@ -4,6 +4,7 @@
       "type": "command",
       "command": "python3 hooks/post_tool_use.py",
       "matcher": "post_tool_use",
+      "tool_matcher": "Write|Edit",
       "timeout": 60
     }
   ]

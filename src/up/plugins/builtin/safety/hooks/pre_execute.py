@@ -15,7 +15,7 @@ def main():
         event_data = {}
 
     task_id = event_data.get("task_id", "unknown")
-    workspace = event_data.get("workspace", ".")
+    workspace = event_data.get("cwd", event_data.get("workspace", "."))
 
     # Check if git repo exists
     result = subprocess.run(

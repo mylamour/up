@@ -15,7 +15,7 @@ def main():
     except (json.JSONDecodeError, EOFError):
         event_data = {}
 
-    workspace = Path(event_data.get("workspace", "."))
+    workspace = Path(event_data.get("cwd", event_data.get("workspace", ".")))
     success = event_data.get("success", True)
     task_id = event_data.get("task_id", "unknown")
 

@@ -68,6 +68,28 @@ class TestClaudeSettingsRenderer:
         data = json.loads(output)
         assert len(data["hooks"]["PreToolUse"]) == 2
 
+    def test_resolves_relative_paths_with_plugin_dir(self):
+        ctx = TemplateContext(hooks_summary=[
+            HookSummary(
+                event="pre_tool_use", plugin="safety",
+                action="python3 hooks/pre_execute.py",
+                plugin_dir=".up/plugins/builtin/safety",
+            ),
+        ])
+        output = self.renderer.render(ctx)
+        data = json.loads(output)
+        cmd = data["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        assert "$CLAUDE_PROJECT_DIR/.up/plugins/builtin/safety/hooks/pre_execute.py" in cmd
+
+    def test_no_plugin_dir_keeps_command_as_is(self):
+        ctx = TemplateContext(hooks_summary=[
+            HookSummary(event="pre_tool_use", plugin="x", action="python3 check.py"),
+        ])
+        output = self.renderer.render(ctx)
+        data = json.loads(output)
+        cmd = data["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        assert cmd == "python3 check.py"
+
     def test_render_merged_preserves_existing(self, tmp_path):
         existing = tmp_path / "settings.json"
         existing.write_text(json.dumps({

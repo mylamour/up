@@ -26,7 +26,8 @@ class HookSpec:
     type: str  # "command" or "prompt"
     command: str
     timeout: int = 10
-    matcher: Optional[str] = None  # optional regex pattern
+    matcher: Optional[str] = None  # UP event matcher regex
+    tool_matcher: Optional[str] = None  # Claude Code tool name matcher (e.g. "Write|Edit")
 
     def matches(self, event_data: dict) -> bool:
         """Check if this hook matches the given event data."""
@@ -218,6 +219,7 @@ def load_hooks_from_json(hooks_json_path: Path) -> list[HookSpec]:
                 command=raw.get("command", ""),
                 timeout=raw.get("timeout", 10),
                 matcher=raw.get("matcher"),
+                tool_matcher=raw.get("tool_matcher"),
             ))
         return specs
     except (json.JSONDecodeError, TypeError) as e:
