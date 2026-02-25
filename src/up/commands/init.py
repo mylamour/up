@@ -83,15 +83,73 @@ def init_cmd(ai: str, systems: tuple, hooks: bool, memory: bool, force: bool):
     if memory:
         memory_stats = _build_initial_memory(cwd)
 
+    # Initialize plugin system
+    plugin_count = _init_plugin_system(cwd)
+
     console.print("\n[green]✓[/] Initialization complete!")
-    
+
     if hooks_installed:
         console.print("[green]✓[/] Git hooks installed for auto-sync")
-    
+
     if memory_stats:
         console.print(f"[green]✓[/] Memory initialized ({memory_stats['total']} entries)")
-    
+
+    if plugin_count:
+        console.print(f"[green]✓[/] Plugin system initialized ({plugin_count} builtin plugins)")
+
     _print_next_steps(systems, hooks_installed)
+
+
+def _init_plugin_system(workspace: Path) -> int:
+    """Initialize plugin directory structure and install builtin plugins.
+
+    Creates .up/plugins/installed/ and .up/plugins/builtin/ directories,
+    copies builtin plugins, and creates initial registry.json.
+
+    Returns number of builtin plugins installed.
+    """
+    import json
+    import shutil
+
+    plugins_dir = workspace / ".up" / "plugins"
+    installed_dir = plugins_dir / "installed"
+    builtin_dir = plugins_dir / "builtin"
+
+    # Create directories (idempotent)
+    installed_dir.mkdir(parents=True, exist_ok=True)
+    builtin_dir.mkdir(parents=True, exist_ok=True)
+
+    # Find source builtin plugins shipped with the package
+    source_builtin = Path(__file__).parent.parent / "plugins" / "builtin"
+    count = 0
+
+    if source_builtin.is_dir():
+        for plugin_src in sorted(source_builtin.iterdir()):
+            if not plugin_src.is_dir():
+                continue
+            manifest = plugin_src / "plugin.json"
+            if not manifest.exists():
+                continue
+
+            dest = builtin_dir / plugin_src.name
+            if dest.exists():
+                # Already installed — skip (idempotent)
+                count += 1
+                continue
+
+            shutil.copytree(plugin_src, dest)
+            count += 1
+            console.print(f"  [dim]Installed builtin plugin: {plugin_src.name}[/]")
+
+    # Create initial registry.json if it doesn't exist
+    registry_file = plugins_dir / "registry.json"
+    if not registry_file.exists():
+        from up.plugins.registry import PluginRegistry
+        reg = PluginRegistry(workspace)
+        reg.load()
+        reg.save()
+
+    return count
 
 
 def _build_initial_memory(workspace: Path) -> dict:

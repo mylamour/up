@@ -152,3 +152,58 @@ def create_cmd(name: str):
 
     console.print(f"[green]Created plugin '{name}'[/green]")
     console.print(f"[dim]  {plugin_dir}[/dim]")
+
+
+@plugin_group.command("install")
+@click.argument("path", type=click.Path(exists=True))
+@click.option("--force", is_flag=True, help="Overwrite existing plugin")
+def install_cmd(path: str, force: bool):
+    """Install a plugin from a local path."""
+    import shutil
+
+    source = Path(path).resolve()
+    manifest_path = source / "plugin.json"
+
+    if not manifest_path.exists():
+        console.print(f"[red]No plugin.json found in {source}[/red]")
+        return
+
+    # Validate manifest
+    from up.plugins.manifest import PluginManifest, ManifestValidationError
+    try:
+        manifest = PluginManifest.from_json(manifest_path)
+    except ManifestValidationError as e:
+        console.print(f"[red]Invalid plugin manifest: {e}[/red]")
+        return
+
+    workspace = Path.cwd()
+    dest = workspace / ".up" / "plugins" / "installed" / manifest.name
+
+    if dest.exists() and not force:
+        console.print(f"[red]Plugin '{manifest.name}' already installed.[/red]")
+        console.print("[dim]Use --force to overwrite.[/dim]")
+        return
+
+    # Copy plugin directory
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(source, dest)
+
+    # Register
+    reg = _get_registry()
+    reg.save()
+
+    # Show summary
+    from up.plugins.loader import _discover_components
+    components = _discover_components(dest)
+    parts = []
+    if components.hooks:
+        parts.append(f"{len(components.hooks)} hooks")
+    if components.rules:
+        parts.append(f"{len(components.rules)} rules")
+    if components.commands:
+        parts.append(f"{len(components.commands)} commands")
+
+    console.print(f"[green]Installed plugin '{manifest.name}' v{manifest.version}[/green]")
+    if parts:
+        console.print(f"[dim]  Components: {', '.join(parts)}[/dim]")

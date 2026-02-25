@@ -1,0 +1,8 @@
+{
+  "name": "safety",
+  "version": "1.0.0",
+  "description": "Builtin safety plugin: auto-checkpoint before AI operations, circuit breaker protection",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "safety"
+}

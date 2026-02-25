@@ -243,6 +243,7 @@ def run_ai_product_loop(
     auto_commit: bool = False,
     verify: bool = True,
     interactive: bool = False,
+    use_sdk: bool = False,
 ):
     """Run the product loop with AI auto-implementation.
 
@@ -357,7 +358,7 @@ def run_ai_product_loop(
 
             success, output = run_ai_task(
                 workspace, prompt, cli_name, timeout=timeout,
-                on_output=_on_ai_output,
+                on_output=_on_ai_output, use_sdk=use_sdk,
             )
             if success:
                 display.log_success("Research complete")
@@ -373,6 +374,7 @@ def run_ai_product_loop(
                 success, output = run_ai_task(
                     workspace, prompt, cli_name, timeout=timeout,
                     continue_session=True, on_output=_on_ai_output,
+                    use_sdk=use_sdk,
                 )
                 if success:
                     display.log_success("Plan complete")
@@ -412,6 +414,7 @@ def run_ai_product_loop(
                 success, output = run_ai_task(
                     workspace, prompt, cli_name, timeout=timeout,
                     continue_session=True, on_output=_on_ai_output,
+                    use_sdk=use_sdk,
                 )
                 if success:
                     display.log_success("Implementation complete")
@@ -510,7 +513,8 @@ def run_ai_product_loop(
                         "Please summarize our progress so far: what's done, what's next, and relevant files.\n"
                         "Write this summary to '.up/thoughts/progress.md' so a new session can resume."
                     )
-                    run_ai_task(workspace, prompt, cli_name, timeout=timeout)
+                    run_ai_task(workspace, prompt, cli_name, timeout=timeout,
+                                use_sdk=use_sdk)
                     display.log("Progress saved. Resetting context...")
                     ctx_mgr.reset()
 

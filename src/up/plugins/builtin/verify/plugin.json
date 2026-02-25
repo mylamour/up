@@ -1,0 +1,8 @@
+{
+  "name": "verify",
+  "version": "1.0.0",
+  "description": "Builtin verify plugin: confidence-based test/lint/typecheck scoring",
+  "author": "up-cli",
+  "engines": ["all"],
+  "category": "quality"
+}

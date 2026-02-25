@@ -42,9 +42,10 @@ console = Console(theme=THEME)
 @click.option("--jobs", "-j", default=3, help="Number of parallel tasks (default: 3)")
 @click.option("--auto-commit", is_flag=True, help="Auto-commit after each successful task")
 @click.option("--verify/--no-verify", default=True, help="Run tests before commit (default: True)")
+@click.option("--sdk", is_flag=True, help="Use Agent SDK engine (persistent sessions, compaction)")
 def start_cmd(
     resume, dry_run, task, prd, interactive, no_ai, run_all,
-    timeout, parallel, jobs, auto_commit, verify,
+    timeout, parallel, jobs, auto_commit, verify, sdk,
 ):
     """Start the product loop for autonomous development.
 
@@ -130,10 +131,22 @@ def start_cmd(
 
     # Check AI availability
     use_ai = not no_ai
-    cli_name, cli_available = check_ai_cli()
+
+    if sdk:
+        from up.ai_cli import check_sdk_available
+        if check_sdk_available():
+            cli_name = "claude-sdk"
+            cli_available = True
+        else:
+            console.print("\n[yellow]Agent SDK not installed. Falling back to CLI mode.[/]")
+            console.print("  Install with: pip install up-cli[sdk]")
+            sdk = False
+            cli_name, cli_available = check_ai_cli()
+    else:
+        cli_name, cli_available = check_ai_cli()
 
     if use_ai and not cli_available:
-        console.print("\n[yellow]No AI CLI found. Running in manual mode.[/]")
+        console.print("\n[yellow]No AI engine found. Running in manual mode.[/]")
         console.print(get_ai_cli_install_instructions())
         use_ai = False
 
@@ -141,6 +154,7 @@ def start_cmd(
         run_ai_product_loop(
             cwd, state, task_source, task, cli_name,
             run_all, timeout, auto_commit, verify, interactive,
+            use_sdk=sdk,
         )
     else:
         run_manual_loop(cwd, state, task_source, task, resume)

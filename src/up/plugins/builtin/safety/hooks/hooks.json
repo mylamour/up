@@ -1,0 +1,16 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 hooks/pre_execute.py",
+      "matcher": "pre_execute",
+      "timeout": 15
+    },
+    {
+      "type": "command",
+      "command": "python3 hooks/post_execute.py",
+      "matcher": "post_execute",
+      "timeout": 10
+    }
+  ]
+}

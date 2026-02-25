@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 hooks/post_tool_use.py",
+      "matcher": "post_tool_use",
+      "timeout": 60
+    }
+  ]
+}

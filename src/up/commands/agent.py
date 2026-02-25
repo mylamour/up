@@ -524,12 +524,125 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
 @click.group()
 def agent():
     """Multi-agent worktree management.
-    
+
     Enable parallel AI development by creating isolated
     Git worktrees for each task.
     """
     pass
 
 
+# =============================================================================
+# up agent explore - Diverge-then-converge exploration
+# =============================================================================
+
+@click.command("explore")
+@click.argument("problem")
+@click.option(
+    "--strategies", "-s",
+    default=None,
+    help="Comma-separated strategy names (default: all 3)",
+)
+@click.option(
+    "--timeout", "-t",
+    default=300, type=int,
+    help="Per-agent timeout in seconds (default: 300)",
+)
+def explore_cmd(problem: str, strategies: str, timeout: int):
+    """Explore a problem from multiple angles simultaneously.
+
+    Spawns agents with different strategies in isolated worktrees,
+    compares results, and lets you pick the best approach.
+
+    \b
+    Examples:
+      up agent explore "optimize database queries"
+      up agent explore "add caching layer" --strategies minimal,clean
+      up agent explore "fix auth bug" --timeout 600
+    """
+    from up.parallel.explore import (
+        ExploreExecutor,
+        get_strategies,
+        merge_exploration,
+        cleanup_explorations,
+    )
+    from up.parallel.analyze import ExploreAnalyzer
+    from up.ui.explore_display import display_comparison
+
+    cwd = Path.cwd()
+
+    if not is_git_repo(cwd):
+        console.print("[red]Error:[/] Not a git repository")
+        return
+
+    # Resolve strategies
+    names = None
+    if strategies:
+        names = [n.strip() for n in strategies.split(",")]
+
+    strats = get_strategies(cwd, names=names)
+    if not strats:
+        console.print("[red]No strategies found.[/]")
+        return
+
+    console.print(Panel.fit(
+        f"[bold blue]up agent explore[/] — {len(strats)} strategies",
+        border_style="blue",
+    ))
+    for s in strats:
+        console.print(f"  [cyan]{s.name}[/]: {s.description}")
+
+    # Get AI engine
+    from up.ai.engine import CliEngine
+    engine = CliEngine()
+    if not engine.is_available():
+        console.print("[red]No AI CLI found. Install claude or agent.[/]")
+        return
+
+    # Execute
+    console.print("\n[dim]Spawning agents...[/]")
+    executor = ExploreExecutor(
+        workspace=cwd, engine=engine, timeout=timeout,
+    )
+
+    with console.status("[bold green]Agents working..."):
+        results = executor.execute(problem=problem, strategies=strats)
+
+    successful = [r for r in results if r.success]
+    failed = [r for r in results if not r.success]
+
+    if failed:
+        for r in failed:
+            console.print(
+                f"  [yellow]Warning:[/] {r.strategy_name} failed: "
+                f"{r.error or 'unknown error'}"
+            )
+
+    if not successful:
+        console.print("[red]All agents failed. No results to compare.[/]")
+        cleanup_explorations(results)
+        return
+
+    # Analyze
+    analyzer = ExploreAnalyzer(cwd)
+    comparison = analyzer.analyze(results)
+
+    # Display and prompt
+    choice = display_comparison(comparison, results=results)
+
+    # Merge
+    merged = merge_exploration(choice, results, cwd)
+    if merged:
+        console.print("\n[green]Exploration merged successfully.[/]")
+    else:
+        console.print("\n[dim]No changes applied.[/]")
+
+    # Record in state
+    sm = get_state_manager(cwd)
+    sm.record_task_complete("explore") if merged else None
+
+
 agent.add_command(spawn_cmd, name="spawn")
 agent.add_command(merge_cmd, name="merge")
+agent.add_command(status_cmd, name="status")
+agent.add_command(cleanup_cmd, name="cleanup")
+agent.add_command(explore_cmd, name="explore")

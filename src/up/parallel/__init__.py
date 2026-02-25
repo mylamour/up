@@ -26,6 +26,21 @@ from up.parallel.scheduler import (
     partial_merge,
     run_enhanced_parallel_loop,
 )
+from up.parallel.explore import (
+    ExploreStrategy,
+    ExploreResult,
+    ExploreExecutor,
+    get_default_strategies,
+    get_strategies,
+    load_custom_strategies,
+    merge_exploration,
+    cleanup_explorations,
+)
+from up.parallel.analyze import (
+    ExploreAnalyzer,
+    ExploreComparison,
+    ExploreResultSummary,
+)
 
 __all__ = [
     # Core execution
@@ -44,4 +59,16 @@ __all__ = [
     "ParallelDashboard",
     "partial_merge",
     "run_enhanced_parallel_loop",
+    # Explore (Phase 2)
+    "ExploreStrategy",
+    "ExploreResult",
+    "ExploreExecutor",
+    "ExploreAnalyzer",
+    "ExploreComparison",
+    "ExploreResultSummary",
+    "get_default_strategies",
+    "get_strategies",
+    "load_custom_strategies",
+    "merge_exploration",
+    "cleanup_explorations",
 ]

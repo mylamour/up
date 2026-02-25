@@ -62,6 +62,12 @@ class EventType(Enum):
     SYNC_REQUESTED = "sync.requested"
     CONTEXT_UPDATED = "context.updated"
 
+    # Hook pipeline events (for plugin system)
+    PRE_TOOL_USE = "hook.pre_tool_use"
+    POST_TOOL_USE = "hook.post_tool_use"
+    PRE_EXECUTE = "hook.pre_execute"
+    POST_EXECUTE = "hook.post_execute"
+
 
 @dataclass
 class Event:
