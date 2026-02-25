@@ -18,15 +18,15 @@ class TestSyncMemory:
         mock_manager.sync.return_value = {"commits_indexed": 3, "files_indexed": 5}
         mock_manager._backend = "json"
 
-        with patch("up._hook_runtime.MemoryManager", return_value=mock_manager), \
-             patch("up._hook_runtime._check_chromadb", return_value=False):
+        with patch("up.memory.MemoryManager", return_value=mock_manager), \
+             patch("up.memory._check_chromadb", return_value=False):
             result = sync_memory(tmp_path)
 
         assert result["commits"] == 3
         assert result["files"] == 5
 
     def test_returns_error_on_failure(self, tmp_path):
-        with patch("up._hook_runtime.MemoryManager", side_effect=RuntimeError("broken")):
+        with patch("up.memory.MemoryManager", side_effect=RuntimeError("broken")):
             result = sync_memory(tmp_path)
         assert "error" in result
 

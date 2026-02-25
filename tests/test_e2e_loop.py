@@ -81,7 +81,7 @@ def test_successful_loop_execution(git_workspace, test_prd, mock_ai_engine):
     mock_ai_engine.write_content = "def hello():\n    return 'world'\n"
 
     with patch("up.commands.start.loop.run_ai_task") as mock_run_task:
-        mock_run_task.side_effect = lambda ws, prompt, cli, timeout=600, continue_session=False, on_output=None: mock_ai_engine.execute_task(ws, prompt, timeout, False)
+        mock_run_task.side_effect = lambda ws, prompt, cli, timeout=600, continue_session=False, on_output=None, **kwargs: mock_ai_engine.execute_task(ws, prompt, timeout, False)
 
         run_ai_product_loop(
             workspace=git_workspace,
@@ -125,7 +125,7 @@ def test_failure_loop_triggers_rollback(git_workspace, test_prd, mock_ai_engine)
     mock_ai_engine.output = "AI explicitly failed"
 
     with patch("up.commands.start.loop.run_ai_task") as mock_run_task:
-        mock_run_task.side_effect = lambda ws, prompt, cli, timeout=600, continue_session=False, on_output=None: mock_ai_engine.execute_task(ws, prompt, timeout, False)
+        mock_run_task.side_effect = lambda ws, prompt, cli, timeout=600, continue_session=False, on_output=None, **kwargs: mock_ai_engine.execute_task(ws, prompt, timeout, False)
 
         run_ai_product_loop(
             workspace=git_workspace,
@@ -161,7 +161,7 @@ def test_doom_loop_circuit_breaker(git_workspace, test_prd, mock_ai_engine):
     mock_ai_engine.output = "AI explicitly failed"
     
     with patch("up.commands.start.loop.run_ai_task") as mock_run_task:
-        mock_run_task.side_effect = lambda ws, prompt, cli, timeout=600, continue_session=False, on_output=None: mock_ai_engine.execute_task(ws, prompt, timeout, False)
+        mock_run_task.side_effect = lambda ws, prompt, cli, timeout=600, continue_session=False, on_output=None, **kwargs: mock_ai_engine.execute_task(ws, prompt, timeout, False)
 
         # Run loop 3 times for the same task to trigger circuit breaker
         for i in range(3):
