@@ -226,31 +226,39 @@ def _collect_provenance_summary(workspace: Path) -> dict:
 
 
 def _collect_legacy_status(workspace: Path, status: dict) -> None:
-    """Collect status from legacy state files."""
-    # Context budget (old location)
-    context_file = workspace / ".claude/context_budget.json"
-    if context_file.exists():
-        try:
-            status["context_budget"] = json.loads(context_file.read_text())
-        except json.JSONDecodeError:
-            status["context_budget"] = {"error": "Invalid JSON"}
-    
-    # Loop state (old location)
-    loop_file = workspace / ".loop_state.json"
-    if loop_file.exists():
-        try:
-            data = json.loads(loop_file.read_text())
-            status["loop_state"] = {
-                "iteration": data.get("iteration", 0),
-                "phase": data.get("phase", "UNKNOWN"),
-                "current_task": data.get("current_task"),
-                "tasks_completed": len(data.get("tasks_completed", [])),
-                "tasks_remaining": len(data.get("tasks_remaining", [])),
-                "success_rate": data.get("metrics", {}).get("success_rate", 1.0),
-            }
-            status["circuit_breaker"] = data.get("circuit_breaker", {})
-        except json.JSONDecodeError:
-            status["loop_state"] = {"error": "Invalid JSON"}
+    """Collect loop and context status from unified state."""
+    try:
+        from up.core.state import get_state_manager
+        sm = get_state_manager(workspace)
+        state = sm.state
+
+        # Loop state from unified state
+        loop = state.loop
+        status["loop_state"] = {
+            "iteration": loop.iteration,
+            "phase": loop.phase,
+            "current_task": loop.current_task,
+            "tasks_completed": len(loop.tasks_completed),
+            "tasks_remaining": 0,
+            "success_rate": 1.0,
+        }
+
+        # Circuit breaker from unified state
+        cb = state.circuit_breaker
+        status["circuit_breaker"] = {
+            "state": cb.state,
+            "failures": cb.failures,
+        }
+
+        # Context budget from unified state
+        ctx = state.context
+        status["context_budget"] = {
+            "budget": ctx.budget,
+            "total_tokens": ctx.total_tokens,
+            "usage_percent": ctx.usage_percent,
+        }
+    except Exception:
+        pass
 
 
 def display_status(status: dict, verbose: bool = False) -> None:

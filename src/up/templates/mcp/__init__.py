@@ -288,37 +288,30 @@ class MCPServer:
         }
     
     async def project_status(self, verbose: bool = False) -> dict:
-        """Get project status."""
+        """Get project status from unified state."""
         status = {"healthy": True, "systems": {}}
-        
-        # Check loop state
-        loop_file = self.workspace / ".loop_state.json"
-        if loop_file.exists():
-            try:
-                data = json.loads(loop_file.read_text())
-                status["systems"]["loop"] = {
-                    "iteration": data.get("iteration", 0),
-                    "phase": data.get("phase", "UNKNOWN"),
-                }
-            except json.JSONDecodeError:
-                status["systems"]["loop"] = {"error": "Invalid state"}
-        
-        # Check context budget
-        context_file = self.workspace / ".claude/context_budget.json"
-        if context_file.exists():
-            try:
-                data = json.loads(context_file.read_text())
-                status["systems"]["context"] = {
-                    "usage_percent": data.get("usage_percent", 0),
-                    "status": data.get("status", "OK"),
-                }
-            except json.JSONDecodeError:
-                status["systems"]["context"] = {"error": "Invalid state"}
-        
+
+        # Read from unified state
+        try:
+            from up.core.state import get_state_manager
+            sm = get_state_manager(self.workspace)
+            state = sm.state
+
+            status["systems"]["loop"] = {
+                "iteration": state.loop.iteration,
+                "phase": state.loop.phase,
+            }
+            status["systems"]["context"] = {
+                "usage_percent": state.context.usage_percent,
+                "status": "OK" if state.context.usage_percent < 80 else "WARNING",
+            }
+        except Exception:
+            pass
+
         if verbose:
             status["workspace"] = str(self.workspace)
-            status["initialized"] = (self.workspace / ".claude").exists()
-        
+            status["initialized"] = (self.workspace / ".up").exists()
+
         return status
     
     async def run_tests(
