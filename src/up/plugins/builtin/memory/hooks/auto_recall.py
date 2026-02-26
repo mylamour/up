@@ -54,7 +54,7 @@ def main():
 
         if results:
             best = results[0]
-            content = best.get("content", "") if isinstance(best, dict) else str(best)
+            content = best.content if hasattr(best, "content") else str(best)
             hint = {"memory_hint": content, "hint_query": query}
             print(json.dumps(hint))
             print(f"Memory recall: found past solution for '{query}'", file=sys.stderr)

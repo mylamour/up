@@ -5,6 +5,8 @@ JSON is the fallback for fast operations or when ChromaDB is unavailable.
 """
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional, List, Dict
 
@@ -208,9 +210,28 @@ class JSONMemoryStore(MemoryStore):
                 pass
 
     def _save(self) -> None:
-        """Save to disk."""
+        """Save to disk atomically (temp file + fsync + os.replace)."""
         data = {id_: entry.to_dict() for id_, entry in self.entries.items()}
-        self.index_file.write_text(json.dumps(data, indent=2))
+        self.db_path.mkdir(parents=True, exist_ok=True)
+        fd = None
+        tmp_path = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(self.db_path), suffix=".tmp", prefix="index_",
+            )
+            with os.fdopen(fd, "w") as f:
+                fd = None
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, str(self.index_file))
+            tmp_path = None
+        except Exception:
+            if fd is not None:
+                os.close(fd)
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
 
     def add(self, entry: MemoryEntry) -> None:
         """Add entry to memory."""

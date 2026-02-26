@@ -8,20 +8,29 @@ Split from the original 1097-line memory.py into:
 All public symbols are re-exported here for backward compatibility.
 """
 
-# Re-export everything from the manager module (backward compat)
-from up.memory._manager import (
-    MemoryManager,
+# Data models (canonical source: entry.py)
+from up.memory.entry import (
     MemoryEntry,
     SessionSummary,
     CodeLearning,
     ErrorMemory,
+    get_git_context,
+)
+
+# Storage backends (canonical source: stores.py)
+from up.memory.stores import (
+    _check_chromadb,
+    _ensure_chromadb,
     MemoryStore,
     ChromaMemoryStore,
     JSONMemoryStore,
-    _check_chromadb,
-    _ensure_chromadb,
-    _get_git_context,
 )
+
+# Manager (canonical source: _manager.py)
+from up.memory._manager import MemoryManager
+
+# Backward-compat alias
+_get_git_context = get_git_context
 
 __all__ = [
     "MemoryManager",
@@ -35,4 +44,5 @@ __all__ = [
     "_check_chromadb",
     "_ensure_chromadb",
     "_get_git_context",
+    "get_git_context",
 ]
