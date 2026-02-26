@@ -1,8 +1,8 @@
 # Project Context
 
-**Updated**: 2026-02-21
-**Status**: 🔄 Quality Improvement Phase
-**Version**: 0.5.0
+**Updated**: 2026-02-26
+**Status**: ✅ Production Ready
+**Version**: 1.0.0
 
 ---
 
@@ -10,80 +10,116 @@
 
 | Aspect | Status |
 |--------|--------|
-| Phase | Sprint 8 - Cleanup |
-| Focus | Test coverage, dead code removal |
+| Phase | All 6 phases complete |
+| Focus | Stability, docs, blog |
 | Blockers | None |
-| PRD Tasks | 26 complete, 8 pending |
+| Tests | 534 passing (59 test files) |
+| Source | 91 Python modules |
 
 ## Architecture
 
 ```
 .up/
 ├── state.json           # Unified state (loop, context, agents, metrics)
-├── checkpoints/         # Checkpoint metadata
-├── provenance/          # AI operation lineage tracking
-└── config.json          # Configuration
+├── config.json          # Configuration (thresholds, timeouts, workers)
+├── checkpoints/         # Checkpoint metadata (git tags + JSON)
+├── provenance/          # AI operation lineage (Merkle chain)
+├── memory/              # ChromaDB + JSON fallback
+│   ├── chroma/          # Vector embeddings (semantic search)
+│   └── index.json       # JSON fallback (keyword search)
+└── plugins/
+    ├── registry.json    # Plugin enable/disable state
+    ├── builtin/         # 4 core plugins
+    └── installed/       # 4 community plugins
 
 src/up/
 ├── core/                # Core modules
-│   ├── state.py         # Unified state management
+│   ├── state.py         # Unified state management (atomic writes)
 │   ├── checkpoint.py    # Git checkpoint operations
-│   └── provenance.py    # AI operation tracking
-├── learn/               # Refactored learning system
+│   ├── provenance.py    # AI operation tracking (Merkle chain)
+│   └── prd_schema.py    # PRD/UserStory data models
+├── memory/              # Persistent memory system
+│   ├── entry.py         # Data models (MemoryEntry, etc.)
+│   ├── stores.py        # ChromaDB + JSON backends
+│   ├── _manager.py      # MemoryManager (CRUD, search, indexing)
+│   └── patterns.py      # ErrorPatternExtractor
+├── plugins/             # Plugin system
+│   ├── loader.py        # Auto-discovery from disk
+│   ├── registry.py      # Enable/disable state
+│   ├── manifest.py      # Schema validation
+│   ├── hooks.py         # Polyglot hook execution
+│   └── rules.py         # Rules engine
+├── sync/                # Config sync pipeline
+│   ├── renderer.py      # Base renderer + context builder
+│   ├── claude_md.py     # CLAUDE.md generator
+│   ├── cursorrules.py   # .cursorrules generator
+│   └── claude_settings.py # .claude/settings.json generator
+├── learn/               # Learning system
 │   ├── analyzer.py      # Project analysis
 │   ├── research.py      # Topic/file learning
 │   └── plan.py          # PRD generation
+├── parallel/            # Multi-agent execution
+│   ├── scheduler.py     # Task scheduling
+│   └── executor.py      # Parallel worktree execution
 └── commands/            # CLI commands
+    ├── start/           # Product loop (SESRC)
+    ├── sync_config.py   # Config sync (up sync)
+    ├── plugin_cmd.py    # Plugin management
     ├── vibe.py          # save/reset/diff
     ├── agent.py         # Multi-agent worktrees
-    ├── bisect.py        # Bug hunting
-    ├── provenance.py    # Lineage tracking
-    ├── review.py        # AI code review
-    └── branch.py        # Branch hierarchy
+    └── provenance.py    # Lineage tracking
 ```
 
 ## Key Features
 
+### SESRC Product Loop
+- `up start` - Autonomous OBSERVE → CHECKPOINT → EXECUTE → VERIFY → COMMIT
+- Circuit breaker (3 failures → OPEN → cooldown → HALF_OPEN)
+- Automatic rollback on verification failure
+- Memory hint injection from past solutions
+
+### Plugin System
+- 4 builtin plugins: memory, safety, verify, provenance
+- 4 installed plugins: code-review, git-workflow, bisect, security-guidance
+- Polyglot hooks (Python/Bash/JS) with JSON stdin, exit code semantics
+- `tool_matcher` scoping (e.g., verify only fires on Write|Edit)
+- `up sync` generates .claude/settings.json, CLAUDE.md, .cursorrules from plugins
+
+### Persistent Memory
+- ChromaDB semantic search with local embeddings (all-MiniLM-L6-v2)
+- JSON fallback for fast operations or when ChromaDB unavailable
+- Auto-record errors after consecutive failures
+- Auto-recall past solutions on task failure
+- Auto-index git commits into semantic memory
+- Branch-aware knowledge tracking
+
+### Provenance Tracking
+- Content-addressed Merkle chain for AI operations
+- Tracks: model, prompt hash, context hash, files modified, verification results
+- Status lifecycle: pending → accepted/rejected/reverted
+
 ### Vibe Coding Safety Rails
 - `up save` / `up reset` - Checkpoint and recovery
 - `up diff` / `up review` - Mandatory review
-- Doom loop detection (3 consecutive failures)
-
-### Multi-Agent Orchestration
-- `up start --parallel` - Parallel worktree execution
-- `up agent spawn/merge` - Agent management
-- Branch hierarchy enforcement
-
-### Provenance Tracking
-- Content-addressed storage
-- AI operation lineage
-- Verification tracking
+- Doom loop detection (configurable threshold, default 3)
 
 ## Recent Changes
 
-- Implemented unified state management (F-001 to F-006)
-- Added vibe safety commands (US-004 to US-006)
-- Added multi-agent support (US-007 to US-010)
-- Added debugging tools (US-011 to US-012)
-- Added provenance tracking (US-013 to US-015)
-- Added AI review and branch hierarchy (US-016 to US-017)
-- Refactored learn.py into modular structure
-- Added auto-commit with verification
-- **Code Review Fixes (2026-02-05)**:
-  - Fixed `run_ai_task` parameter mismatch in parallel.py
-  - Fixed version mismatch (`__init__.py` now 0.4.0)
-  - Consolidated `ParallelState` to unified state management
-  - Standardized git utilities (removed duplicates)
-  - Fixed checkpoint tag prefix (`up-checkpoint/`)
-  - Added configurable settings via `.up/config.json`
-  - Enhanced error handling with custom exceptions
-  - Integrated provenance tracking in product loop
+- **Plugin System (2026-02-25)**: Full plugin architecture — loader, registry, manifest validation, hook execution, scaffold command (US-001 through US-005)
+- **Phases 2-6 Implementation (2026-02-25)**: Memory plugin, safety plugin, verify plugin, provenance plugin, installed plugins (code-review, git-workflow, bisect, security-guidance)
+- **Claude Code Hooks Fix (2026-02-25)**: Fixed settings.json format (record/matcher), path resolution with $CLAUDE_PROJECT_DIR, tool_matcher scoping, HOOK_TYPE_MAP trimmed to pre_tool_use/post_tool_use only
+- **Config Sync Pipeline (2026-02-25)**: `up sync` generates CLAUDE.md, .cursorrules, .claude/settings.json from plugin configs
+- **Memory Module Refactor (2026-02-26)**: Deduplicated _manager.py — imports from entry.py and stores.py. Atomic writes for JSON store. Fixed auto_recall type handling.
+- **Test Suite (2026-02-26)**: 534 tests passing across 59 test files
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| CLAUDE.md | AI instructions |
+| CLAUDE.md | AI instructions (skills, rules, handoff protocol) |
 | docs/handoff/LATEST.md | Session continuity |
-| .claude/skills/learning-system/prd.json | Task tracking |
-| docs/roadmap/IMPROVEMENT_PLAN.md | Development roadmap |
+| docs/CONTEXT.md | This file — current project state |
+| docs/INDEX.md | Documentation quick reference |
+| .up/state.json | Unified state (loop, context, agents, metrics) |
+| .up/config.json | Configuration (thresholds, timeouts) |
+| prd.json | Current PRD with user stories |

@@ -1,6 +1,6 @@
 # Documentation Index
 
-**Updated**: 2026-02-21
+**Updated**: 2026-02-26
 
 > AI: Use this index to quickly find relevant documentation.
 
@@ -10,10 +10,9 @@
 
 | Topic | File | Description |
 |-------|------|-------------|
-| Project State | CONTEXT.md | Current status, blockers, next steps |
+| Project State | CONTEXT.md | Current status, architecture, key files |
 | Recent Work | handoff/LATEST.md | Last session summary |
 | Vision | roadmap/vision/PRODUCT_VISION.md | Product goals and target users |
-| Phase 1 | roadmap/phases/PHASE_1_FOUNDATION.md | Current phase deliverables |
 | Improvement Plan | roadmap/IMPROVEMENT_PLAN.md | Development roadmap |
 
 ## By Category
@@ -24,6 +23,33 @@
 | SESRC Design | architecture/SESRC_DESIGN.md |
 | Integrated Lifecycle | architecture/INTEGRATED_LIFECYCLE.md |
 | Multi-Worktree Execution | architecture/MULTI_WORKTREE_EXECUTION.md |
+
+### Plugin System
+| Topic | Location |
+|-------|----------|
+| Builtin: memory | src/up/plugins/builtin/memory/plugin.json |
+| Builtin: safety | src/up/plugins/builtin/safety/plugin.json |
+| Builtin: verify | src/up/plugins/builtin/verify/plugin.json |
+| Builtin: provenance | src/up/plugins/builtin/provenance/plugin.json |
+| Installed: code-review | src/up/plugins/installed/code-review/plugin.json |
+| Installed: security-guidance | src/up/plugins/installed/security-guidance/plugin.json |
+| Plugin template | src/up/templates/projects/plugin/ |
+
+### Memory System
+| Topic | Location |
+|-------|----------|
+| Data models | src/up/memory/entry.py |
+| Storage backends | src/up/memory/stores.py |
+| Manager API | src/up/memory/_manager.py |
+| Error patterns | src/up/memory/patterns.py |
+
+### Config Sync
+| Topic | Location |
+|-------|----------|
+| Renderer base | src/up/sync/renderer.py |
+| CLAUDE.md generator | src/up/sync/claude_md.py |
+| .cursorrules generator | src/up/sync/cursorrules.py |
+| .claude/settings.json | src/up/sync/claude_settings.py |
 
 ### Guides
 | Topic | File |
