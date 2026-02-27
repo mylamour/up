@@ -2,6 +2,12 @@
   "hooks": [
     {
       "type": "command",
+      "command": "python3 hooks/session_prime.py",
+      "matcher": "task_start",
+      "timeout": 10
+    },
+    {
+      "type": "command",
       "command": "python3 hooks/auto_recall.py",
       "matcher": "task_failed|verify_fail",
       "timeout": 10
@@ -11,6 +17,12 @@
       "command": "python3 hooks/auto_record.py",
       "matcher": "task_failed|task_complete",
       "timeout": 10
+    },
+    {
+      "type": "command",
+      "command": "python3 hooks/auto_learn.py",
+      "matcher": "task_failed",
+      "timeout": 15
     },
     {
       "type": "command",

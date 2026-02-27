@@ -21,6 +21,7 @@ class CursorrulesRenderer(ConfigRenderer):
         sections.append(self._code_style(context))
         sections.append(self._command_reference(context))
         sections.append(self._safety_rules(context))
+        sections.append(self._project_knowledge(context))
         return "\n".join(s for s in sections if s)
 
     def _project_overview(self, ctx: TemplateContext) -> str:
@@ -56,4 +57,23 @@ class CursorrulesRenderer(ConfigRenderer):
         for rule in ctx.safety_rules:
             lines.append(f"- {rule}")
         lines.append("")
+        return "\n".join(lines)
+
+    def _project_knowledge(self, ctx: TemplateContext) -> str:
+        if not ctx.knowledge:
+            return ""
+        decisions = [k for k in ctx.knowledge if k.category == "decision"]
+        learnings = [k for k in ctx.knowledge if k.category == "learning"]
+
+        lines = ["# Project Knowledge\n"]
+        if decisions:
+            lines.append("## Key Decisions\n")
+            for d in decisions[:5]:
+                lines.append(f"- {d.content}")
+            lines.append("")
+        if learnings:
+            lines.append("## Learnings\n")
+            for l in learnings[:5]:
+                lines.append(f"- {l.content}")
+            lines.append("")
         return "\n".join(lines)

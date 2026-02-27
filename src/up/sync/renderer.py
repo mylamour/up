@@ -32,6 +32,14 @@ class HookSummary:
 
 
 @dataclass
+class KnowledgeEntry:
+    """A knowledge item from memory (decision, learning, or error pattern)."""
+    category: str  # "decision", "learning", "error"
+    content: str
+    timestamp: str = ""
+
+
+@dataclass
 class TemplateContext:
     """Aggregated context for rendering config files."""
     project_name: str = ""
@@ -40,6 +48,7 @@ class TemplateContext:
     hooks_summary: list[HookSummary] = field(default_factory=list)
     memory_protocol: bool = False
     safety_rules: list[str] = field(default_factory=list)
+    knowledge: list[KnowledgeEntry] = field(default_factory=list)
 
 
 class ConfigRenderer(ABC):
@@ -72,12 +81,39 @@ def _parse_command_md(path: Path, plugin_name: str) -> Optional[CommandInfo]:
         return None
 
 
-def build_context(config: dict, plugins: list[LoadedPlugin]) -> TemplateContext:
-    """Aggregate data from config and enabled plugins into TemplateContext.
+def _collect_knowledge(workspace: Path, limit: int = 10) -> list[KnowledgeEntry]:
+    """Query memory for recent decisions, learnings, and error patterns."""
+    entries: list[KnowledgeEntry] = []
+    try:
+        from up.memory import MemoryManager
+        manager = MemoryManager(workspace, use_vectors=False)
+
+        for category in ("decision", "learning", "error"):
+            results = manager.store.get_by_type(category, limit=limit)
+            for r in results:
+                content = r.content if hasattr(r, "content") else str(r)
+                ts = r.timestamp if hasattr(r, "timestamp") else ""
+                entries.append(KnowledgeEntry(
+                    category=category,
+                    content=content.strip()[:300],
+                    timestamp=ts,
+                ))
+    except Exception:
+        pass
+    return entries
+
+
+def build_context(
+    config: dict,
+    plugins: list[LoadedPlugin],
+    workspace: Optional[Path] = None,
+) -> TemplateContext:
+    """Aggregate data from config, plugins, and memory into TemplateContext.
 
     Args:
         config: Parsed .up/config.json dict.
         plugins: List of enabled LoadedPlugin instances.
+        workspace: Project root (used to query memory for knowledge).
 
     Returns:
         TemplateContext ready for rendering.
@@ -90,6 +126,10 @@ def build_context(config: dict, plugins: list[LoadedPlugin]) -> TemplateContext:
     # Memory protocol
     memory_cfg = config.get("automation", {}).get("memory", {})
     ctx.memory_protocol = any(memory_cfg.values()) if memory_cfg else False
+
+    # Collect knowledge from memory
+    if workspace:
+        ctx.knowledge = _collect_knowledge(workspace)
 
     # Collect from plugins
     for plugin in plugins:

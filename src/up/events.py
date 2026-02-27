@@ -440,15 +440,29 @@ Milestone completed.
 # Initialize Default Handlers
 # =============================================================================
 
+def create_learning_handlers(bridge: EventBridge) -> None:
+    """Register continuous learning event handlers."""
+
+    def on_task_complete_learn(event: Event):
+        try:
+            from up.learn.continuous import check_learning_trigger
+            check_learning_trigger(bridge.workspace)
+        except Exception as e:
+            logger.debug("Continuous learning check failed: %s", e)
+
+    bridge.subscribe(EventType.TASK_COMPLETE, on_task_complete_learn)
+
+
 def initialize_event_system(workspace: Optional[Path] = None) -> EventBridge:
     """Initialize the event system with default handlers."""
     bridge = EventBridge(workspace)
-    
+
     # Only register handlers once
     if not bridge.handlers:
         create_memory_handlers(bridge)
         create_docs_handlers(bridge)
-    
+        create_learning_handlers(bridge)
+
     return bridge
 
 

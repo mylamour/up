@@ -27,6 +27,7 @@ class ClaudeMdRenderer(ConfigRenderer):
         sections.append(self._safety_rules(context))
         sections.append(self._memory_protocol(context))
         sections.append(self._hooks_summary(context))
+        sections.append(self._project_knowledge(context))
         sections.append(self._auto_triggers())
 
         return "\n".join(s for s in sections if s)
@@ -88,6 +89,31 @@ class ClaudeMdRenderer(ConfigRenderer):
         for h in ctx.hooks_summary:
             lines.append(f"- **{h.event}** ({h.plugin}): `{h.action}`")
         lines.append("")
+        return "\n".join(lines)
+
+    def _project_knowledge(self, ctx: TemplateContext) -> str:
+        if not ctx.knowledge:
+            return ""
+        decisions = [k for k in ctx.knowledge if k.category == "decision"]
+        learnings = [k for k in ctx.knowledge if k.category == "learning"]
+        errors = [k for k in ctx.knowledge if k.category == "error"]
+
+        lines = ["## Project Knowledge (from memory)\n"]
+        if decisions:
+            lines.append("### Key Decisions\n")
+            for d in decisions[:5]:
+                lines.append(f"- {d.content}")
+            lines.append("")
+        if learnings:
+            lines.append("### Learnings\n")
+            for l in learnings[:5]:
+                lines.append(f"- {l.content}")
+            lines.append("")
+        if errors:
+            lines.append("### Known Error Patterns\n")
+            for e in errors[:5]:
+                lines.append(f"- {e.content}")
+            lines.append("")
         return "\n".join(lines)
 
     def _auto_triggers(self) -> str:

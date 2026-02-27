@@ -83,7 +83,7 @@ def run_sync(
     # Build context
     if not config.get("project", {}).get("name"):
         config.setdefault("project", {})["name"] = workspace.name
-    ctx = build_context(config, plugins)
+    ctx = build_context(config, plugins, workspace=workspace)
 
     # Select renderers
     if targets:
