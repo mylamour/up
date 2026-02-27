@@ -12,7 +12,6 @@ Exit code semantics:
 import json
 import logging
 import re
-import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,8 +88,11 @@ class HookRunner:
         input_json = json.dumps(event_data)
 
         try:
+            # Use sh -c to support shell features (redirections, chaining)
+            # while keeping shell=False. Command strings come from trusted
+            # config (hooks.json); untrusted event data flows via stdin only.
             result = subprocess.run(
-                shlex.split(spec.command),
+                ["sh", "-c", spec.command],
                 shell=False,
                 input=input_json,
                 capture_output=True,
