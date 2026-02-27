@@ -16,6 +16,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from up.concurrency import run_subprocess
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,7 +92,7 @@ class HookRunner:
             # Use sh -c to support shell features (redirections, chaining)
             # while keeping shell=False. Command strings come from trusted
             # config (hooks.json); untrusted event data flows via stdin only.
-            result = subprocess.run(
+            result = run_subprocess(
                 ["sh", "-c", spec.command],
                 shell=False,
                 input=input_json,

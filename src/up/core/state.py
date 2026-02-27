@@ -18,6 +18,7 @@ import shutil
 import tempfile
 import threading
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -400,6 +401,11 @@ class StateManager:
         self._config: UpConfig | None = None
         # File lock for thread-safe and cross-process state access
         self._lock = FileLock(str(self.state_file) + ".lock", timeout=30)
+        # Separate lock for config to avoid deadlock when load() applies config
+        self._config_lock = FileLock(str(self.config_file) + ".lock", timeout=30)
+        # Batch updates: when > 0, save() defers writes until batch_update() exits
+        self._batch_depth = 0
+        self._batch_dirty = False
 
     @property
     def config(self) -> UpConfig:
@@ -409,21 +415,23 @@ class StateManager:
         return self._config
 
     def _load_config(self) -> UpConfig:
-        """Load configuration from file."""
-        if self.config_file.exists():
-            try:
-                data = json.loads(self.config_file.read_text())
-                return UpConfig.from_dict(data)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return UpConfig()
+        """Load configuration from file (synchronized with _config_lock)."""
+        with self._config_lock:
+            if self.config_file.exists():
+                try:
+                    data = json.loads(self.config_file.read_text())
+                    return UpConfig.from_dict(data)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return UpConfig()
 
     def save_config(self) -> None:
-        """Save configuration to file."""
+        """Save configuration to file (thread-safe)."""
         if self._config is None:
             return
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.config_file.write_text(json.dumps(self._config.to_dict(), indent=2))
+        with self._config_lock:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            self.config_file.write_text(json.dumps(self._config.to_dict(), indent=2))
 
     def update_config(self, **kwargs) -> None:
         """Update configuration values."""
@@ -467,38 +475,36 @@ class StateManager:
     def load(self) -> UnifiedState:
         """Load state from file, migrating old files if needed.
         
+        Holds the file lock for the read to avoid TOCTOU with concurrent writers.
         If state.json is corrupted, attempts recovery from .bak file
         before falling back to migration.
         """
-        # Try loading new unified state
-        if self.state_file.exists():
-            try:
-                data = json.loads(self.state_file.read_text())
-                self._state = UnifiedState.from_dict(data)
-                # Apply configuration
-                self._apply_config_to_state()
-                return self._state
-            except (json.JSONDecodeError, TypeError, KeyError) as e:
-                logger.warning("State file corrupted: %s. Trying backup.", e)
-                # Try recovery from backup
-                backup_file = self.state_file.with_suffix(".json.bak")
-                if backup_file.exists():
-                    try:
-                        data = json.loads(backup_file.read_text())
-                        self._state = UnifiedState.from_dict(data)
-                        self._apply_config_to_state()
-                        logger.info("Recovered state from backup file")
-                        # Re-save to fix the corrupted main file
-                        self.save()
-                        return self._state
-                    except (json.JSONDecodeError, TypeError, KeyError):
-                        logger.warning("Backup file also corrupted")
+        with self._lock:
+            # Try loading new unified state
+            if self.state_file.exists():
+                try:
+                    data = json.loads(self.state_file.read_text())
+                    self._state = UnifiedState.from_dict(data)
+                    self._apply_config_to_state()
+                    return self._state
+                except (json.JSONDecodeError, TypeError, KeyError) as e:
+                    logger.warning("State file corrupted: %s. Trying backup.", e)
+                    backup_file = self.state_file.with_suffix(".json.bak")
+                    if backup_file.exists():
+                        try:
+                            data = json.loads(backup_file.read_text())
+                            self._state = UnifiedState.from_dict(data)
+                            self._apply_config_to_state()
+                            logger.info("Recovered state from backup file")
+                            self._write_state_to_disk()
+                            return self._state
+                        except (json.JSONDecodeError, TypeError, KeyError):
+                            logger.warning("Backup file also corrupted")
 
-        # No unified state (or both corrupted), try migration
-        self._state = self._migrate_old_states()
-        # Apply configuration
-        self._apply_config_to_state()
-        return self._state
+            # No unified state (or both corrupted), try migration
+            self._state = self._migrate_old_states()
+            self._apply_config_to_state()
+            return self._state
 
     def _write_state_to_disk(self) -> None:
         """Atomic write of in-memory state to disk.
@@ -540,12 +546,34 @@ class StateManager:
                 os.unlink(tmp_path)
             raise
 
+    @contextmanager
+    def batch_update(self):
+        """Context manager to batch multiple state updates into a single disk write.
+
+        Use when making several mutations (e.g. in a loop) to avoid redundant I/O.
+        On exit, writes state to disk at most once.
+        """
+        self._batch_depth += 1
+        try:
+            yield
+        finally:
+            self._batch_depth -= 1
+            if self._batch_depth == 0 and self._batch_dirty and self._state is not None:
+                self._batch_dirty = False
+                self._state.updated_at = datetime.now().isoformat()
+                with self._lock:
+                    self._write_state_to_disk()
+
     def save(self) -> None:
-        """Save current state to file (thread-safe, atomic)."""
+        """Save current state to file (thread-safe, atomic). Defers when inside batch_update()."""
         if self._state is None:
             return
 
         self._state.updated_at = datetime.now().isoformat()
+
+        if self._batch_depth > 0:
+            self._batch_dirty = True
+            return
 
         with self._lock:
             self._write_state_to_disk()
@@ -690,20 +718,22 @@ class StateManager:
         self.save()
 
     def record_task_complete(self, task_id: str) -> None:
-        """Record a task completion."""
-        if task_id not in self.state.loop.tasks_completed:
-            self.state.loop.tasks_completed.append(task_id)
-        self.state.metrics.completed_tasks += 1
-        self.state.loop.consecutive_failures = 0  # Reset doom loop counter
-        self.save()
+        """Record a task completion (atomic)."""
+        def _update(s: UnifiedState) -> None:
+            if task_id not in s.loop.tasks_completed:
+                s.loop.tasks_completed.append(task_id)
+            s.metrics.completed_tasks += 1
+            s.loop.consecutive_failures = 0
+        self.atomic_update(_update)
 
     def record_task_failed(self, task_id: str) -> None:
-        """Record a task failure."""
-        if task_id not in self.state.loop.tasks_failed:
-            self.state.loop.tasks_failed.append(task_id)
-        self.state.metrics.failed_tasks += 1
-        self.state.loop.consecutive_failures += 1
-        self.save()
+        """Record a task failure (atomic)."""
+        def _update(s: UnifiedState) -> None:
+            if task_id not in s.loop.tasks_failed:
+                s.loop.tasks_failed.append(task_id)
+            s.metrics.failed_tasks += 1
+            s.loop.consecutive_failures += 1
+        self.atomic_update(_update)
 
     def check_doom_loop(self) -> tuple[bool, str]:
         """Check if we're in a doom loop.

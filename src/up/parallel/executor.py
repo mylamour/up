@@ -9,16 +9,16 @@ Uses the unified state system in .up/state.json for consistency.
 
 import json
 import logging
-import subprocess
-import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from filelock import FileLock
 from rich.console import Console
 
 from up.ai_cli import run_ai_task
+from up.concurrency import run_subprocess
 from up.core.state import get_state_manager
 from up.core.checkpoint import get_checkpoint_manager
 from up.git.utils import count_commits_since
@@ -47,15 +47,13 @@ class ParallelExecutionManager:
     This replaces the old ParallelState dataclass to use .up/state.json
     instead of the legacy .parallel_state.json file.
 
-    All state mutations are protected by a threading.Lock to prevent
-    race conditions when multiple threads modify state concurrently.
-    The underlying StateManager also uses filelock for cross-process safety.
+    State mutations use StateManager.atomic_update() and FileLock for
+    thread- and process-safe consistency; no separate threading lock.
     """
 
     def __init__(self, workspace: Path = None):
         self.workspace = workspace or Path.cwd()
         self._state_manager = get_state_manager(self.workspace)
-        self._lock = threading.Lock()
 
     @property
     def state(self):
@@ -68,9 +66,7 @@ class ParallelExecutionManager:
 
     @iteration.setter
     def iteration(self, value: int):
-        with self._lock:
-            self.state.current_batch = value
-            self._state_manager.save()
+        self._state_manager.atomic_update(lambda s: setattr(s.parallel, "current_batch", value))
 
     @property
     def parallel_limit(self) -> int:
@@ -78,48 +74,46 @@ class ParallelExecutionManager:
 
     @parallel_limit.setter
     def parallel_limit(self, value: int):
-        with self._lock:
-            self.state.max_workers = value
-            self._state_manager.save()
+        self._state_manager.atomic_update(lambda s: setattr(s.parallel, "max_workers", value))
 
     @property
     def active_worktrees(self) -> list[str]:
         return self.state.agents
 
     def add_active_worktree(self, task_id: str):
-        """Add a worktree to active list (thread-safe)."""
-        with self._lock:
-            if task_id not in self.state.agents:
-                self.state.agents.append(task_id)
-                self._state_manager.save()
+        """Add a worktree to active list (thread-safe via atomic_update)."""
+        def _add(s):
+            if task_id not in s.parallel.agents:
+                s.parallel.agents.append(task_id)
+        self._state_manager.atomic_update(_add)
 
     def remove_active_worktree(self, task_id: str):
-        """Remove a worktree from active list (thread-safe)."""
-        with self._lock:
-            if task_id in self.state.agents:
-                self.state.agents.remove(task_id)
-                self._state_manager.save()
+        """Remove a worktree from active list (thread-safe via atomic_update)."""
+        def _remove(s):
+            if task_id in s.parallel.agents:
+                s.parallel.agents.remove(task_id)
+        self._state_manager.atomic_update(_remove)
 
     def set_active(self, active: bool):
-        """Set parallel execution active state (thread-safe)."""
-        with self._lock:
-            self.state.active = active
-            self._state_manager.save()
+        """Set parallel execution active state (thread-safe via atomic_update)."""
+        self._state_manager.atomic_update(lambda s: setattr(s.parallel, "active", active))
 
     def save(self):
-        """Explicit save (thread-safe, for compatibility)."""
-        with self._lock:
-            self._state_manager.save()
+        """Explicit save (for compatibility)."""
+        self._state_manager.save()
 
     def record_task_complete(self, task_id: str):
-        """Record a task completion in metrics (thread-safe)."""
-        with self._lock:
-            self._state_manager.record_task_complete(task_id)
+        """Record a task completion in metrics (atomic)."""
+        self._state_manager.record_task_complete(task_id)
 
     def record_task_failed(self, task_id: str):
-        """Record a task failure in metrics (thread-safe)."""
-        with self._lock:
-            self._state_manager.record_task_failed(task_id)
+        """Record a task failure in metrics (atomic)."""
+        self._state_manager.record_task_failed(task_id)
+
+
+def _prd_lock(prd_path: Path) -> FileLock:
+    """Return a FileLock for the PRD file to prevent concurrent read/write corruption."""
+    return FileLock(str(prd_path) + ".lock", timeout=30)
 
 
 def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None) -> list[dict]:
@@ -128,6 +122,7 @@ def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None)
     Cross-checks against both the PRD's `passes` field AND the
     state manager's `tasks_completed` list to avoid re-running
     tasks that were already implemented (e.g., manually in Cursor).
+    PRD read/write is protected by FileLock for multi-agent safety.
 
     Args:
         prd_path: Path to prd.json
@@ -140,49 +135,59 @@ def get_pending_tasks(prd_path: Path, limit: int = None, workspace: Path = None)
     if not prd_path.exists():
         return []
 
+    lock = _prd_lock(prd_path)
     try:
-        data = json.loads(prd_path.read_text())
-        stories = data.get("userStories", [])
-
-        # Get already-completed tasks from state manager
-        completed_in_state = set()
-        if workspace:
-            try:
-                sm = get_state_manager(workspace)
-                completed_in_state = set(sm.state.loop.tasks_completed)
-            except Exception as e:
-                logger.debug("Ignored exception: %s", e)
-
-        # A task is pending only if BOTH:
-        # 1. PRD says passes != true
-        # 2. State doesn't list it as completed
-        pending = []
-        synced_count = 0
-        for s in stories:
-            task_id = s.get("id", "")
-            if s.get("passes", False):
-                continue  # Already marked done in PRD
-            if task_id in completed_in_state:
-                s["passes"] = True
-                s["completedAt"] = s.get("completedAt", datetime.now().strftime("%Y-%m-%d"))
-                synced_count += 1
-                continue
-            pending.append(s)
-
-        # Save synced PRD if any tasks were auto-completed
-        if synced_count > 0:
-            try:
-                prd_path.write_text(json.dumps(data, indent=2))
-                console.print(f"[dim]Auto-synced {synced_count} completed tasks in PRD[/]")
-            except Exception as e:
-                logger.debug("Ignored exception: %s", e)
-
-        if limit:
-            pending = pending[:limit]
-
-        return pending
-    except json.JSONDecodeError:
+        with lock:
+            data = json.loads(prd_path.read_text())
+    except (json.JSONDecodeError, OSError):
         return []
+
+    stories = data.get("userStories", [])
+
+    # Get already-completed tasks from state manager (outside PRD lock to avoid deadlock)
+    completed_in_state = set()
+    if workspace:
+        try:
+            sm = get_state_manager(workspace)
+            completed_in_state = set(sm.state.loop.tasks_completed)
+        except Exception as e:
+            logger.debug("Ignored exception: %s", e)
+
+    # A task is pending only if BOTH:
+    # 1. PRD says passes != true
+    # 2. State doesn't list it as completed
+    pending = []
+    synced_count = 0
+    for s in stories:
+        task_id = s.get("id", "")
+        if s.get("passes", False):
+            continue  # Already marked done in PRD
+        if task_id in completed_in_state:
+            s["passes"] = True
+            s["completedAt"] = s.get("completedAt", datetime.now().strftime("%Y-%m-%d"))
+            synced_count += 1
+            continue
+        pending.append(s)
+
+    # Save synced PRD if any tasks were auto-completed (hold lock for write)
+    if synced_count > 0:
+        try:
+            with lock:
+                # Re-read to avoid overwriting concurrent updates
+                data = json.loads(prd_path.read_text())
+                for s in data.get("userStories", []):
+                    if s.get("id") in completed_in_state and not s.get("passes"):
+                        s["passes"] = True
+                        s["completedAt"] = s.get("completedAt", datetime.now().strftime("%Y-%m-%d"))
+                prd_path.write_text(json.dumps(data, indent=2))
+            console.print(f"[dim]Auto-synced {synced_count} completed tasks in PRD[/]")
+        except Exception as e:
+            logger.debug("Ignored exception: %s", e)
+
+    if limit:
+        pending = pending[:limit]
+
+    return pending
 
 
 def execute_task_in_worktree(
@@ -206,17 +211,14 @@ def execute_task_in_worktree(
         state = WorktreeState.load(worktree_path)
         state.status = "executing"
         state.phase = "CHECKPOINT"
-        state.save(worktree_path)
 
         cp_manager = get_checkpoint_manager(worktree_path)
         checkpoint_meta = cp_manager.save(message=f"{task_id}-start", task_id=task_id)
         state.checkpoints.append({"name": checkpoint_meta.id, "time": datetime.now().isoformat()})
+        state.phase = "AI_IMPL"
         state.save(worktree_path)
 
         prompt = _build_task_prompt(task)
-
-        state.phase = "AI_IMPL"
-        state.save(worktree_path)
 
         success, output = run_ai_task(
             workspace=worktree_path, prompt=prompt, cli_name=cli_name, timeout=timeout
@@ -229,13 +231,11 @@ def execute_task_in_worktree(
                 "output_preview": output[:500] if output else "",
             }
         )
-        state.save(worktree_path)
 
         if not success:
             state.status = "failed"
             state.error = output[:500] if output else "AI execution failed"
             state.save(worktree_path)
-
             return TaskResult(
                 task_id=task_id,
                 success=False,
@@ -244,8 +244,10 @@ def execute_task_in_worktree(
                 error=state.error,
             )
 
-        subprocess.run(["git", "add", "-A"], cwd=worktree_path, capture_output=True, timeout=30)
-        subprocess.run(
+        run_subprocess(
+            ["git", "add", "-A"], cwd=worktree_path, capture_output=True, timeout=30
+        )
+        run_subprocess(
             ["git", "commit", "-m", f"feat({task_id}): {task.get('title', 'Implement task')}"],
             cwd=worktree_path,
             capture_output=True,
@@ -296,17 +298,17 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
 
     test_results = {"tests": None, "lint": None, "type_check": None}
 
-    result = subprocess.run(
+    result = run_subprocess(
         ["pytest", "-q", "--tb=no"], cwd=worktree_path, capture_output=True, text=True, timeout=300
     )
     test_results["tests"] = result.returncode == 0
 
-    result = subprocess.run(
+    result = run_subprocess(
         ["ruff", "check", "src/", "--quiet"], cwd=worktree_path, capture_output=True, text=True, timeout=60
     )
     test_results["lint"] = result.returncode == 0
 
-    result = subprocess.run(
+    result = run_subprocess(
         ["mypy", "src/", "--ignore-missing-imports", "--no-error-summary"],
         cwd=worktree_path,
         capture_output=True,
@@ -363,17 +365,19 @@ Begin implementation."""
 
 
 def mark_task_complete_in_prd(prd_path: Path, task_id: str):
-    """Mark a task as complete in the PRD."""
+    """Mark a task as complete in the PRD. Uses FileLock for concurrent safety."""
     if not prd_path.exists():
         return
 
+    lock = _prd_lock(prd_path)
     try:
-        data = json.loads(prd_path.read_text())
-        for story in data.get("userStories", []):
-            if story.get("id") == task_id:
-                story["passes"] = True
-                story["completedAt"] = datetime.now().strftime("%Y-%m-%d")
-                break
-        prd_path.write_text(json.dumps(data, indent=2))
+        with lock:
+            data = json.loads(prd_path.read_text())
+            for story in data.get("userStories", []):
+                if story.get("id") == task_id:
+                    story["passes"] = True
+                    story["completedAt"] = datetime.now().strftime("%Y-%m-%d")
+                    break
+            prd_path.write_text(json.dumps(data, indent=2))
     except (OSError, json.JSONDecodeError):
         pass

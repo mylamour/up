@@ -28,6 +28,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from filelock import FileLock
+
+from up.concurrency import run_subprocess
+
 from up.memory.entry import (
     MemoryEntry,
     get_git_context,
@@ -97,6 +101,10 @@ class MemoryManager:
 
         self.config_file = self.workspace / ".up" / "memory_config.json"
         self.config = self._load_config()
+
+        # File lock for session file (prevents read-modify-write races)
+        self._session_file = self.workspace / ".up" / "current_session.json"
+        self._session_lock = FileLock(str(self._session_file) + ".lock", timeout=30)
 
         # Cache git context (refreshed on demand)
         self._git_context_cache: dict[str, str] | None = None
@@ -180,51 +188,50 @@ class MemoryManager:
         """Start a new session and return session ID."""
         session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        session_file = self.workspace / ".up" / "current_session.json"
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-        session_file.write_text(json.dumps({
-            "session_id": session_id,
-            "started_at": datetime.now().isoformat(),
-            "tasks": [],
-            "files_modified": [],
-            "decisions": [],
-            "learnings": [],
-            "errors": [],
-        }, indent=2))
+        self._session_file.parent.mkdir(parents=True, exist_ok=True)
+        with self._session_lock:
+            self._session_file.write_text(json.dumps({
+                "session_id": session_id,
+                "started_at": datetime.now().isoformat(),
+                "tasks": [],
+                "files_modified": [],
+                "decisions": [],
+                "learnings": [],
+                "errors": [],
+            }, indent=2))
 
         return session_id
 
     def end_session(self, summary: str = None) -> None:
         """End current session and save summary to memory."""
-        session_file = self.workspace / ".up" / "current_session.json"
+        with self._session_lock:
+            if not self._session_file.exists():
+                return
 
-        if not session_file.exists():
-            return
+            session_data = json.loads(self._session_file.read_text())
+            session_id = session_data.get("session_id", "unknown")
 
-        session_data = json.loads(session_file.read_text())
-        session_id = session_data.get("session_id", "unknown")
+            # Auto-generate summary if not provided
+            if not summary:
+                summary = self._auto_summarize_session(session_data)
 
-        # Auto-generate summary if not provided
-        if not summary:
-            summary = self._auto_summarize_session(session_data)
+            # Create memory entry
+            entry = MemoryEntry(
+                id=session_id,
+                type="session",
+                content=summary,
+                metadata={
+                    "started_at": session_data.get("started_at"),
+                    "ended_at": datetime.now().isoformat(),
+                    "tasks_count": len(session_data.get("tasks", [])),
+                    "files_count": len(session_data.get("files_modified", [])),
+                }
+            )
 
-        # Create memory entry
-        entry = MemoryEntry(
-            id=session_id,
-            type="session",
-            content=summary,
-            metadata={
-                "started_at": session_data.get("started_at"),
-                "ended_at": datetime.now().isoformat(),
-                "tasks_count": len(session_data.get("tasks", [])),
-                "files_count": len(session_data.get("files_modified", [])),
-            }
-        )
+            self.store.add(entry)
 
-        self.store.add(entry)
-
-        # Clean up session file
-        session_file.unlink()
+            # Clean up session file
+            self._session_file.unlink()
 
     def _auto_summarize_session(self, session_data: dict) -> str:
         """Generate automatic session summary."""
@@ -302,23 +309,22 @@ class MemoryManager:
         self.store.add(entry)
 
     def _update_session(self, key: str, value: str) -> None:
-        """Update current session data."""
-        session_file = self.workspace / ".up" / "current_session.json"
-
-        if session_file.exists():
-            data = json.loads(session_file.read_text())
-            if key not in data:
-                data[key] = []
-            if value not in data[key]:
-                data[key].append(value)
-            session_file.write_text(json.dumps(data, indent=2))
+        """Update current session data (locked read-modify-write)."""
+        with self._session_lock:
+            if self._session_file.exists():
+                data = json.loads(self._session_file.read_text())
+                if key not in data:
+                    data[key] = []
+                if value not in data[key]:
+                    data[key].append(value)
+                self._session_file.write_text(json.dumps(data, indent=2))
 
     def _get_current_session_id(self) -> str:
         """Get current session ID."""
-        session_file = self.workspace / ".up" / "current_session.json"
-        if session_file.exists():
-            data = json.loads(session_file.read_text())
-            return data.get("session_id", "unknown")
+        with self._session_lock:
+            if self._session_file.exists():
+                data = json.loads(self._session_file.read_text())
+                return data.get("session_id", "unknown")
         return "no_session"
 
     # -------------------------------------------------------------------------
@@ -340,7 +346,7 @@ class MemoryManager:
             current_branch = git_ctx["branch"]
 
             # Get commit log with more details
-            result = subprocess.run(
+            result = run_subprocess(
                 ["git", "log", f"-{count}",
                  "--pretty=format:%H|%h|%s|%b|%D|||"],
                 cwd=self.workspace,
@@ -417,7 +423,7 @@ class MemoryManager:
     def index_file_changes(self) -> int:
         """Index recent file changes."""
         try:
-            result = subprocess.run(
+            result = run_subprocess(
                 ["git", "diff", "--name-only", "HEAD~5..HEAD"],
                 cwd=self.workspace,
                 capture_output=True,
@@ -479,13 +485,9 @@ class MemoryManager:
             entry_type: Filter by type (learning, decision, error, etc.)
             branch: Filter by branch (None = all branches)
         """
-        results = self.store.search(query, limit * 2 if branch else limit, entry_type)
-
-        # Filter by branch if specified
-        if branch:
-            results = [e for e in results if e.branch == branch][:limit]
-
-        return results
+        return self.store.search(
+            query, limit=limit, entry_type=entry_type, branch=branch
+        )
 
     def search_on_branch(self, query: str, branch: str, limit: int = 5) -> list[MemoryEntry]:
         """Search for knowledge on a specific branch."""
@@ -536,8 +538,10 @@ class MemoryManager:
         }
 
         for entry_type in result.keys():
-            entries = self.store.get_by_type(entry_type[:-1] if entry_type.endswith("s") else entry_type, 100)
-            result[entry_type] = [e for e in entries if e.branch == branch]
+            type_name = entry_type[:-1] if entry_type.endswith("s") else entry_type
+            result[entry_type] = self.store.get_by_type(
+                type_name, limit=100, branch=branch
+            )
 
         return result
 
@@ -583,24 +587,15 @@ class MemoryManager:
 
     def get_learnings(self, limit: int = 10, branch: str | None = None) -> list[MemoryEntry]:
         """Get recorded learnings, optionally filtered by branch."""
-        entries = self.store.get_by_type("learning", limit * 2 if branch else limit)
-        if branch:
-            entries = [e for e in entries if e.branch == branch][:limit]
-        return entries
+        return self.store.get_by_type("learning", limit=limit, branch=branch)
 
     def get_decisions(self, limit: int = 10, branch: str | None = None) -> list[MemoryEntry]:
         """Get recorded decisions, optionally filtered by branch."""
-        entries = self.store.get_by_type("decision", limit * 2 if branch else limit)
-        if branch:
-            entries = [e for e in entries if e.branch == branch][:limit]
-        return entries
+        return self.store.get_by_type("decision", limit=limit, branch=branch)
 
     def get_errors(self, limit: int = 10, branch: str | None = None) -> list[MemoryEntry]:
         """Get recorded errors, optionally filtered by branch."""
-        entries = self.store.get_by_type("error", limit * 2 if branch else limit)
-        if branch:
-            entries = [e for e in entries if e.branch == branch][:limit]
-        return entries
+        return self.store.get_by_type("error", limit=limit, branch=branch)
 
     def get_current_context(self) -> dict[str, Any]:
         """Get current git context and relevant memories."""

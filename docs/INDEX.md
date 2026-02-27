@@ -55,6 +55,7 @@
 | Topic | File |
 |-------|------|
 | Cursor + Claude Integration | guides/CURSOR_CLAUDE_INTEGRATION.md |
+| Concurrency & Thread Safety | guides/CONCURRENCY_AND_THREAD_SAFETY.md |
 
 ### Research & Analysis
 | Topic | File |

@@ -37,10 +37,21 @@ class MemoryStore:
     def add(self, entry: MemoryEntry) -> None:
         raise NotImplementedError
 
-    def search(self, query: str, limit: int = 5) -> list[MemoryEntry]:
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        entry_type: str | None = None,
+        branch: str | None = None,
+    ) -> list[MemoryEntry]:
         raise NotImplementedError
 
-    def get_by_type(self, entry_type: str, limit: int = 10) -> list[MemoryEntry]:
+    def get_by_type(
+        self,
+        entry_type: str,
+        limit: int = 10,
+        branch: str | None = None,
+    ) -> list[MemoryEntry]:
         raise NotImplementedError
 
     def delete(self, entry_id: str) -> bool:
@@ -112,10 +123,20 @@ class ChromaMemoryStore(MemoryStore):
         )
 
     def search(
-        self, query: str, limit: int = 5, entry_type: str | None = None
+        self,
+        query: str,
+        limit: int = 5,
+        entry_type: str | None = None,
+        branch: str | None = None,
     ) -> list[MemoryEntry]:
         """Semantic search for relevant memories."""
-        where = {"type": entry_type} if entry_type else None
+        where = None
+        if entry_type is not None or branch is not None:
+            where = {}
+            if entry_type is not None:
+                where["type"] = entry_type
+            if branch is not None:
+                where["branch"] = branch
 
         results = self.collection.query(
             query_texts=[query],
@@ -141,10 +162,18 @@ class ChromaMemoryStore(MemoryStore):
 
         return entries
 
-    def get_by_type(self, entry_type: str, limit: int = 10) -> list[MemoryEntry]:
-        """Get entries by type."""
+    def get_by_type(
+        self,
+        entry_type: str,
+        limit: int = 10,
+        branch: str | None = None,
+    ) -> list[MemoryEntry]:
+        """Get entries by type, optionally filtered by branch."""
+        where = {"type": entry_type}
+        if branch is not None:
+            where["branch"] = branch
         results = self.collection.get(
-            where={"type": entry_type},
+            where=where,
             limit=limit,
         )
 
@@ -238,7 +267,11 @@ class JSONMemoryStore(MemoryStore):
         self._save()
 
     def search(
-        self, query: str, limit: int = 5, entry_type: str | None = None
+        self,
+        query: str,
+        limit: int = 5,
+        entry_type: str | None = None,
+        branch: str | None = None,
     ) -> list[MemoryEntry]:
         """Keyword-based search."""
         query_lower = query.lower()
@@ -247,6 +280,8 @@ class JSONMemoryStore(MemoryStore):
         scored = []
         for entry in self.entries.values():
             if entry_type and entry.type != entry_type:
+                continue
+            if branch is not None and entry.branch != branch:
                 continue
 
             content_lower = entry.content.lower()
@@ -257,9 +292,18 @@ class JSONMemoryStore(MemoryStore):
         scored.sort(key=lambda x: x[0], reverse=True)
         return [entry for _, entry in scored[:limit]]
 
-    def get_by_type(self, entry_type: str, limit: int = 10) -> list[MemoryEntry]:
-        """Get entries by type."""
-        entries = [e for e in self.entries.values() if e.type == entry_type]
+    def get_by_type(
+        self,
+        entry_type: str,
+        limit: int = 10,
+        branch: str | None = None,
+    ) -> list[MemoryEntry]:
+        """Get entries by type, optionally filtered by branch."""
+        entries = [
+            e
+            for e in self.entries.values()
+            if e.type == entry_type and (branch is None or e.branch == branch)
+        ]
         entries.sort(key=lambda e: e.timestamp, reverse=True)
         return entries[:limit]
 

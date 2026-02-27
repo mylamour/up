@@ -1,7 +1,7 @@
 # SESRC Resilient Product Loop Design
 
 **Created**: 2026-01-31
-**Updated**: 2026-02-21
+**Updated**: 2026-02-27
 **Status**: 🔄 Active
 **Source**: Extracted from original Ralph Hybrid skill design
 
@@ -147,6 +147,23 @@ ALLOWED_PATHS = ["src/", "tests/", "docs/"]
 FORBIDDEN_PATTERNS = [".env", "credentials", "secret", ".git/"]
 ```
 
+## Concurrency & Thread Safety
+
+Shared state and file-backed data are protected so that parallel agents and threads do not corrupt state or lose updates.
+
+| Resource | Mechanism | Location |
+|----------|-----------|----------|
+| `.up/state.json` | `FileLock` + atomic write (temp + replace) | `src/up/core/state.py` |
+| `.up/config.json` | Separate `FileLock` (avoids deadlock with state) | `src/up/core/state.py` |
+| PRD (`prd.json`) | `FileLock` per PRD path for read/write | `src/up/parallel/executor.py` |
+| Memory session (`.up/current_session.json`) | `FileLock` for session file | `src/up/memory/_manager.py` |
+
+- **State mutations**: Use `StateManager.atomic_update(updater)` for read-modify-write; use `batch_update()` when batching multiple updates into one disk write.
+- **Parallel execution**: `ParallelExecutionManager` uses `atomic_update` only (no separate threading lock) to avoid double-lock deadlock with `StateManager`.
+- **Subprocess blocking**: Long-running or blocking subprocess calls (git, hooks, verify) run via a shared `ThreadPoolExecutor` (`up.concurrency.run_subprocess`) so they do not block the main thread.
+
+See [Concurrency & Thread Safety](guides/CONCURRENCY_AND_THREAD_SAFETY.md) for details and plugin guidance.
+
 ## Implementation Map
 
 | Concept | File |
@@ -155,5 +172,6 @@ FORBIDDEN_PATTERNS = [".env", "credentials", "secret", ".git/"]
 | Checkpoint/rollback | `src/up/core/checkpoint.py` |
 | Provenance tracking | `src/up/core/provenance.py` |
 | Product loop | `src/up/commands/start/loop.py` |
-| Parallel execution | `src/up/parallel_scheduler.py` |
+| Parallel execution | `src/up/parallel/executor.py`, `src/up/parallel/scheduler.py` |
 | AI CLI integration | `src/up/ai_cli.py` |
+| Subprocess offload | `src/up/concurrency.py` |
