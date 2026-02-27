@@ -111,6 +111,7 @@ src/up/
 
 ## Recent Changes
 
+- Add feature
 - **Plugin System (2026-02-25)**: Full plugin architecture — loader, registry, manifest validation, hook execution, scaffold command (US-001 through US-005)
 - **Phases 2-6 Implementation (2026-02-25)**: Memory plugin, safety plugin, verify plugin, provenance plugin, installed plugins (code-review, git-workflow, bisect, security-guidance)
 - **Claude Code Hooks Fix (2026-02-25)**: Fixed settings.json format (record/matcher), path resolution with $CLAUDE_PROJECT_DIR, tool_matcher scoping, HOOK_TYPE_MAP trimmed to pre_tool_use/post_tool_use only
