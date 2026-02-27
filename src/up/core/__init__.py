@@ -46,6 +46,17 @@ from up.core.provenance import (
     complete_ai_operation,
 )
 
+from up.core.loop import (
+    LoopOrchestrator,
+    TaskInfo,
+    BeginTaskResult,
+    TaskPrompts,
+    FailureResult,
+    SuccessResult,
+    CircuitBreakerStatus,
+    VerificationCommands,
+)
+
 __all__ = [
     # State
     "UnifiedState",
@@ -74,4 +85,13 @@ __all__ = [
     "get_provenance_manager",
     "track_ai_operation",
     "complete_ai_operation",
+    # Loop Orchestrator
+    "LoopOrchestrator",
+    "TaskInfo",
+    "BeginTaskResult",
+    "TaskPrompts",
+    "FailureResult",
+    "SuccessResult",
+    "CircuitBreakerStatus",
+    "VerificationCommands",
 ]
