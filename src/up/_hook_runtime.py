@@ -31,10 +31,12 @@ def sync_memory(workspace: Path) -> Dict[str, Any]:
     old_stderr = sys.stderr
     try:
         sys.stderr = open(os.devnull, "w")
-        from up.memory import MemoryManager, _check_chromadb
+        from up.memory import MemoryManager
 
-        use_vectors = _check_chromadb()
-        manager = MemoryManager(workspace, use_vectors=use_vectors)
+        # Always use JSON backend in hooks — loading ChromaDB/sentence-transformers
+        # triggers BLAS (gemm_thread_n) which segfaults on macOS due to thread
+        # stack size limits. Hooks only index commit messages; keyword search suffices.
+        manager = MemoryManager(workspace, use_vectors=False)
         results = manager.sync()
         return {
             "commits": results.get("commits_indexed", 0),
