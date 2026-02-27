@@ -35,7 +35,7 @@ class StateManager:
     
     def __init__(self, workspace: Optional[Path] = None):
         self.workspace = workspace or Path.cwd()
-        self.state_file = self.workspace / ".loop_state.json"
+        self.state_file = self.workspace / ".up" / "state.json"
         self.state = self._load()
     
     def _load(self) -> LoopState:

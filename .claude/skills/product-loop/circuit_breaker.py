@@ -33,7 +33,7 @@ class CircuitBreaker:
         self.name = name
         self.state_dir = state_dir or Path.cwd()
         self.config = config or CircuitConfig()
-        self.state_file = self.state_dir / f".circuit_{name}.json"
+        self.state_file = self.state_dir / ".up" / f"circuit_{name}.json"
         self._load()
     
     def _load(self) -> None:
