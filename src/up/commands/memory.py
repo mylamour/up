@@ -79,20 +79,18 @@ def memory_record(learning: str, decision: str, error: str, solution: str):
       up memory record --decision "Use PostgreSQL for persistence"
       up memory record --error "ImportError" --solution "pip install package"
     """
-    from up.memory import MemoryManager
-
-    manager = MemoryManager()
+    from up.events import emit_learning, emit_decision, emit_error
 
     if learning:
-        manager.record_learning(learning)
+        emit_learning(learning, source="cli")
         console.print(f"[green]✓[/] Recorded learning: {learning}")
 
     if decision:
-        manager.record_decision(decision)
+        emit_decision(decision, source="cli")
         console.print(f"[green]✓[/] Recorded decision: {decision}")
 
     if error:
-        manager.record_error(error, solution)
+        emit_error(error, solution, source="cli")
         console.print(f"[green]✓[/] Recorded error: {error}")
         if solution:
             console.print(f"  Solution: {solution}")

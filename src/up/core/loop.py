@@ -515,6 +515,10 @@ class LoopOrchestrator:
         # Doom loop check
         is_doom, doom_msg = sm.check_doom_loop()
 
+        # Emit error event so memory and docs capture it
+        from up.events import emit_error
+        emit_error(error=error or "Task failed", source="loop")
+
         # Reject provenance
         if self._current_provenance:
             try:

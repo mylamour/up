@@ -76,20 +76,14 @@ def main():
     threshold = config["threshold"]
 
     try:
-        from up.memory import MemoryManager
-
-        manager = MemoryManager(workspace, use_vectors=False)
+        from up.events import emit_error
 
         # TASK_COMPLETE after previous failures → record the solution
         if event_type == "task_complete":
             prev_error = event_data.get("previous_error", "")
             solution = event_data.get("solution", "") or event_data.get("output", "")
             if prev_error and solution:
-                content = (
-                    f"Error: {prev_error[:500]}\n"
-                    f"Solution: {solution[:500]}"
-                )
-                manager.record_error(prev_error[:500], solution[:500])
+                emit_error(prev_error[:500], solution[:500], source="auto_record")
                 hint = {"recorded": "solution", "error": prev_error[:100]}
                 print(json.dumps(hint))
                 print(
@@ -110,19 +104,15 @@ def main():
 
             signature = _error_signature(error_output)
 
+            # We still need MemoryManager to check for duplicates
+            from up.memory import MemoryManager
+            manager = MemoryManager(workspace, use_vectors=False)
             if _is_duplicate(manager, signature):
                 sys.exit(0)
 
             task_id = event_data.get("task_id", "unknown")
-            files = event_data.get("files", [])
-
-            content = (
-                f"Task: {task_id}\n"
-                f"Error: {error_output[:500]}\n"
-                f"Files: {', '.join(files[:5]) if files else 'unknown'}\n"
-                f"Consecutive failures: {consecutive_failures}"
-            )
-            manager.record_error(error_output[:500])
+            
+            emit_error(error_output[:500], source="auto_record")
 
             hint = {
                 "recorded": "error",

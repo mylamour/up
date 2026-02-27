@@ -118,7 +118,16 @@ def main():
                 f"Diff: {details['diff_summary'][:300]}"
             )
 
-            manager.record_learning(content)
+            # Record as a commit entry, not a learning, so it doesn't spam PATTERNS.md
+            from up.memory.entry import MemoryEntry
+            entry = MemoryEntry(
+                id=f"commit_{sha}",
+                type="commit",
+                content=content,
+                metadata={"hash": sha, "message": details["message"] or message},
+                commit=sha,
+            )
+            manager.store.add(entry)
             indexed += 1
 
         if indexed > 0:

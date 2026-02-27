@@ -541,6 +541,11 @@ def run_ai_product_loop(
         _current_display = None
         _restore_terminal()
 
+        # Emit session end event to trigger handoff generation
+        from up.events import emit_session_end
+        summary = f"Completed {completed} tasks, failed {failed} tasks."
+        emit_session_end(summary=summary, source="loop")
+
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     # Summary

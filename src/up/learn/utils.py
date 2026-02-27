@@ -72,21 +72,17 @@ def safe_filename(name: str) -> str:
 
 
 def record_to_memory(workspace: Path, content: str, entry_type: str = "learning") -> None:
-    """Record entry to memory system (optional, best-effort)."""
+    """Record entry to memory system and docs via event bridge."""
     import logging
     try:
-        from up.memory import MemoryManager
-        manager = MemoryManager(workspace, use_vectors=False)
-        _record_methods = {
-            "learning": manager.record_learning,
-            "decision": manager.record_decision,
-            "error": manager.record_error,
-        }
-        method = _record_methods.get(entry_type)
-        if method:
-            method(content)
+        from up.events import emit_learning, emit_decision, emit_error
+        
+        if entry_type == "decision":
+            emit_decision(content, source="learn")
+        elif entry_type == "error":
+            emit_error(content, source="learn")
         else:
-            manager.record_learning(content)
+            emit_learning(content, source="learn")
     except Exception as e:
         logging.getLogger(__name__).debug("Memory recording skipped: %s", e)
 
