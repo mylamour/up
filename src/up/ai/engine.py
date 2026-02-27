@@ -8,15 +8,15 @@ import abc
 import shutil
 import subprocess
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, Tuple, Callable
 
 from rich.console import Console
 
 from up.exceptions import (
+    AICliExecutionError,
     AICliNotFoundError,
     AICliTimeoutError,
-    AICliExecutionError,
 )
 
 console = Console()
@@ -43,7 +43,7 @@ class AIEngine(abc.ABC):
         timeout: int = 180,
         silent: bool = False,
         continue_session: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Execute a prompt and return the response."""
         pass
 
@@ -55,8 +55,8 @@ class AIEngine(abc.ABC):
         timeout: int = 600,
         raise_on_error: bool = False,
         continue_session: bool = False,
-        on_output: Optional[Callable[[str], None]] = None,
-    ) -> Tuple[bool, str]:
+        on_output: Callable[[str], None] | None = None,
+    ) -> tuple[bool, str]:
         """Execute an implementation task and return success status and output.
 
         Args:
@@ -69,7 +69,7 @@ class AIEngine(abc.ABC):
 class CliEngine(AIEngine):
     """AI engine that uses local CLI tools (Claude or Cursor Agent)."""
 
-    def __init__(self, cli_name: Optional[str] = None):
+    def __init__(self, cli_name: str | None = None):
         """Initialize CLI engine.
         
         Args:
@@ -79,7 +79,7 @@ class CliEngine(AIEngine):
         if not self._cli_name:
             self._cli_name, _ = self._detect_cli()
 
-    def _detect_cli(self) -> Tuple[str, bool]:
+    def _detect_cli(self) -> tuple[str, bool]:
         if shutil.which("claude"):
             return "claude", True
         if shutil.which("agent"):
@@ -116,7 +116,7 @@ class CliEngine(AIEngine):
         timeout: int = 180,
         silent: bool = False,
         continue_session: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         if not self.is_available():
             if not silent:
                 console.print(f"[yellow]AI CLI '{self.name()}' not found, using basic analysis[/]")
@@ -157,8 +157,8 @@ class CliEngine(AIEngine):
         timeout: int = 600,
         raise_on_error: bool = False,
         continue_session: bool = False,
-        on_output: Optional[Callable[[str], None]] = None,
-    ) -> Tuple[bool, str]:
+        on_output: Callable[[str], None] | None = None,
+    ) -> tuple[bool, str]:
         if not self.is_available():
             error_msg = f"AI CLI '{self.name()}' not found in PATH"
             if raise_on_error:

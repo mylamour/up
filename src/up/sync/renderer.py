@@ -7,10 +7,9 @@ that aggregates data from .up/config.json and enabled plugins.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-from up.plugins.loader import LoadedPlugin
 from up.plugins.hooks import load_hooks_from_json
+from up.plugins.loader import LoadedPlugin
 
 
 @dataclass
@@ -64,7 +63,7 @@ class ConfigRenderer(ABC):
         """Target filename this renderer produces."""
 
 
-def _parse_command_md(path: Path, plugin_name: str) -> Optional[CommandInfo]:
+def _parse_command_md(path: Path, plugin_name: str) -> CommandInfo | None:
     """Parse a plugin command markdown file into CommandInfo."""
     try:
         text = path.read_text()
@@ -106,7 +105,7 @@ def _collect_knowledge(workspace: Path, limit: int = 10) -> list[KnowledgeEntry]
 def build_context(
     config: dict,
     plugins: list[LoadedPlugin],
-    workspace: Optional[Path] = None,
+    workspace: Path | None = None,
 ) -> TemplateContext:
     """Aggregate data from config, plugins, and memory into TemplateContext.
 

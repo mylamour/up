@@ -9,10 +9,10 @@ Exit codes:
   1 = warn (recorded to memory)
 """
 
-import json
-import sys
-import os
 import hashlib
+import json
+import os
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -77,7 +77,6 @@ def main():
 
     try:
         from up.memory import MemoryManager
-        from up.memory.patterns import ErrorPatternExtractor
 
         manager = MemoryManager(workspace, use_vectors=False)
 

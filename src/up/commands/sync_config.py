@@ -11,10 +11,10 @@ import click
 from rich.console import Console
 
 from up.plugins.registry import PluginRegistry
-from up.sync.renderer import build_context, ConfigRenderer
 from up.sync.claude_md import ClaudeMdRenderer
-from up.sync.cursorrules import CursorrulesRenderer
 from up.sync.claude_settings import ClaudeSettingsRenderer
+from up.sync.cursorrules import CursorrulesRenderer
+from up.sync.renderer import ConfigRenderer, build_context
 
 console = Console()
 

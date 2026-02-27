@@ -4,25 +4,16 @@ This module provides utilities for creating, managing, and merging
 Git worktrees - enabling parallel AI task execution.
 """
 
-import json
 import shutil
 import subprocess
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
+from up.core.state import AgentState, get_state_manager
 from up.git.utils import (
-    is_git_repo,
-    get_current_branch,
-    count_commits_since,
     make_branch_name,
-    run_git,
-    BRANCH_PREFIX,
 )
-
-
-from up.core.state import get_state_manager, AgentState
 
 # For backwards compatibility during the migration
 WorktreeState = AgentState
@@ -41,18 +32,18 @@ def save_worktree_state(state: AgentState, worktree_path: Path):
     sm = get_state_manager(workspace)
     sm.add_agent(state)
 
-def load_worktree_state(worktree_path: Path, task_id: Optional[str] = None) -> AgentState:
+def load_worktree_state(worktree_path: Path, task_id: str | None = None) -> AgentState:
     """Load state from unified state manager."""
     workspace = _get_workspace_for_worktree(worktree_path)
     sm = get_state_manager(workspace)
-    
+
     # Extract task_id from path if not provided
     if not task_id:
         task_id = worktree_path.name
-        
+
     if task_id in sm.state.agents:
         return sm.state.agents[task_id]
-        
+
     raise FileNotFoundError(f"No state found for agent {task_id} in unified state")
 
 def _monkeypatch_agent_state():
@@ -83,10 +74,10 @@ def create_worktree(
     branch = make_branch_name(task_id)
     worktree_dir = Path(".worktrees")
     worktree_path = worktree_dir / task_id
-    
+
     # Ensure .worktrees directory exists
     worktree_dir.mkdir(exist_ok=True)
-    
+
     # Check if worktree already exists
     if worktree_path.exists():
         try:
@@ -95,14 +86,14 @@ def create_worktree(
         except FileNotFoundError:
             # Corrupt state, remove and recreate
             remove_worktree(task_id)
-    
+
     # Create branch and worktree
     result = subprocess.run(
         ["git", "worktree", "add", "-b", branch, str(worktree_path), base_branch],
         capture_output=True,
         text=True
     )
-    
+
     if result.returncode != 0:
         # Branch might already exist, try without -b
         result = subprocess.run(
@@ -112,13 +103,13 @@ def create_worktree(
         )
         if result.returncode != 0:
             raise RuntimeError(f"Failed to create worktree: {result.stderr}")
-    
+
     # Copy environment files
     env_files = [".env", ".env.local", ".env.development"]
     for env_file in env_files:
         if Path(env_file).exists():
             shutil.copy(env_file, worktree_path / env_file)
-    
+
     # Initialize state
     state = WorktreeState(
         task_id=task_id,
@@ -128,7 +119,7 @@ def create_worktree(
         status="created"
     )
     state.save(worktree_path)
-    
+
     return worktree_path, state
 
 
@@ -141,14 +132,14 @@ def remove_worktree(task_id: str, force: bool = False):
     """
     worktree_path = Path(f".worktrees/{task_id}")
     branch = make_branch_name(task_id)
-    
+
     # Remove worktree
     if worktree_path.exists():
         cmd = ["git", "worktree", "remove", str(worktree_path)]
         if force:
             cmd.append("--force")
         subprocess.run(cmd, capture_output=True)
-    
+
     # Delete branch
     subprocess.run(
         ["git", "branch", "-D" if force else "-d", branch],
@@ -167,10 +158,10 @@ def list_worktrees() -> list[dict]:
         capture_output=True,
         text=True
     )
-    
+
     worktrees = []
     current = {}
-    
+
     for line in result.stdout.strip().split("\n"):
         if not line:
             if current and ".worktrees" in current.get("worktree", ""):
@@ -189,7 +180,7 @@ def list_worktrees() -> list[dict]:
             current["head"] = line[5:]
         elif line.startswith("branch "):
             current["branch"] = line[7:]
-    
+
     # Don't forget last entry
     if current and ".worktrees" in current.get("worktree", ""):
         wt_path = Path(current["worktree"])
@@ -199,7 +190,7 @@ def list_worktrees() -> list[dict]:
         except FileNotFoundError:
             current["state"] = None
         worktrees.append(current)
-    
+
     return worktrees
 
 
@@ -227,16 +218,16 @@ def merge_worktree(
     branch = make_branch_name(task_id)
     worktree_path = Path(f".worktrees/{task_id}")
     workspace_dir = workspace or Path.cwd()
-    
+
     # Load state for commit message
     try:
         state = WorktreeState.load(worktree_path)
         default_message = f"feat({task_id}): {state.task_title}"
     except FileNotFoundError:
         default_message = f"feat({task_id}): Implement task"
-    
+
     commit_message = message or default_message
-    
+
     # Checkout target branch
     result = subprocess.run(
         ["git", "checkout", target_branch],
@@ -246,24 +237,24 @@ def merge_worktree(
     )
     if result.returncode != 0:
         return False
-    
+
     # Merge
     merge_cmd = ["git", "merge", "--squash", branch] if squash else ["git", "merge", branch, "-m", commit_message]
-    
+
     result = subprocess.run(
         merge_cmd,
         cwd=workspace_dir,
         capture_output=True,
         text=True
     )
-    
+
     # If merge fails, attempt AI conflict resolution
     if result.returncode != 0:
         if not cli_name:
             # Revert the failed merge
             subprocess.run(["git", "merge", "--abort"], cwd=workspace_dir, capture_output=True)
             return False
-            
+
         # Get conflicted files
         diff_res = subprocess.run(
             ["git", "diff", "--name-only", "--diff-filter=U"],
@@ -272,18 +263,18 @@ def merge_worktree(
             text=True
         )
         conflicted_files = [f for f in diff_res.stdout.strip().split("\n") if f]
-        
+
         if not conflicted_files:
             subprocess.run(["git", "merge", "--abort"], cwd=workspace_dir, capture_output=True)
             return False
-            
+
         from up.ai_cli import run_ai_prompt
-        
+
         for file in conflicted_files:
             file_path = workspace_dir / file
             if not file_path.exists():
                 continue
-            
+
             content = file_path.read_text()
             prompt = (
                 f"Please resolve the Git merge conflicts in this file. "
@@ -291,22 +282,22 @@ def merge_worktree(
                 f"no explanations, and no original conflict markers.\n\nFile: {file}\n\n"
                 f"```\n{content}\n```"
             )
-            
+
             resolved = run_ai_prompt(workspace_dir, prompt, cli_name, timeout=300, silent=True)
             if not resolved or "<<<<<<< HEAD" in resolved:
                 # Resolution failed
                 subprocess.run(["git", "merge", "--abort"], cwd=workspace_dir, capture_output=True)
                 return False
-                
+
             # Clean up markdown block if the AI included it
             if resolved.startswith("```"):
                 lines = resolved.split("\n")
                 if len(lines) >= 2 and lines[-1].startswith("```"):
                     resolved = "\n".join(lines[1:-1])
-            
+
             file_path.write_text(resolved)
             subprocess.run(["git", "add", file], cwd=workspace_dir)
-            
+
     # Commit the changes (always needed for squash, or if we resolved conflicts)
     if squash or result.returncode != 0:
         commit_res = subprocess.run(
@@ -318,10 +309,10 @@ def merge_worktree(
         if commit_res.returncode != 0:
             # Commit failed (e.g. no changes)
             return False
-    
+
     # Cleanup worktree
     remove_worktree(task_id)
-    
+
     return True
 
 
@@ -340,14 +331,14 @@ def create_checkpoint(worktree_path: Path, name: str = None) -> str:
         Checkpoint identifier
     """
     checkpoint_name = name or f"cp-{datetime.now().strftime('%H%M%S')}"
-    
+
     # Stage all changes
     subprocess.run(
         ["git", "add", "-A"],
         cwd=worktree_path,
         capture_output=True
     )
-    
+
     # Check if there are changes to commit
     result = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -355,7 +346,7 @@ def create_checkpoint(worktree_path: Path, name: str = None) -> str:
         capture_output=True,
         text=True
     )
-    
+
     if result.stdout.strip():
         # Commit changes
         subprocess.run(
@@ -363,14 +354,14 @@ def create_checkpoint(worktree_path: Path, name: str = None) -> str:
             cwd=worktree_path,
             capture_output=True
         )
-    
+
     # Create lightweight tag with standard prefix
     subprocess.run(
         ["git", "tag", f"{CHECKPOINT_TAG_PREFIX}/{checkpoint_name}"],
         cwd=worktree_path,
         capture_output=True
     )
-    
+
     return checkpoint_name
 
 
@@ -382,7 +373,7 @@ def reset_to_checkpoint(worktree_path: Path, checkpoint: str = None):
         checkpoint: Checkpoint name (defaults to HEAD)
     """
     target = f"{CHECKPOINT_TAG_PREFIX}/{checkpoint}" if checkpoint else "HEAD"
-    
+
     subprocess.run(
         ["git", "reset", "--hard", target],
         cwd=worktree_path,

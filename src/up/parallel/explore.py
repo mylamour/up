@@ -6,16 +6,11 @@ problem in isolated worktrees, then compares results for user selection.
 Phase 2 of the UP Platform PRD.
 """
 
-import json
 import logging
 import subprocess
-import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 
@@ -108,7 +103,7 @@ class ExploreResult:
     success: bool
     output: str
     files_changed: list[str] = field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class ExploreExecutor:
@@ -143,7 +138,7 @@ class ExploreExecutor:
         self, strategy: ExploreStrategy, problem: str, context: str
     ) -> ExploreResult:
         """Run a single agent in its own worktree."""
-        from up.git.worktree import create_worktree, remove_worktree
+        from up.git.worktree import create_worktree
 
         task_id = f"explore-{strategy.name}"
         branch = ""
@@ -270,8 +265,8 @@ def merge_exploration(
     Returns:
         True if merge succeeded.
     """
+    from up.git.worktree import merge_worktree
     from up.ui.explore_display import ExploreChoice
-    from up.git.worktree import merge_worktree, remove_worktree
 
     if choice == ExploreChoice.NONE:
         cleanup_explorations(results)
@@ -298,7 +293,7 @@ def merge_exploration(
             message=f"explore({selected.strategy_name}): merge selected approach",
         )
         return ok
-    except Exception as e:
+    except Exception:
         logger.exception("Merge failed for %s", selected.strategy_name)
         return False
     finally:

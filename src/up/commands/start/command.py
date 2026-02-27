@@ -10,21 +10,20 @@ from rich.console import Console
 from rich.panel import Panel
 
 from up.ai_cli import check_ai_cli, get_ai_cli_install_instructions
-from up.ui import THEME
-
 from up.commands.start.helpers import (
-    is_initialized,
-    find_task_source,
-    load_loop_state,
     check_circuit_breaker,
-    reset_circuit_breaker,
     display_status_table,
+    find_task_source,
+    is_initialized,
+    load_loop_state,
+    reset_circuit_breaker,
 )
 from up.commands.start.loop import (
     preview_loop,
-    run_manual_loop,
     run_ai_product_loop,
+    run_manual_loop,
 )
+from up.ui import THEME
 
 console = Console(theme=THEME)
 
@@ -99,8 +98,8 @@ def start_cmd(
 
     # Parallel mode
     if parallel:
-        from up.parallel import run_enhanced_parallel_loop
         from up.git.utils import is_git_repo
+        from up.parallel import run_enhanced_parallel_loop
 
         if not is_git_repo(cwd):
             console.print("\n[red]Error:[/] Parallel mode requires a Git repository.")

@@ -1,7 +1,7 @@
 """Learn system templates."""
 
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 
 def create_learn_system(target_dir: Path, ai_target: str, force: bool = False) -> None:

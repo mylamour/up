@@ -11,9 +11,8 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from up.plugins.loader import PluginLoader, LoadedPlugin
+from up.plugins.loader import LoadedPlugin, PluginLoader
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +144,6 @@ class PluginRegistry:
         """Return all registry entries."""
         return list(self._entries.values())
 
-    def get_plugin(self, name: str) -> Optional[LoadedPlugin]:
+    def get_plugin(self, name: str) -> LoadedPlugin | None:
         """Get a loaded plugin by name."""
         return self._plugins.get(name)

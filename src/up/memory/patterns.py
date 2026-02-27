@@ -5,8 +5,6 @@ output, and exception traces. Used by auto-recall to find past solutions.
 """
 
 import re
-from typing import List
-
 
 # ANSI escape code pattern
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -49,7 +47,7 @@ class ErrorPatternExtractor:
     Returns 1-3 keywords suitable for memory search queries.
     """
 
-    def extract(self, error_output: str) -> List[str]:
+    def extract(self, error_output: str) -> list[str]:
         """Extract search keywords from error text.
 
         Tries extractors in priority order:
@@ -72,7 +70,7 @@ class ErrorPatternExtractor:
 
         return keywords[:3]
 
-    def _from_traceback(self, text: str) -> List[str]:
+    def _from_traceback(self, text: str) -> list[str]:
         """Extract from Python tracebacks."""
         matches = _TRACEBACK_RE.findall(text)
         if not matches:
@@ -82,7 +80,7 @@ class ErrorPatternExtractor:
         msg = message.strip()[:80]
         return [exc_class, msg]
 
-    def _from_pytest(self, text: str) -> List[str]:
+    def _from_pytest(self, text: str) -> list[str]:
         """Extract from pytest failure output."""
         keywords = []
         # FAILED test path
@@ -100,7 +98,7 @@ class ErrorPatternExtractor:
 
         return keywords if keywords else []
 
-    def _from_lint(self, text: str) -> List[str]:
+    def _from_lint(self, text: str) -> list[str]:
         """Extract from lint/type-check errors."""
         matches = _LINT_RE.findall(text)
         if not matches:
@@ -116,7 +114,7 @@ class ErrorPatternExtractor:
                 break
         return keywords
 
-    def _from_generic(self, text: str) -> List[str]:
+    def _from_generic(self, text: str) -> list[str]:
         """Extract from generic error output."""
         matches = _ERROR_LINE_RE.findall(text)
         if not matches:

@@ -6,10 +6,8 @@ categories, and version tracking.
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +106,7 @@ class Marketplace:
             if e.category.lower() == category.lower()
         ]
 
-    def get(self, name: str) -> Optional[MarketplaceEntry]:
+    def get(self, name: str) -> MarketplaceEntry | None:
         """Get a specific entry by name."""
         return self._entries.get(name)
 

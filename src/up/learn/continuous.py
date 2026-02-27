@@ -10,7 +10,6 @@ Wired into EventBridge via create_learning_handlers().
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +79,7 @@ def _run_sync(workspace: Path) -> None:
         logger.warning("Auto-sync failed: %s", e)
 
 
-def check_learning_trigger(workspace: Path) -> Optional[dict]:
+def check_learning_trigger(workspace: Path) -> dict | None:
     """Check if learning should trigger and run it if so.
 
     Called after each task completion. Returns improvement dict

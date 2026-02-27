@@ -6,8 +6,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+
 from up.commands.start.helpers import is_initialized
 
 console = Console()
@@ -36,16 +35,16 @@ def status_cmd(as_json: bool, verbose: bool):
     Use --verbose for provenance summary.
     """
     cwd = Path.cwd()
-    
+
     status = collect_status(cwd)
 
     if verbose:
         status["provenance"] = _collect_provenance_summary(cwd)
-    
+
     if as_json:
         console.print(json.dumps(status, indent=2))
         return
-    
+
     display_status(status, verbose=verbose)
 
 
@@ -67,20 +66,20 @@ def collect_status(workspace: Path) -> dict:
         "plugins": None,
         "provenance_chain": None,
     }
-    
+
     # Check if initialized
     status["initialized"] = is_initialized(workspace)
-    
+
     if not status["initialized"]:
         return status
-    
+
     # Try to load unified state first
     try:
         from up.core.state import get_state_manager
         manager = get_state_manager(workspace)
         state = manager.state
         status["state_version"] = state.version
-        
+
         # Context budget from unified state
         status["context_budget"] = {
             "budget": state.context.budget,
@@ -89,7 +88,7 @@ def collect_status(workspace: Path) -> dict:
             "usage_percent": state.context.usage_percent,
             "status": state.context.status,
         }
-        
+
         # Loop state from unified state
         status["loop_state"] = {
             "iteration": state.loop.iteration,
@@ -100,20 +99,20 @@ def collect_status(workspace: Path) -> dict:
             "success_rate": state.metrics.success_rate,
             "last_checkpoint": state.loop.last_checkpoint,
         }
-        
+
         # Circuit breakers
         status["circuit_breaker"] = {
             name: {"state": cb.state, "failures": cb.failures}
             for name, cb in state.circuit_breakers.items()
         }
-        
+
         # Checkpoints
         status["checkpoints"] = {
             "total": len(state.checkpoints),
             "last": state.loop.last_checkpoint,
             "recent": state.checkpoints[-5:] if state.checkpoints else [],
         }
-        
+
         # Agents
         if state.agents:
             status["agents"] = {
@@ -124,7 +123,7 @@ def collect_status(workspace: Path) -> dict:
                 }
                 for task_id, agent in state.agents.items()
             }
-        
+
         # Doom loop detection
         is_doom, doom_msg = manager.check_doom_loop()
         if is_doom or state.loop.consecutive_failures > 0:
@@ -134,15 +133,15 @@ def collect_status(workspace: Path) -> dict:
                 "threshold": state.loop.doom_loop_threshold,
                 "message": doom_msg if is_doom else None,
             }
-            
+
     except ImportError:
         # Fallback to old state files
         _collect_legacy_status(workspace, status)
-    
+
     # Git hooks status
-    from up.commands.sync import check_hooks_installed
+    from up.commands.init import check_hooks_installed
     status["hooks"] = check_hooks_installed(workspace)
-    
+
     # Memory status
     memory_dir = workspace / ".up" / "memory"
     if memory_dir.exists():
@@ -157,7 +156,7 @@ def collect_status(workspace: Path) -> dict:
             }
         except Exception:
             status["memory"] = {"total": 0}
-    
+
     # Skills
     skills_dirs = [
         workspace / ".claude/skills",
@@ -263,7 +262,7 @@ def _collect_legacy_status(workspace: Path, status: dict) -> None:
 
 def display_status(status: dict, verbose: bool = False) -> None:
     """Display status in rich format."""
-    
+
     # Header
     workspace_name = Path(status["workspace"]).name
     if status["initialized"]:
@@ -273,9 +272,9 @@ def display_status(status: dict, verbose: bool = False) -> None:
         console.print(Panel(header, border_style="yellow"))
         console.print("\nRun [cyan]up init[/] to initialize up systems.")
         return
-    
+
     console.print(Panel(header, border_style="green"))
-    
+
     # Context Budget
     console.print("\n[bold]Context Budget[/]")
     if status["context_budget"]:
@@ -286,7 +285,7 @@ def display_status(status: dict, verbose: bool = False) -> None:
             usage = budget.get("usage_percent", 0)
             remaining = budget.get("remaining_tokens", 0)
             budget_status = budget.get("status", "OK")
-            
+
             # Color based on status
             if budget_status == "CRITICAL":
                 color = "red"
@@ -297,12 +296,12 @@ def display_status(status: dict, verbose: bool = False) -> None:
             else:
                 color = "green"
                 icon = "🟢"
-            
+
             console.print(f"  {icon} Status: [{color}]{budget_status}[/]")
             console.print(f"  Usage: {usage:.1f}% ({remaining:,} tokens remaining)")
     else:
         console.print("  [dim]Not configured[/]")
-    
+
     # Circuit Breaker
     console.print("\n[bold]Circuit Breaker[/]")
     if status["circuit_breaker"]:
@@ -311,7 +310,7 @@ def display_status(status: dict, verbose: bool = False) -> None:
             if isinstance(state, dict):
                 cb_state = state.get("state", "UNKNOWN")
                 failures = state.get("failures", 0)
-                
+
                 if cb_state == "OPEN":
                     icon = "🔴"
                     color = "red"
@@ -321,11 +320,11 @@ def display_status(status: dict, verbose: bool = False) -> None:
                 else:
                     icon = "🟢"
                     color = "green"
-                
+
                 console.print(f"  {icon} {name}: [{color}]{cb_state}[/] (failures: {failures})")
     else:
         console.print("  [dim]Not active[/]")
-    
+
     # Product Loop State
     console.print("\n[bold]Product Loop[/]")
     if status["loop_state"]:
@@ -335,32 +334,32 @@ def display_status(status: dict, verbose: bool = False) -> None:
         else:
             console.print(f"  Iteration: {loop.get('iteration', 0)}")
             console.print(f"  Phase: {loop.get('phase', 'UNKNOWN')}")
-            
+
             current = loop.get("current_task")
             if current:
                 console.print(f"  Current Task: [cyan]{current}[/]")
-            
+
             completed = loop.get("tasks_completed", 0)
             failed = loop.get("tasks_failed", 0)
             remaining = loop.get("tasks_remaining", 0)
             total = completed + failed + remaining if remaining else completed + failed
-            
+
             if total > 0:
                 progress = completed / total * 100
                 bar_len = 20
                 filled = int(bar_len * completed / total)
                 bar = "█" * filled + "░" * (bar_len - filled)
                 console.print(f"  Progress: [{bar}] {progress:.0f}% ({completed}/{total})")
-            
+
             success_rate = loop.get("success_rate", 1.0)
             console.print(f"  Success Rate: {success_rate * 100:.0f}%")
-            
+
             last_cp = loop.get("last_checkpoint")
             if last_cp:
                 console.print(f"  Last Checkpoint: [cyan]{last_cp}[/]")
     else:
         console.print("  [dim]Not active[/]")
-    
+
     # Doom Loop Detection
     if status.get("doom_loop"):
         doom = status["doom_loop"]
@@ -370,7 +369,7 @@ def display_status(status: dict, verbose: bool = False) -> None:
             console.print(f"  [dim]{doom.get('message', '')}[/]")
         else:
             console.print(f"  Consecutive Failures: {doom['consecutive_failures']}/{doom['threshold']}")
-    
+
     # Checkpoints
     if status.get("checkpoints"):
         cp = status["checkpoints"]
@@ -378,14 +377,14 @@ def display_status(status: dict, verbose: bool = False) -> None:
         console.print(f"  Total: {cp['total']}")
         if cp.get("recent"):
             console.print(f"  Recent: {', '.join(cp['recent'][-3:])}")
-    
+
     # Active Agents
     if status.get("agents"):
         console.print("\n[bold]Active Agents[/]")
         for task_id, agent in status["agents"].items():
             status_icon = "🟢" if agent["status"] == "passed" else "🟡" if agent["status"] in ["executing", "verifying"] else "🔴"
             console.print(f"  {status_icon} {task_id}: {agent['status']} ({agent['phase']})")
-    
+
     # Memory
     console.print("\n[bold]Memory[/]")
     if status["memory"]:
@@ -396,14 +395,14 @@ def display_status(status: dict, verbose: bool = False) -> None:
         console.print(f"  📚 {total} entries | Branch: [cyan]{branch}[/] @ {commit}")
     else:
         console.print("  [dim]Not initialized — memory builds automatically via git hooks[/]")
-    
+
     # Git Hooks
     console.print("\n[bold]Auto-Sync (Git Hooks)[/]")
     hooks = status.get("hooks", {})
     if hooks.get("git"):
         post_commit = hooks.get("post_commit", False)
         post_checkout = hooks.get("post_checkout", False)
-        
+
         if post_commit and post_checkout:
             console.print("  [green]✓ Enabled[/] - commits auto-indexed to memory")
         else:
@@ -447,7 +446,7 @@ def display_status(status: dict, verbose: bool = False) -> None:
             console.print(f"  • {skill}")
     else:
         console.print("  [dim]No skills installed[/]")
-    
+
     # Provenance (verbose only)
     if verbose and status.get("provenance"):
         prov = status["provenance"]

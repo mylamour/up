@@ -1,6 +1,7 @@
 """Templates module for up scaffolding."""
 
 from pathlib import Path
+
 from rich.console import Console
 
 console = Console()
@@ -13,13 +14,13 @@ def scaffold_project(
     force: bool = False,
 ) -> None:
     """Scaffold a project with selected systems."""
+    from up.context import create_context_budget_file
+    from up.templates.config import create_config_files
     from up.templates.docs import create_docs_system
+    from up.templates.docs_skill import create_docs_skill
     from up.templates.learn import create_learn_system
     from up.templates.loop import create_loop_system
-    from up.templates.docs_skill import create_docs_skill
-    from up.templates.config import create_config_files
     from up.templates.mcp import create_mcp_config
-    from up.context import create_context_budget_file
 
     # Create base structure
     _create_base_structure(target_dir, ai_target)
@@ -71,10 +72,10 @@ def _create_base_structure(target_dir: Path, ai_target: str) -> None:
 def _create_handoff_file(target_dir: Path, force: bool) -> None:
     """Create initial handoff file for session continuity."""
     from datetime import date
-    
+
     handoff_dir = target_dir / "docs/handoff"
     handoff_dir.mkdir(parents=True, exist_ok=True)
-    
+
     content = f"""# Latest Session Handoff
 
 **Date**: {date.today().isoformat()}

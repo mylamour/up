@@ -11,11 +11,10 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List
 
-from up.core.state import get_state_manager, StateManager
-from up.core.checkpoint import get_checkpoint_manager, CheckpointManager, NotAGitRepoError
-from up.core.provenance import get_provenance_manager, ProvenanceManager, ProvenanceEntry
+from up.core.checkpoint import CheckpointManager, NotAGitRepoError, get_checkpoint_manager
+from up.core.provenance import ProvenanceEntry, ProvenanceManager, get_provenance_manager
+from up.core.state import StateManager, get_state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 class CircuitBreakerStatus:
     """Result of a circuit breaker check."""
     can_execute: bool
-    circuit_name: Optional[str] = None
+    circuit_name: str | None = None
     state: str = "CLOSED"
     failures: int = 0
     message: str = ""
@@ -41,9 +40,9 @@ class TaskInfo:
     title: str
     description: str = ""
     priority: str = "medium"
-    acceptance_criteria: List[str] = field(default_factory=list)
-    files: List[str] = field(default_factory=list)
-    depends_on: List[str] = field(default_factory=list)
+    acceptance_criteria: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    depends_on: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "TaskInfo":
@@ -62,9 +61,9 @@ class TaskInfo:
 class BeginTaskResult:
     """Result of beginning a task."""
     success: bool
-    checkpoint_id: Optional[str] = None
-    provenance_id: Optional[str] = None
-    error: Optional[str] = None
+    checkpoint_id: str | None = None
+    provenance_id: str | None = None
+    error: str | None = None
 
 
 @dataclass
@@ -73,7 +72,7 @@ class TaskPrompts:
     research: str = ""
     plan: str = ""
     implement: str = ""
-    memory_hint: Optional[str] = None
+    memory_hint: str | None = None
 
 
 @dataclass
@@ -134,10 +133,10 @@ class LoopOrchestrator:
 
     def __init__(self, workspace: Path):
         self.workspace = workspace
-        self._sm: Optional[StateManager] = None
-        self._cm: Optional[CheckpointManager] = None
-        self._pm: Optional[ProvenanceManager] = None
-        self._current_provenance: Optional[ProvenanceEntry] = None
+        self._sm: StateManager | None = None
+        self._cm: CheckpointManager | None = None
+        self._pm: ProvenanceManager | None = None
+        self._current_provenance: ProvenanceEntry | None = None
 
     @property
     def state_manager(self) -> StateManager:
@@ -161,7 +160,7 @@ class LoopOrchestrator:
     # Task selection
     # -----------------------------------------------------------------
 
-    def find_task_source(self, prd_path: Optional[str] = None) -> Optional[str]:
+    def find_task_source(self, prd_path: str | None = None) -> str | None:
         """Locate the task source file (PRD or TODO)."""
         if prd_path:
             return prd_path
@@ -179,9 +178,9 @@ class LoopOrchestrator:
 
     def get_next_task(
         self,
-        task_source: Optional[str] = None,
-        specific_task: Optional[str] = None,
-    ) -> Optional[TaskInfo]:
+        task_source: str | None = None,
+        specific_task: str | None = None,
+    ) -> TaskInfo | None:
         """Get the single next task to execute.
 
         If *specific_task* is given, returns a stub TaskInfo for it.
@@ -202,10 +201,10 @@ class LoopOrchestrator:
 
     def get_tasks(
         self,
-        task_source: Optional[str] = None,
-        specific_task: Optional[str] = None,
+        task_source: str | None = None,
+        specific_task: str | None = None,
         run_all: bool = False,
-    ) -> List[TaskInfo]:
+    ) -> list[TaskInfo]:
         """Get task(s) to execute. Returns a list (possibly empty)."""
         if specific_task:
             return [TaskInfo(id=specific_task, title=specific_task, description=specific_task)]
@@ -215,8 +214,9 @@ class LoopOrchestrator:
             task = self.get_next_task(task_source=source)
             return [task] if task else []
 
-        from up.core.prd_schema import load_prd, PRDValidationError
         from dataclasses import asdict
+
+        from up.core.prd_schema import PRDValidationError, load_prd
 
         prd_path = self.workspace / source
         try:
@@ -225,7 +225,7 @@ class LoopOrchestrator:
             return []
 
         completed = set(self.state_manager.state.loop.tasks_completed)
-        tasks: List[TaskInfo] = []
+        tasks: list[TaskInfo] = []
         for story in prd.userStories:
             if story.passes or story.id in completed:
                 continue
@@ -234,14 +234,15 @@ class LoopOrchestrator:
                 break
         return tasks
 
-    def _next_from_prd(self, task_source: str) -> Optional[dict]:
+    def _next_from_prd(self, task_source: str) -> dict | None:
         """Get next incomplete task dict from PRD file.
 
         Reads the PRD directly to avoid circular imports
         (core must not import from commands layer).
         """
-        from up.core.prd_schema import load_prd, PRDValidationError
         from dataclasses import asdict
+
+        from up.core.prd_schema import PRDValidationError, load_prd
 
         prd_path = self.workspace / task_source
         if not prd_path.exists():
@@ -291,7 +292,7 @@ class LoopOrchestrator:
     # Task lifecycle
     # -----------------------------------------------------------------
 
-    def begin_task(self, task: TaskInfo, task_source: Optional[str] = None) -> BeginTaskResult:
+    def begin_task(self, task: TaskInfo, task_source: str | None = None) -> BeginTaskResult:
         """Begin a task: bump iteration, create checkpoint, start provenance.
 
         Returns a result indicating whether the task can proceed.
@@ -343,16 +344,16 @@ class LoopOrchestrator:
     # Prompts
     # -----------------------------------------------------------------
 
-    def build_prompts(self, task: TaskInfo, task_source: Optional[str] = None) -> TaskPrompts:
+    def build_prompts(self, task: TaskInfo, task_source: str | None = None) -> TaskPrompts:
         """Build AI prompts for all three phases.
 
         These are the same prompts used by ``up start`` but returned as
         data so skills can feed them to the AI directly.
         """
         from up.commands.start.helpers import (
-            build_research_prompt,
-            build_plan_prompt,
             build_implement_prompt,
+            build_plan_prompt,
+            build_research_prompt,
         )
 
         source = task_source or self.find_task_source() or ""
@@ -375,11 +376,11 @@ class LoopOrchestrator:
             memory_hint=hint,
         )
 
-    def get_memory_hint(self, task: TaskInfo) -> Optional[str]:
+    def get_memory_hint(self, task: TaskInfo) -> str | None:
         """Query memory for hints relevant to this task."""
         try:
-            from up.memory.patterns import ErrorPatternExtractor
             from up.memory import MemoryManager
+            from up.memory.patterns import ErrorPatternExtractor
 
             state_file = self.workspace / ".up" / "state.json"
             if not state_file.exists():
@@ -418,11 +419,11 @@ class LoopOrchestrator:
     def record_success(
         self,
         task: TaskInfo,
-        task_source: Optional[str] = None,
-        tests_passed: Optional[bool] = None,
-        lint_passed: Optional[bool] = None,
-        type_check_passed: Optional[bool] = None,
-        files_modified: Optional[List[str]] = None,
+        task_source: str | None = None,
+        tests_passed: bool | None = None,
+        lint_passed: bool | None = None,
+        type_check_passed: bool | None = None,
+        files_modified: list[str] | None = None,
     ) -> SuccessResult:
         """Record a successful task completion.
 
@@ -469,7 +470,7 @@ class LoopOrchestrator:
     def record_failure(
         self,
         task: TaskInfo,
-        error: Optional[str] = None,
+        error: str | None = None,
         rollback: bool = True,
     ) -> FailureResult:
         """Record a task failure.
@@ -525,7 +526,7 @@ class LoopOrchestrator:
             circuit_open=circuit_open,
             doom_loop=is_doom,
             message=doom_msg if is_doom else (
-                f"Circuit breaker OPEN" if circuit_open else ""
+                "Circuit breaker OPEN" if circuit_open else ""
             ),
             consecutive_failures=sm.state.loop.consecutive_failures,
         )
@@ -542,9 +543,9 @@ class LoopOrchestrator:
         """
         cfg = self.state_manager.config
         return VerificationCommands(
-            test_cmd=f"python3 -m pytest -x -q --tb=short 2>&1 | tail -20",
-            lint_cmd=f"python3 -m ruff check . 2>&1 | tail -10",
-            type_check_cmd=f"python3 -m mypy src/ --ignore-missing-imports --no-error-summary 2>&1 | tail -10",
+            test_cmd="python3 -m pytest -x -q --tb=short 2>&1 | tail -20",
+            lint_cmd="python3 -m ruff check . 2>&1 | tail -10",
+            type_check_cmd="python3 -m mypy src/ --ignore-missing-imports --no-error-summary 2>&1 | tail -10",
         )
 
     def run_verification(self):

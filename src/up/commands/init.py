@@ -1,6 +1,5 @@
 """up init - Initialize up systems in existing project."""
 
-import os
 import stat
 from pathlib import Path
 
@@ -126,7 +125,6 @@ def _init_plugin_system(workspace: Path) -> int:
 
     Returns number of builtin plugins installed.
     """
-    import json
     import shutil
 
     plugins_dir = workspace / ".up" / "plugins"
@@ -183,30 +181,30 @@ def _build_initial_memory(workspace: Path) -> dict:
     try:
         import os
         import warnings
+
         from up.memory import MemoryManager
-        
+
         # Suppress noisy warnings from tokenizers
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         warnings.filterwarnings("ignore", category=UserWarning)
-        
+
         console.print("\n[dim]Building initial memory...[/]")
-        
+
         manager = MemoryManager(workspace, use_vectors=False)  # Use fast JSON backend
-        
+
         # Index existing commits
         commits = manager.index_recent_commits(count=50)
         console.print(f"  [dim]Indexed {commits} commits[/]")
-        
+
         # Index recent file changes
         files = manager.index_file_changes()
         console.print(f"  [dim]Indexed {files} files[/]")
-        
+
         # Record project initialization
-        import subprocess
-        
+
         # Get project info
         project_name = workspace.name
-        
+
         # Detect languages/frameworks
         languages = []
         if (workspace / "pyproject.toml").exists() or (workspace / "requirements.txt").exists():
@@ -217,7 +215,7 @@ def _build_initial_memory(workspace: Path) -> dict:
             languages.append("Go")
         if (workspace / "Cargo.toml").exists():
             languages.append("Rust")
-        
+
         # Record initialization as a learning
         if languages:
             manager.record_learning(
@@ -225,17 +223,41 @@ def _build_initial_memory(workspace: Path) -> dict:
                 f"Languages detected: {', '.join(languages)}. "
                 f"Indexed {commits} commits and {files} files into memory."
             )
-        
+
         stats = manager.get_stats()
         return {
             "total": stats.get("total", 0),
             "commits": commits,
             "files": files,
         }
-        
+
     except Exception as e:
         console.print(f"  [yellow]Warning: Could not build memory: {e}[/]")
         return None
+
+
+def check_hooks_installed(workspace: Path) -> dict:
+    """Check if up-cli hooks are installed.
+    
+    Returns dict with status of each hook.
+    """
+    git_dir = workspace / ".git"
+    if not git_dir.exists():
+        return {"git": False, "post_commit": False, "post_checkout": False}
+
+    hooks_dir = git_dir / "hooks"
+
+    result = {"git": True, "post_commit": False, "post_checkout": False}
+
+    post_commit = hooks_dir / "post-commit"
+    if post_commit.exists() and "up-cli" in post_commit.read_text():
+        result["post_commit"] = True
+
+    post_checkout = hooks_dir / "post-checkout"
+    if post_checkout.exists() and "up-cli" in post_checkout.read_text():
+        result["post_checkout"] = True
+
+    return result
 
 
 def _install_git_hooks(workspace: Path) -> bool:
@@ -244,14 +266,14 @@ def _install_git_hooks(workspace: Path) -> bool:
     Returns True if hooks were installed successfully.
     """
     git_dir = workspace / ".git"
-    
+
     if not git_dir.exists():
         console.print("[yellow]⚠[/] Not a git repo, skipping hooks")
         return False
-    
+
     hooks_dir = git_dir / "hooks"
     hooks_dir.mkdir(exist_ok=True)
-    
+
     # Post-commit hook
     post_commit = hooks_dir / "post-commit"
     post_commit_content = '''#!/bin/bash
@@ -266,9 +288,9 @@ fi
 
 exit 0
 '''
-    
+
     _write_hook(post_commit, post_commit_content)
-    
+
     # Post-checkout hook (for branch switches)
     post_checkout = hooks_dir / "post-checkout"
     post_checkout_content = '''#!/bin/bash
@@ -290,9 +312,9 @@ fi
 
 exit 0
 '''
-    
+
     _write_hook(post_checkout, post_checkout_content)
-    
+
     return True
 
 
@@ -307,7 +329,7 @@ def _write_hook(path: Path, content: str):
         else:
             # User has custom hook, append
             content = existing + "\n\n" + content
-    
+
     path.write_text(content)
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
 
@@ -319,7 +341,7 @@ def _print_next_steps(systems: tuple, hooks_installed: bool):
     console.print("  2. [dim](AI codes)[/]   Let Claude/Cursor do the work")
     console.print("  3. [cyan]up diff[/]      Review changes")
     console.print("  4. [cyan]up reset[/]     Rollback instantly if the AI broke something")
-    
+
     console.print("\n[bold]Other Commands:[/]")
 
     if "docs" in systems:
@@ -330,8 +352,8 @@ def _print_next_steps(systems: tuple, hooks_installed: bool):
 
     if "loop" in systems:
         console.print("  • Run [cyan]up start[/] to run autonomous development")
-        
+
     console.print("  • Run [cyan]up memory search <query>[/] to search past decisions and bugs")
-    
+
     if hooks_installed:
         console.print("\n[dim]Auto-sync enabled: commits will be indexed automatically[/]")

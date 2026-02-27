@@ -12,8 +12,8 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from up.core.state import get_state_manager, CircuitBreakerState
-from up.core.checkpoint import get_checkpoint_manager, NotAGitRepoError
+from up.core.checkpoint import NotAGitRepoError, get_checkpoint_manager
+from up.core.state import CircuitBreakerState, get_state_manager
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -202,7 +202,8 @@ def get_next_task_from_prd(prd_path: Path, workspace: Path = None, auto_sync: bo
     persist PRD pass-state updates for tasks already completed in state.
     """
     from dataclasses import asdict
-    from up.core.prd_schema import load_prd, save_prd, PRDValidationError
+
+    from up.core.prd_schema import PRDValidationError, load_prd, save_prd
 
     try:
         prd = load_prd(prd_path)

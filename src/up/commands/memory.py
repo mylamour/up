@@ -1,6 +1,5 @@
 """up memory - Long-term memory management (v1.0 surface: 3 commands)."""
 
-from pathlib import Path
 
 import click
 from rich.console import Console

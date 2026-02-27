@@ -5,24 +5,24 @@ This module wraps the AIEngine abstraction, supporting both:
 - AgentSdkEngine: in-process via claude-agent-sdk (persistent sessions, hooks, compaction)
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional, Tuple
 
 from up.ai.engine import AIEngine, CliEngine
 from up.exceptions import (  # noqa: F401
     AICliError,
+    AICliExecutionError,
     AICliNotFoundError,
     AICliTimeoutError,
-    AICliExecutionError,
 )
 
 # Shared engine instances
-_default_engine: Optional[AIEngine] = None
-_sdk_engine: Optional[AIEngine] = None
+_default_engine: AIEngine | None = None
+_sdk_engine: AIEngine | None = None
 
 
 def _get_engine(
-    cli_name: Optional[str] = None,
+    cli_name: str | None = None,
     use_sdk: bool = False,
 ) -> AIEngine:
     """Get an AI engine instance.
@@ -66,7 +66,7 @@ def run_ai_prompt(
     silent: bool = False,
     continue_session: bool = False,
     use_sdk: bool = False,
-) -> Optional[str]:
+) -> str | None:
     """Run a prompt through AI and return the response.
 
     Args:
@@ -87,9 +87,9 @@ def run_ai_task(
     max_tokens: int = 0,
     raise_on_error: bool = False,
     continue_session: bool = False,
-    on_output: Optional[Callable[[str], None]] = None,
+    on_output: Callable[[str], None] | None = None,
     use_sdk: bool = False,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """Run an AI task (like implementing code) and return success status.
 
     Args:

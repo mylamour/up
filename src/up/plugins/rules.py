@@ -20,7 +20,6 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from up.plugins.hooks import HookResult
 
@@ -36,10 +35,10 @@ class RuleSpec:
     action: str  # "block", "warn", or "allow"
     confidence: int  # 0-100
     message: str  # from markdown body
-    source_file: Optional[Path] = None
+    source_file: Path | None = None
 
 
-def parse_rule(path: Path) -> Optional[RuleSpec]:
+def parse_rule(path: Path) -> RuleSpec | None:
     """Parse a Markdown rule file with YAML frontmatter.
 
     Expected format:
@@ -80,7 +79,7 @@ def parse_rule(path: Path) -> Optional[RuleSpec]:
     )
 
 
-def _split_frontmatter(content: str) -> tuple[Optional[str], str]:
+def _split_frontmatter(content: str) -> tuple[str | None, str]:
     """Split YAML frontmatter from markdown body.
 
     Returns (frontmatter_text, body_text). If no frontmatter found,

@@ -14,12 +14,12 @@ import os
 import sys
 import warnings
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def sync_memory(workspace: Path) -> Dict[str, Any]:
+def sync_memory(workspace: Path) -> dict[str, Any]:
     """Sync memory: index recent commits and file changes.
 
     Called by the post-commit hook.
@@ -51,7 +51,7 @@ def sync_memory(workspace: Path) -> Dict[str, Any]:
         sys.stderr = old_stderr
 
 
-def sync_context(workspace: Path) -> Dict[str, Any]:
+def sync_context(workspace: Path) -> dict[str, Any]:
     """Refresh context docs (update dates, etc.).
 
     Called by the post-checkout hook.

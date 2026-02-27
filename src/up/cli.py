@@ -4,19 +4,19 @@ import click
 from rich.console import Console
 
 from up import __version__
-from up.commands.init import init_cmd
-from up.commands.new import new_cmd
-from up.commands.status import status_cmd
-from up.learn import learn_cmd
-from up.commands.start import start_cmd
-from up.commands.memory import memory_cmd
-from up.commands.vibe import save_cmd, reset_cmd, diff_cmd
-from up.commands.done import done_cmd
 from up.commands.agent import agent as agent_group
+from up.commands.done import done_cmd
+from up.commands.init import init_cmd
+from up.commands.memory import memory_cmd
+from up.commands.new import new_cmd
+from up.commands.plugin import plugin_group
 from up.commands.provenance import provenance as provenance_group
 from up.commands.review import review_cmd
-from up.commands.plugin import plugin_group
+from up.commands.start import start_cmd
+from up.commands.status import status_cmd
 from up.commands.sync_config import sync_config_cmd
+from up.commands.vibe import diff_cmd, reset_cmd, save_cmd
+from up.learn import learn_cmd
 
 console = Console()
 

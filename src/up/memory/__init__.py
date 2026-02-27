@@ -9,25 +9,24 @@ All public symbols are re-exported here for backward compatibility.
 """
 
 # Data models (canonical source: entry.py)
+# Manager (canonical source: _manager.py)
+from up.memory._manager import MemoryManager
 from up.memory.entry import (
-    MemoryEntry,
-    SessionSummary,
     CodeLearning,
     ErrorMemory,
+    MemoryEntry,
+    SessionSummary,
     get_git_context,
 )
 
 # Storage backends (canonical source: stores.py)
 from up.memory.stores import (
-    _check_chromadb,
-    _ensure_chromadb,
-    MemoryStore,
     ChromaMemoryStore,
     JSONMemoryStore,
+    MemoryStore,
+    _check_chromadb,
+    _ensure_chromadb,
 )
-
-# Manager (canonical source: _manager.py)
-from up.memory._manager import MemoryManager
 
 # Backward-compat alias
 _get_git_context = get_git_context

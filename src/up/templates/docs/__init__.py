@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+
 def create_docs_system(target_dir: Path, force: bool = False) -> None:
     """Create the documentation system structure."""
     docs = target_dir / "docs"
@@ -167,7 +168,7 @@ def _create_phase_templates(docs: Path, force: bool) -> None:
     from datetime import date
     today = date.today().isoformat()
 
-    phase1 = f"""# Phase 1: Foundation
+    phase1 = """# Phase 1: Foundation
 
 **Timeline**: Q1
 **Status**: 📋 Planned

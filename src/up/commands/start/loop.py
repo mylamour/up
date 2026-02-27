@@ -11,44 +11,41 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-import click
 from rich.console import Console
 from rich.panel import Panel
 from tqdm import tqdm
 
 from up.ai_cli import run_ai_task
-from up.core.prd_schema import load_prd, PRDValidationError
-from up.core.loop import LoopOrchestrator, TaskInfo
-from up.ui import ProductLoopDisplay, TaskStatus
-from up.ui.loop_display import LoopStatus
-
 from up.commands.start.helpers import (
-    save_loop_state,
-    get_next_task_from_prd,
-    build_research_prompt,
-    build_plan_prompt,
     build_implement_prompt,
+    build_plan_prompt,
+    build_research_prompt,
+    get_next_task_from_prd,
+    save_loop_state,
 )
 from up.commands.start.verification import (
-    get_modified_files,
-    get_diff_summary,
     commit_changes,
+    get_diff_summary,
+    get_modified_files,
 )
+from up.core.loop import LoopOrchestrator
+from up.core.prd_schema import PRDValidationError, load_prd
+from up.ui import ProductLoopDisplay, TaskStatus
+from up.ui.loop_display import LoopStatus
 
 console = Console()
 logger = logging.getLogger(__name__)
 
 
-def _get_memory_hint(workspace: Path, task: dict) -> Optional[str]:
+def _get_memory_hint(workspace: Path, task: dict) -> str | None:
     """Check for memory hints from auto-recall for the current task.
 
     Returns a formatted hint string to prepend to the AI prompt, or None.
     """
     try:
-        from up.memory.patterns import ErrorPatternExtractor
         from up.memory import MemoryManager
+        from up.memory.patterns import ErrorPatternExtractor
 
         # Check if there's a recent error for this task in state
         state_file = workspace / ".up" / "state.json"
@@ -98,9 +95,9 @@ def _restore_terminal():
 
 
 # Global state for interrupt handling
-_orchestrator: Optional[LoopOrchestrator] = None
+_orchestrator: LoopOrchestrator | None = None
 _current_workspace = None
-_current_display: Optional[ProductLoopDisplay] = None
+_current_display: ProductLoopDisplay | None = None
 
 
 def handle_interrupt(signum, frame):
@@ -364,7 +361,7 @@ def run_ai_product_loop(
             # Phase 2: Plan
             if success:
                 display.set_phase("PLAN")
-                display.log(f"Phase 2/3: Planning implementation...")
+                display.log("Phase 2/3: Planning implementation...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_plan_prompt(workspace, task_dict, task_source)
                 success, output = run_ai_task(
@@ -394,7 +391,7 @@ def run_ai_product_loop(
             # Phase 3: Implement
             if success:
                 display.set_phase("IMPLEMENT")
-                display.log(f"Phase 3/3: Implementing code changes...")
+                display.log("Phase 3/3: Implementing code changes...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
                 prompt = build_implement_prompt(workspace, task_dict, task_source)
 

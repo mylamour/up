@@ -7,9 +7,8 @@ Templates available:
 - minimal: Minimal project structure
 """
 
-from pathlib import Path
 from datetime import date
-
+from pathlib import Path
 
 # Template registry
 TEMPLATES = {
@@ -34,7 +33,7 @@ def create_project_from_template(
     """Create project from specified template."""
     if template not in TEMPLATES:
         raise ValueError(f"Unknown template: {template}. Available: {list(TEMPLATES.keys())}")
-    
+
     if template == "minimal":
         _create_minimal_template(target_dir, project_name, force)
     elif template == "fastapi":
@@ -62,7 +61,7 @@ def _create_minimal_template(target_dir: Path, project_name: str, force: bool) -
     # Create directories
     (target_dir / "src").mkdir(parents=True, exist_ok=True)
     (target_dir / "tests").mkdir(parents=True, exist_ok=True)
-    
+
     # Create README
     readme = f"""# {project_name}
 
@@ -88,7 +87,7 @@ pytest
 ```
 """
     _write_file(target_dir / "README.md", readme, force)
-    
+
     # Create .gitignore
     gitignore = """# Python
 __pycache__/
@@ -127,7 +126,7 @@ htmlcov/
 def _create_fastapi_template(target_dir: Path, project_name: str, force: bool) -> None:
     """Create FastAPI project template."""
     safe_name = project_name.replace("-", "_").lower()
-    
+
     # Create directories
     dirs = [
         f"src/{safe_name}",
@@ -139,7 +138,7 @@ def _create_fastapi_template(target_dir: Path, project_name: str, force: bool) -
     ]
     for d in dirs:
         (target_dir / d).mkdir(parents=True, exist_ok=True)
-    
+
     # pyproject.toml
     pyproject = f'''[build-system]
 requires = ["hatchling"]
@@ -185,7 +184,7 @@ python_version = "3.10"
 strict = true
 '''
     _write_file(target_dir / "pyproject.toml", pyproject, force)
-    
+
     # Main app
     main_app = f'''"""FastAPI application."""
 
@@ -225,13 +224,13 @@ async def health():
 # app.include_router(router)
 '''
     _write_file(target_dir / f"src/{safe_name}/main.py", main_app, force)
-    
+
     # __init__.py
     _write_file(target_dir / f"src/{safe_name}/__init__.py", '"""Package."""\n', force)
     _write_file(target_dir / f"src/{safe_name}/api/__init__.py", '"""API module."""\n', force)
     _write_file(target_dir / f"src/{safe_name}/models/__init__.py", '"""Models module."""\n', force)
     _write_file(target_dir / f"src/{safe_name}/services/__init__.py", '"""Services module."""\n', force)
-    
+
     # Config
     config = f'''"""Application configuration."""
 
@@ -252,7 +251,7 @@ class Settings(BaseSettings):
 settings = Settings()
 '''
     _write_file(target_dir / f"src/{safe_name}/config.py", config, force)
-    
+
     # Test file
     test_main = f'''"""Test main endpoints."""
 
@@ -285,7 +284,7 @@ async def test_health(client: AsyncClient):
 '''
     _write_file(target_dir / "tests/test_main.py", test_main, force)
     _write_file(target_dir / "tests/__init__.py", "", force)
-    
+
     # Dockerfile
     dockerfile = f'''FROM python:3.11-slim
 
@@ -303,7 +302,7 @@ EXPOSE 8000
 CMD ["uvicorn", "{safe_name}.main:app", "--host", "0.0.0.0", "--port", "8000"]
 '''
     _write_file(target_dir / "Dockerfile", dockerfile, force)
-    
+
     # README
     readme = f'''# {project_name}
 
@@ -335,14 +334,14 @@ docker run -p 8000:8000 {project_name}
 ```
 '''
     _write_file(target_dir / "README.md", readme, force)
-    
+
     # .env.example
     env_example = """# Environment variables
 DEBUG=false
 DATABASE_URL=sqlite:///./app.db
 """
     _write_file(target_dir / ".env.example", env_example, force)
-    
+
     # .gitignore
     gitignore = """# Python
 __pycache__/
@@ -385,7 +384,7 @@ def _create_nextjs_template(target_dir: Path, project_name: str, force: bool) ->
     ]
     for d in dirs:
         (target_dir / d).mkdir(parents=True, exist_ok=True)
-    
+
     # package.json
     package_json = f'''{{
   "name": "{project_name}",
@@ -420,7 +419,7 @@ def _create_nextjs_template(target_dir: Path, project_name: str, force: bool) ->
 }}
 '''
     _write_file(target_dir / "package.json", package_json, force)
-    
+
     # tsconfig.json
     tsconfig = '''{
   "compilerOptions": {
@@ -446,7 +445,7 @@ def _create_nextjs_template(target_dir: Path, project_name: str, force: bool) ->
 }
 '''
     _write_file(target_dir / "tsconfig.json", tsconfig, force)
-    
+
     # tailwind.config.js
     tailwind = '''/** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -462,7 +461,7 @@ module.exports = {
 }
 '''
     _write_file(target_dir / "tailwind.config.js", tailwind, force)
-    
+
     # postcss.config.js
     postcss = '''module.exports = {
   plugins: {
@@ -472,7 +471,7 @@ module.exports = {
 }
 '''
     _write_file(target_dir / "postcss.config.js", postcss, force)
-    
+
     # next.config.js
     next_config = '''/** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -482,7 +481,7 @@ const nextConfig = {
 module.exports = nextConfig
 '''
     _write_file(target_dir / "next.config.js", next_config, force)
-    
+
     # src/app/layout.tsx
     layout = f'''import type {{ Metadata }} from 'next'
 import './globals.css'
@@ -505,7 +504,7 @@ export default function RootLayout({{
 }}
 '''
     _write_file(target_dir / "src/app/layout.tsx", layout, force)
-    
+
     # src/app/page.tsx
     page = f'''export default function Home() {{
   return (
@@ -519,14 +518,14 @@ export default function RootLayout({{
 }}
 '''
     _write_file(target_dir / "src/app/page.tsx", page, force)
-    
+
     # src/app/globals.css
     globals_css = '''@tailwind base;
 @tailwind components;
 @tailwind utilities;
 '''
     _write_file(target_dir / "src/app/globals.css", globals_css, force)
-    
+
     # README
     readme = f'''# {project_name}
 
@@ -550,7 +549,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm run test` - Run tests
 '''
     _write_file(target_dir / "README.md", readme, force)
-    
+
     # .gitignore
     gitignore = """# Dependencies
 node_modules/
@@ -585,7 +584,7 @@ coverage/
 def _create_python_lib_template(target_dir: Path, project_name: str, force: bool) -> None:
     """Create Python library template."""
     safe_name = project_name.replace("-", "_").lower()
-    
+
     # Create directories
     dirs = [
         f"src/{safe_name}",
@@ -593,7 +592,7 @@ def _create_python_lib_template(target_dir: Path, project_name: str, force: bool
     ]
     for d in dirs:
         (target_dir / d).mkdir(parents=True, exist_ok=True)
-    
+
     # pyproject.toml
     pyproject = f'''[build-system]
 requires = ["hatchling"]
@@ -650,7 +649,7 @@ python_version = "3.10"
 strict = true
 '''
     _write_file(target_dir / "pyproject.toml", pyproject, force)
-    
+
     # Main module
     init_py = f'''"""{project_name} - A Python library.
 
@@ -675,7 +674,7 @@ def hello(name: str) -> str:
     return f"Hello, {{name}}!"
 '''
     _write_file(target_dir / f"src/{safe_name}/__init__.py", init_py, force)
-    
+
     # Tests
     test_main = f'''"""Tests for {project_name}."""
 
@@ -694,7 +693,7 @@ def test_hello():
 '''
     _write_file(target_dir / "tests/test_main.py", test_main, force)
     _write_file(target_dir / "tests/__init__.py", "", force)
-    
+
     # README
     readme = f'''# {project_name}
 
@@ -735,7 +734,7 @@ mypy src/
 MIT
 '''
     _write_file(target_dir / "README.md", readme, force)
-    
+
     # LICENSE
     license_text = f'''MIT License
 
@@ -760,7 +759,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
     _write_file(target_dir / "LICENSE", license_text, force)
-    
+
     # .gitignore
     gitignore = """# Python
 __pycache__/

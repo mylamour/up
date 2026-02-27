@@ -8,7 +8,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
 
 from rich.console import Console
 
@@ -19,11 +18,11 @@ console = Console()
 class VerificationResult:
     """Full result of a verification run."""
 
-    tests_passed: Optional[bool] = None
-    lint_passed: Optional[bool] = None
-    type_check_passed: Optional[bool] = None
+    tests_passed: bool | None = None
+    lint_passed: bool | None = None
+    type_check_passed: bool | None = None
 
-    def all_required_passed(self, required_checks: List[str]) -> bool:
+    def all_required_passed(self, required_checks: list[str]) -> bool:
         """Return True if every required check passed (or was not applicable).
 
         A check that returned ``None`` (tool not installed / no tests collected)
@@ -40,7 +39,7 @@ class VerificationResult:
                 return False
         return True
 
-    def summary_parts(self) -> List[str]:
+    def summary_parts(self) -> list[str]:
         labels = [
             ("tests", self.tests_passed),
             ("lint", self.lint_passed),
@@ -70,7 +69,7 @@ def _load_timeouts(workspace: Path) -> dict:
         return {"test": 300, "lint": 60, "type_check": 120}
 
 
-def _load_required_checks(workspace: Path) -> List[str]:
+def _load_required_checks(workspace: Path) -> list[str]:
     """Load the list of checks that must pass from UpConfig."""
     try:
         from up.core.state import get_state_manager
@@ -159,9 +158,9 @@ def run_full_verification(workspace: Path) -> VerificationResult:
     return result
 
 
-def get_modified_files(workspace: Path) -> List[str]:
+def get_modified_files(workspace: Path) -> list[str]:
     """Get list of all changed files (modified + untracked)."""
-    files: List[str] = []
+    files: list[str] = []
     try:
         result = subprocess.run(
             ["git", "diff", "--name-only", "HEAD"],

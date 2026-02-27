@@ -35,7 +35,7 @@ def _auto_sync(workspace: Path) -> None:
         result = run_sync(workspace)
         written = result["written"]
         if written:
-            console.print(f"[dim]Config files updated (CLAUDE.md, .cursorrules)[/dim]")
+            console.print("[dim]Config files updated (CLAUDE.md, .cursorrules)[/dim]")
 
         # Emit SYNC_REQUESTED event
         bridge = EventBridge(workspace)
@@ -236,8 +236,6 @@ def search_cmd(query: str, category: str):
 def install_cmd(path: str, force: bool, no_sync: bool):
     """Install a plugin from a local path or git URL."""
     import shutil
-    import subprocess
-    import tempfile
 
     # Detect git URL (https://, git://, github:user/repo)
     is_git = (
@@ -263,7 +261,7 @@ def install_cmd(path: str, force: bool, no_sync: bool):
         return
 
     # Validate manifest
-    from up.plugins.manifest import PluginManifest, ManifestValidationError
+    from up.plugins.manifest import ManifestValidationError, PluginManifest
     try:
         manifest = PluginManifest.from_json(manifest_path)
     except ManifestValidationError as e:

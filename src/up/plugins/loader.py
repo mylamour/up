@@ -8,9 +8,8 @@ with their components.
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-from up.plugins.manifest import PluginManifest, ManifestValidationError
+from up.plugins.manifest import ManifestValidationError, PluginManifest
 
 logger = logging.getLogger(__name__)
 

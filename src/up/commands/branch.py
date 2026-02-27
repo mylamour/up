@@ -11,12 +11,10 @@ Changes flow upward: agent/* → feature/* → develop → main
 
 import subprocess
 from pathlib import Path
-from typing import Optional, List
 
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.tree import Tree
 
 console = Console()
@@ -78,7 +76,7 @@ def _get_current_branch(path: Path) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _get_all_branches(path: Path) -> List[str]:
+def _get_all_branches(path: Path) -> list[str]:
     """Get all branch names."""
     result = subprocess.run(
         ["git", "branch", "-a", "--format=%(refname:short)"],
@@ -114,27 +112,27 @@ def _can_merge(source: str, target: str) -> tuple[bool, str]:
     """
     source_pattern = _get_branch_pattern(source)
     target_pattern = _get_branch_pattern(target)
-    
+
     target_config = BRANCH_HIERARCHY.get(target_pattern)
-    
+
     if not target_config:
         # Unknown target branch - allow by default
         return True, "Target branch not in hierarchy"
-    
+
     allowed = target_config.get("allows_from", [])
-    
+
     if source_pattern in allowed:
         return True, f"Merge allowed: {source_pattern} → {target_pattern}"
-    
+
     # Check if source is at a lower level (wrong direction)
     source_config = BRANCH_HIERARCHY.get(source_pattern)
     if source_config:
         source_level = source_config.get("level", 99)
         target_level = target_config.get("level", 99)
-        
+
         if source_level < target_level:
             return False, f"Wrong direction: {source_pattern} (level {source_level}) cannot merge into {target_pattern} (level {target_level})"
-    
+
     return False, f"Not allowed: {source_pattern} → {target_pattern}. Allowed sources: {', '.join(allowed)}"
 
 
@@ -152,30 +150,30 @@ def branch():
 def status_cmd():
     """Show current branch status and hierarchy."""
     cwd = Path.cwd()
-    
+
     if not _is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     current = _get_current_branch(cwd)
     all_branches = _get_all_branches(cwd)
-    
+
     console.print(Panel.fit(
         f"[bold]Branch Hierarchy[/]\nCurrent: [cyan]{current}[/]",
         border_style="blue"
     ))
-    
+
     # Build hierarchy tree
     tree = Tree("[bold]Branch Hierarchy[/]")
-    
+
     main_node = tree.add("🔒 [bold green]main[/] - Production")
     develop_node = main_node.add("📦 [yellow]develop[/] - Integration")
-    
+
     # Group branches
     feature_branches = [b for b in all_branches if b.startswith("feature/")]
     agent_branches = [b for b in all_branches if b.startswith("agent/")]
     hotfix_branches = [b for b in all_branches if b.startswith("hotfix/")]
-    
+
     if feature_branches:
         features = develop_node.add(f"🔧 [cyan]feature/*[/] ({len(feature_branches)})")
         for fb in feature_branches[:5]:
@@ -183,7 +181,7 @@ def status_cmd():
             features.add(f"[dim]{fb}[/] {is_current}")
         if len(feature_branches) > 5:
             features.add(f"[dim]... and {len(feature_branches) - 5} more[/]")
-    
+
     if agent_branches:
         agents = develop_node.add(f"🤖 [magenta]agent/*[/] ({len(agent_branches)})")
         for ab in agent_branches[:5]:
@@ -191,24 +189,24 @@ def status_cmd():
             agents.add(f"[dim]{ab}[/] {is_current}")
         if len(agent_branches) > 5:
             agents.add(f"[dim]... and {len(agent_branches) - 5} more[/]")
-    
+
     if hotfix_branches:
         hotfixes = main_node.add(f"🚨 [red]hotfix/*[/] ({len(hotfix_branches)})")
         for hb in hotfix_branches[:3]:
             hotfixes.add(f"[dim]{hb}[/]")
-    
+
     console.print(tree)
-    
+
     # Show allowed merges for current branch
     current_pattern = _get_branch_pattern(current)
     console.print(f"\n[bold]Current Branch:[/] {current} ({current_pattern})")
-    
+
     # Where can we merge to?
     merge_targets = []
     for target, config in BRANCH_HIERARCHY.items():
         if current_pattern in config.get("allows_from", []):
             merge_targets.append(target)
-    
+
     if merge_targets:
         console.print(f"[green]Can merge to:[/] {', '.join(merge_targets)}")
     else:
@@ -227,26 +225,26 @@ def check_cmd(target: str, source: str):
       up branch check main -s develop      # Check develop → main
     """
     cwd = Path.cwd()
-    
+
     if not _is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     source_branch = source or _get_current_branch(cwd)
     target_branch = target or "develop"
-    
+
     can_merge, reason = _can_merge(source_branch, target_branch)
-    
+
     if can_merge:
         console.print(f"[green]✓[/] {reason}")
         console.print(f"\n  {source_branch} → {target_branch}")
     else:
         console.print(f"[red]✗[/] {reason}")
-        
+
         # Suggest correct flow
         source_pattern = _get_branch_pattern(source_branch)
         source_config = BRANCH_HIERARCHY.get(source_pattern)
-        
+
         if source_config:
             # Find where source can go
             for t, config in BRANCH_HIERARCHY.items():
@@ -264,24 +262,24 @@ def enforce_cmd(enable: bool, disable: bool):
     When enabled, 'up agent merge' will check hierarchy before merging.
     """
     cwd = Path.cwd()
-    
+
     if not _is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     # Store setting in .up/config.json
     config_dir = cwd / ".up"
     config_file = config_dir / "config.json"
-    
+
     import json
-    
+
     config = {}
     if config_file.exists():
         try:
             config = json.loads(config_file.read_text())
         except json.JSONDecodeError:
             pass
-    
+
     if enable:
         config["branch_hierarchy_enforcement"] = True
         console.print("[green]✓[/] Branch hierarchy enforcement enabled")
@@ -294,14 +292,14 @@ def enforce_cmd(enable: bool, disable: bool):
         console.print(f"Branch hierarchy enforcement: {status}")
         console.print("\nUse [cyan]--enable[/] or [cyan]--disable[/] to change")
         return
-    
+
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file.write_text(json.dumps(config, indent=2))
 
 
 @branch.command("create")
 @click.argument("name")
-@click.option("--type", "branch_type", type=click.Choice(["feature", "agent", "hotfix"]), 
+@click.option("--type", "branch_type", type=click.Choice(["feature", "agent", "hotfix"]),
               default="feature", help="Branch type")
 @click.option("--from", "from_branch", default="develop", help="Base branch")
 def create_cmd(name: str, branch_type: str, from_branch: str):
@@ -314,11 +312,11 @@ def create_cmd(name: str, branch_type: str, from_branch: str):
       up branch create fix-login --type hotfix --from main
     """
     cwd = Path.cwd()
-    
+
     if not _is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     # Build branch name
     if branch_type == "feature":
         full_name = f"feature/{name}"
@@ -329,7 +327,7 @@ def create_cmd(name: str, branch_type: str, from_branch: str):
         from_branch = "main"  # Hotfixes always from main
     else:
         full_name = name
-    
+
     # Create branch
     result = subprocess.run(
         ["git", "checkout", "-b", full_name, from_branch],
@@ -337,14 +335,14 @@ def create_cmd(name: str, branch_type: str, from_branch: str):
         capture_output=True,
         text=True
     )
-    
+
     if result.returncode == 0:
         console.print(f"[green]✓[/] Created branch: [cyan]{full_name}[/]")
         console.print(f"  Based on: {from_branch}")
-        
+
         # Show merge path
         target = "develop" if branch_type in ["feature", "agent"] else "main"
         console.print(f"\n[dim]Merge path: {full_name} → {target}[/]")
     else:
-        console.print(f"[red]Error:[/] Failed to create branch")
+        console.print("[red]Error:[/] Failed to create branch")
         console.print(f"[dim]{result.stderr}[/]")

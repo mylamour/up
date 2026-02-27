@@ -4,13 +4,13 @@ Data classes for memory entries, sessions, learnings, and errors.
 """
 
 import subprocess
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 
-def get_git_context(workspace: Path) -> Dict[str, str]:
+def get_git_context(workspace: Path) -> dict[str, str]:
     """Get current git context (branch, commit, etc.).
 
     Returns dict with:
@@ -67,10 +67,10 @@ class MemoryEntry:
     id: str
     type: str  # 'session', 'learning', 'decision', 'error', 'code', 'commit'
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    branch: Optional[str] = None
-    commit: Optional[str] = None
+    branch: str | None = None
+    commit: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -83,11 +83,11 @@ class SessionSummary:
     started_at: str
     ended_at: str
     summary: str
-    tasks_completed: List[str] = field(default_factory=list)
-    files_modified: List[str] = field(default_factory=list)
-    key_decisions: List[str] = field(default_factory=list)
-    learnings: List[str] = field(default_factory=list)
-    errors_encountered: List[str] = field(default_factory=list)
+    tasks_completed: list[str] = field(default_factory=list)
+    files_modified: list[str] = field(default_factory=list)
+    key_decisions: list[str] = field(default_factory=list)
+    learnings: list[str] = field(default_factory=list)
+    errors_encountered: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -97,7 +97,7 @@ class CodeLearning:
     description: str
     example: str
     file_path: str
-    commit_hash: Optional[str] = None
+    commit_hash: str | None = None
 
 
 @dataclass

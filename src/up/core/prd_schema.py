@@ -2,9 +2,8 @@
 
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ class UserStory:
     effort: str = "medium"
     phase: str = ""
     passes: bool = False
-    completedAt: Optional[str] = None
+    completedAt: str | None = None
     acceptanceCriteria: list[str] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
 
@@ -35,7 +34,7 @@ class PRD:
     def pending_tasks(self) -> list[UserStory]:
         return [s for s in self.userStories if not s.passes]
 
-    def next_task(self, completed_ids: set[str] | None = None) -> Optional[UserStory]:
+    def next_task(self, completed_ids: set[str] | None = None) -> UserStory | None:
         completed_ids = completed_ids or set()
         for story in self.userStories:
             if story.passes or story.id in completed_ids:

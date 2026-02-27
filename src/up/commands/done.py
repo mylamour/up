@@ -12,8 +12,8 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from up.core.state import get_state_manager
 from up.commands.start.helpers import find_task_source
+from up.core.state import get_state_manager
 
 console = Console()
 

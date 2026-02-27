@@ -1,7 +1,7 @@
 """Config file templates for Claude and Cursor."""
 
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 
 def create_config_files(target_dir: Path, ai_target: str, force: bool = False) -> None:
@@ -24,7 +24,7 @@ def _create_claude_md(target_dir: Path, force: bool) -> None:
     """Create CLAUDE.md for Claude Code."""
     today = date.today().isoformat()
     project_name = target_dir.name
-    
+
     content = f"""# {project_name}
 
 > AI Instructions for Claude Code
@@ -175,10 +175,10 @@ def _create_cursor_rules_dir(target_dir: Path, force: bool) -> None:
     """Create .cursor/rules/ directory with rule files."""
     rules_dir = target_dir / ".cursor/rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create main rules file
     _create_main_cursor_rule(rules_dir, force)
-    
+
     # Create file-specific rules
     _create_python_rule(rules_dir, force)
     _create_typescript_rule(rules_dir, force)

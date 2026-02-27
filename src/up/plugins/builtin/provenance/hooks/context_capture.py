@@ -17,7 +17,6 @@ import sys
 import time
 from pathlib import Path
 
-
 # File path patterns to detect in prompts
 _FILE_PATH_RE = re.compile(
     r"(?:^|\s)([a-zA-Z0-9_./-]+\.(?:py|js|ts|tsx|go|rs|java|rb|md|json|yaml|yml|toml))"

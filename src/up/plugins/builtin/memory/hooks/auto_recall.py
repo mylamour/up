@@ -10,8 +10,8 @@ Exit codes:
 """
 
 import json
-import sys
 import os
+import sys
 from pathlib import Path
 
 
@@ -40,8 +40,8 @@ def main():
         sys.exit(0)
 
     try:
-        from up.memory.patterns import ErrorPatternExtractor
         from up.memory import MemoryManager
+        from up.memory.patterns import ErrorPatternExtractor
 
         extractor = ErrorPatternExtractor()
         keywords = extractor.extract(error_output)

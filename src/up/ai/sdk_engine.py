@@ -6,8 +6,8 @@ tool control, and automatic context compaction.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional, Tuple
 
 from up.ai.engine import AIEngine
 
@@ -38,17 +38,17 @@ class AgentSdkEngine(AIEngine):
 
     def __init__(
         self,
-        allowed_tools: Optional[list[str]] = None,
+        allowed_tools: list[str] | None = None,
         permission_mode: str = "acceptEdits",
         max_turns: int = 50,
-        model: Optional[str] = None,
+        model: str | None = None,
     ):
         _ensure_sdk()
         self._allowed_tools = allowed_tools or ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
         self._permission_mode = permission_mode
         self._max_turns = max_turns
         self._model = model  # None = SDK default (claude-opus-4-6)
-        self._session_id: Optional[str] = None
+        self._session_id: str | None = None
 
     def is_available(self) -> bool:
         try:
@@ -61,7 +61,7 @@ class AgentSdkEngine(AIEngine):
         return "claude-sdk"
 
     @property
-    def session_id(self) -> Optional[str]:
+    def session_id(self) -> str | None:
         """Current session ID for resumption across SESRC phases."""
         return self._session_id
 
@@ -119,14 +119,14 @@ class AgentSdkEngine(AIEngine):
         workspace: Path,
         prompt: str,
         continue_session: bool = False,
-        on_output: Optional[Callable[[str], None]] = None,
-    ) -> Tuple[Optional[str], bool]:
+        on_output: Callable[[str], None] | None = None,
+    ) -> tuple[str | None, bool]:
         """Core async method that drives the SDK query loop.
 
         Returns:
             (result_text, success) tuple
         """
-        from claude_agent_sdk import query, ClaudeAgentOptions
+        from claude_agent_sdk import ClaudeAgentOptions, query
 
         options_kwargs: dict = {
             "cwd": str(workspace),
@@ -215,7 +215,7 @@ class AgentSdkEngine(AIEngine):
         timeout: int = 180,
         silent: bool = False,
         continue_session: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Execute a prompt via the Agent SDK and return the response."""
         if not self.is_available():
             if not silent:
@@ -245,12 +245,12 @@ class AgentSdkEngine(AIEngine):
         timeout: int = 600,
         raise_on_error: bool = False,
         continue_session: bool = False,
-        on_output: Optional[Callable[[str], None]] = None,
-    ) -> Tuple[bool, str]:
+        on_output: Callable[[str], None] | None = None,
+    ) -> tuple[bool, str]:
         """Execute an implementation task via the Agent SDK."""
         from up.exceptions import (
-            AICliNotFoundError,
             AICliExecutionError,
+            AICliNotFoundError,
         )
 
         if not self.is_available():

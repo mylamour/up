@@ -5,11 +5,10 @@ Extracts patterns, learnings, and actionable insights from AI conversation histo
 
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from collections import Counter
 
 
 @dataclass
@@ -22,7 +21,7 @@ class ConversationPattern:
     category: str = "general"
 
 
-@dataclass 
+@dataclass
 class ConversationInsight:
     """An insight or learning from conversations."""
     title: str
@@ -48,7 +47,7 @@ class SummaryReport:
 
 class ConversationSummarizer:
     """Analyzes and summarizes AI conversation history."""
-    
+
     # Common coding topics to detect
     TOPIC_PATTERNS = {
         "testing": r"\b(test|pytest|jest|unit test|integration test|coverage)\b",
@@ -62,7 +61,7 @@ class ConversationSummarizer:
         "performance": r"\b(performance|optimize|cache|slow|fast|memory)\b",
         "security": r"\b(security|vulnerability|sanitize|escape|inject)\b",
     }
-    
+
     # Error patterns
     ERROR_PATTERNS = [
         r"error:\s*(.+?)(?:\n|$)",
@@ -72,7 +71,7 @@ class ConversationSummarizer:
         r"ValueError:\s*(.+?)(?:\n|$)",
         r"ImportError:\s*(.+?)(?:\n|$)",
     ]
-    
+
     def __init__(self, conversations: list[dict]):
         """Initialize with conversation data.
         
@@ -82,7 +81,7 @@ class ConversationSummarizer:
         self.conversations = conversations
         self.all_messages = []
         self._extract_messages()
-    
+
     def _extract_messages(self) -> None:
         """Extract all messages from conversations."""
         for conv in self.conversations:
@@ -94,16 +93,16 @@ class ConversationSummarizer:
                     "conversation_id": conv.get("id"),
                     "project": conv.get("project"),
                 })
-    
+
     def analyze(self) -> SummaryReport:
         """Analyze conversations and generate summary report."""
         # Basic stats
         total_convs = len(self.conversations)
         total_msgs = len(self.all_messages)
-        
+
         # Date range
         timestamps = [
-            m["timestamp"] for m in self.all_messages 
+            m["timestamp"] for m in self.all_messages
             if m.get("timestamp")
         ]
         if timestamps:
@@ -113,22 +112,22 @@ class ConversationSummarizer:
             )
         else:
             date_range = ("Unknown", "Unknown")
-        
+
         # Analyze topics
         top_topics = self._analyze_topics()
-        
+
         # Extract patterns
         patterns = self._extract_patterns()
-        
+
         # Generate insights
         insights = self._generate_insights(top_topics, patterns)
-        
+
         # Extract code snippets
         code_snippets = self._extract_code_snippets()
-        
+
         # Extract errors
         errors = self._extract_errors()
-        
+
         return SummaryReport(
             total_conversations=total_convs,
             total_messages=total_msgs,
@@ -139,7 +138,7 @@ class ConversationSummarizer:
             code_snippets=code_snippets[:20],
             errors_encountered=errors[:20],
         )
-    
+
     def _format_timestamp(self, ts: int) -> str:
         """Format timestamp to readable string."""
         try:
@@ -147,23 +146,23 @@ class ConversationSummarizer:
             return dt.strftime("%Y-%m-%d")
         except (ValueError, TypeError):
             return "Unknown"
-    
+
     def _analyze_topics(self) -> list[tuple[str, int]]:
         """Analyze topic frequency in conversations."""
         topic_counts = Counter()
-        
+
         for msg in self.all_messages:
             content = msg.get("content", "").lower()
             for topic, pattern in self.TOPIC_PATTERNS.items():
                 if re.search(pattern, content, re.IGNORECASE):
                     topic_counts[topic] += 1
-        
+
         return topic_counts.most_common()
-    
+
     def _extract_patterns(self) -> list[ConversationPattern]:
         """Extract common patterns from conversations."""
         patterns = []
-        
+
         # Pattern: Common user request types
         request_patterns = {
             "implementation": r"(implement|create|add|build)\s+(\w+)",
@@ -171,15 +170,15 @@ class ConversationSummarizer:
             "explain": r"(explain|what is|how does)\s+(\w+)",
             "refactor": r"(refactor|improve|clean)\s+(\w+)",
         }
-        
+
         request_counts = Counter()
         request_examples = {}
-        
+
         for msg in self.all_messages:
             if msg.get("role") != "user":
                 continue
             content = msg.get("content", "")
-            
+
             for pattern_name, pattern in request_patterns.items():
                 matches = re.findall(pattern, content, re.IGNORECASE)
                 if matches:
@@ -188,7 +187,7 @@ class ConversationSummarizer:
                         request_examples[pattern_name] = []
                     if len(request_examples[pattern_name]) < 3:
                         request_examples[pattern_name].append(content[:100])
-        
+
         for name, count in request_counts.most_common(10):
             patterns.append(ConversationPattern(
                 name=f"Request: {name}",
@@ -197,17 +196,17 @@ class ConversationSummarizer:
                 examples=request_examples.get(name, []),
                 category="request_type",
             ))
-        
+
         return patterns
-    
+
     def _generate_insights(
-        self, 
-        topics: list[tuple[str, int]], 
+        self,
+        topics: list[tuple[str, int]],
         patterns: list[ConversationPattern]
     ) -> list[ConversationInsight]:
         """Generate actionable insights from analysis."""
         insights = []
-        
+
         # Insight from top topics
         if topics:
             top_topic = topics[0][0]
@@ -219,7 +218,7 @@ class ConversationSummarizer:
                 actionable=True,
                 action=f"Consider creating documentation or templates for {top_topic}",
             ))
-        
+
         # Insight from error patterns
         error_count = sum(1 for m in self.all_messages if "error" in m.get("content", "").lower())
         if error_count > 10:
@@ -231,7 +230,7 @@ class ConversationSummarizer:
                 actionable=True,
                 action="Consider improving error handling or adding better logging",
             ))
-        
+
         # Insight from conversation length
         avg_msgs = len(self.all_messages) / max(len(self.conversations), 1)
         if avg_msgs > 20:
@@ -243,19 +242,19 @@ class ConversationSummarizer:
                 actionable=True,
                 action="Consider breaking complex tasks into smaller sessions",
             ))
-        
+
         return insights
-    
+
     def _extract_code_snippets(self) -> list[dict]:
         """Extract code snippets from conversations."""
         snippets = []
         code_pattern = r"```(\w+)?\n(.*?)```"
-        
+
         for msg in self.all_messages:
             if msg.get("role") != "assistant":
                 continue
             content = msg.get("content", "")
-            
+
             matches = re.findall(code_pattern, content, re.DOTALL)
             for lang, code in matches:
                 if len(code.strip()) > 20:  # Skip trivial snippets
@@ -264,13 +263,13 @@ class ConversationSummarizer:
                         "code": code.strip()[:500],  # Limit size
                         "project": msg.get("project"),
                     })
-        
+
         return snippets
-    
+
     def _extract_errors(self) -> list[str]:
         """Extract unique errors from conversations."""
         errors = set()
-        
+
         for msg in self.all_messages:
             content = msg.get("content", "")
             for pattern in self.ERROR_PATTERNS:
@@ -279,13 +278,13 @@ class ConversationSummarizer:
                     error_text = match.strip()[:100]
                     if len(error_text) > 10:
                         errors.add(error_text)
-        
+
         return sorted(errors)
-    
+
     def to_markdown(self) -> str:
         """Generate markdown report."""
         report = self.analyze()
-        
+
         lines = [
             "# Conversation Analysis Report",
             "",
@@ -302,25 +301,25 @@ class ConversationSummarizer:
             "## Top Topics",
             "",
         ]
-        
+
         for topic, count in report.top_topics:
             lines.append(f"- {topic.title()}: {count} mentions")
-        
+
         lines.extend([
             "",
             "## Key Insights",
             "",
         ])
-        
+
         for insight in report.insights:
             lines.append(f"### {insight.title}")
-            lines.append(f"")
+            lines.append("")
             lines.append(f"{insight.description}")
             if insight.actionable:
-                lines.append(f"")
+                lines.append("")
                 lines.append(f"**Action**: {insight.action}")
             lines.append("")
-        
+
         if report.errors_encountered:
             lines.extend([
                 "## Common Errors",
@@ -328,20 +327,20 @@ class ConversationSummarizer:
             ])
             for error in report.errors_encountered[:10]:
                 lines.append(f"- `{error}`")
-        
+
         lines.extend([
             "",
             "---",
             "",
             "*Generated by up-cli conversation summarizer*",
         ])
-        
+
         return "\n".join(lines)
-    
+
     def to_json(self) -> str:
         """Generate JSON report."""
         report = self.analyze()
-        
+
         return json.dumps({
             "generated_at": datetime.now().isoformat(),
             "summary": {
@@ -382,10 +381,10 @@ def summarize_cursor_history(output_format: str = "markdown") -> str:
         import sys
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
         from export_cursor_history import load_all_data
-    
+
     conversations = load_all_data()
     summarizer = ConversationSummarizer(conversations)
-    
+
     if output_format == "json":
         return summarizer.to_json()
     return summarizer.to_markdown()
@@ -394,11 +393,11 @@ def summarize_cursor_history(output_format: str = "markdown") -> str:
 # CLI
 if __name__ == "__main__":
     import sys
-    
+
     output_format = "markdown"
     if len(sys.argv) > 1 and sys.argv[1] == "--json":
         output_format = "json"
-    
+
     try:
         result = summarize_cursor_history(output_format)
         print(result)

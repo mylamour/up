@@ -1,7 +1,7 @@
 """Product-loop system templates."""
 
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 
 def create_loop_system(target_dir: Path, ai_target: str, force: bool = False) -> None:
@@ -550,11 +550,11 @@ if __name__ == "__main__":
 def _create_loop_state(target_dir: Path, force: bool) -> None:
     """Create initial unified state file in .up/ directory."""
     today = date.today().isoformat()
-    
+
     # Create .up directory
     up_dir = target_dir / ".up"
     up_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Unified state file
     content = f"""{{
   "version": "2.0",
@@ -593,7 +593,7 @@ def _create_loop_state(target_dir: Path, force: bool) -> None:
 }}
 """
     _write_file(up_dir / "state.json", content, force)
-    
+
     # Also create config.json with defaults
     config_content = """{
   "doom_loop_threshold": 3,

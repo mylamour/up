@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from up.templates import scaffold_project
-from up.templates.projects import get_available_templates, create_project_from_template
+from up.templates.projects import create_project_from_template
 
 console = Console()
 
@@ -50,7 +50,7 @@ def new_cmd(name: str, ai: str, template: str, list_templates: bool):
     if list_templates:
         _show_templates()
         return
-    
+
     target = Path.cwd() / name
 
     if target.exists():
@@ -67,12 +67,12 @@ def new_cmd(name: str, ai: str, template: str, list_templates: bool):
 
     # Check if it's a project-type template
     project_templates = ["fastapi", "nextjs", "python-lib"]
-    
+
     if template in project_templates:
         # Create project from template first
         console.print(f"  [dim]Creating {template} project structure...[/]")
         create_project_from_template(target, template, name, force=True)
-        
+
         # Then add up systems
         systems = ["docs", "learn", "loop"]
         console.print("  [dim]Adding up systems...[/]")
@@ -105,12 +105,12 @@ def _get_systems_for_template(template: str) -> list:
 def _show_templates():
     """Show available templates."""
     console.print("\n[bold]Available Templates[/]\n")
-    
+
     table = Table()
     table.add_column("Template", style="cyan")
     table.add_column("Description")
     table.add_column("Systems")
-    
+
     table.add_row(
         "minimal",
         "Basic structure with documentation",
@@ -141,9 +141,9 @@ def _show_templates():
         "Python library with packaging",
         "lib + all systems"
     )
-    
+
     console.print(table)
-    
+
     console.print("\n[bold]Usage:[/]")
     console.print("  up new my-project --template fastapi")
     console.print("  up new my-app -t nextjs")
@@ -152,7 +152,7 @@ def _show_templates():
 def _print_next_steps(name: str, template: str):
     """Print next steps after creation."""
     console.print(f"\n  cd {name}")
-    
+
     if template == "fastapi":
         console.print("  pip install -e .[dev]")
         console.print("  uvicorn src.{name}.main:app --reload".replace("{name}", name.replace("-", "_")))
@@ -164,7 +164,7 @@ def _print_next_steps(name: str, template: str):
         console.print("  pytest")
     else:
         console.print("  up status")
-    
+
     console.print("\n[bold]Available commands:[/]")
     console.print("  up status       Show system health")
     console.print("  up learn auto   Analyze project")

@@ -18,10 +18,9 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from up.core.checkpoint import (
-    get_checkpoint_manager,
-    CheckpointManager,
     CheckpointNotFoundError,
     NotAGitRepoError,
+    get_checkpoint_manager,
 )
 from up.core.state import get_state_manager
 
@@ -54,23 +53,23 @@ def save_cmd(message: str, task: str, quiet: bool):
       up save -t US-004            # Link to task
     """
     cwd = Path.cwd()
-    
+
     try:
         manager = get_checkpoint_manager(cwd)
-        
+
         # Check for changes
         has_changes = manager._has_changes()
-        
+
         if not has_changes and not quiet:
             console.print("[dim]No changes to checkpoint (working tree clean)[/]")
-        
+
         # Create checkpoint
         metadata = manager.save(
             message=message,
             task_id=task,
             auto_commit=True
         )
-        
+
         if quiet:
             console.print(metadata.id)
         else:
@@ -80,7 +79,7 @@ def save_cmd(message: str, task: str, quiet: bool):
             console.print(f"  Commit: {metadata.commit_sha[:8]}")
             console.print(f"  Tag: {metadata.tag_name}")
             console.print(f"\nTo restore: [cyan]up reset {metadata.id}[/]")
-        
+
     except NotAGitRepoError:
         console.print("[red]Error:[/] Not a git repository")
         console.print("Initialize with: [cyan]git init[/]")
@@ -113,24 +112,24 @@ def reset_cmd(checkpoint_id: str, hard: bool, soft: bool, list_checkpoints: bool
       up reset --list              # Show available checkpoints
     """
     cwd = Path.cwd()
-    
+
     try:
         manager = get_checkpoint_manager(cwd)
-        
+
         # List mode
         if list_checkpoints:
             checkpoints = manager.list_checkpoints(limit=20)
-            
+
             if not checkpoints:
                 console.print("[dim]No checkpoints available[/]")
                 return
-            
+
             table = Table(title="Available Checkpoints")
             table.add_column("ID", style="cyan")
             table.add_column("Message")
             table.add_column("Branch")
             table.add_column("Time")
-            
+
             for cp in checkpoints:
                 table.add_row(
                     cp.id,
@@ -138,10 +137,10 @@ def reset_cmd(checkpoint_id: str, hard: bool, soft: bool, list_checkpoints: bool
                     cp.branch,
                     cp.created_at[:19]
                 )
-            
+
             console.print(table)
             return
-        
+
         # Get checkpoint info for confirmation
         if checkpoint_id:
             target = checkpoint_id
@@ -152,34 +151,34 @@ def reset_cmd(checkpoint_id: str, hard: bool, soft: bool, list_checkpoints: bool
                 console.print("Create one with: [cyan]up save[/]")
                 return
             target = last.id
-        
+
         # Show what will be reset
         stats = manager.diff_stats(target)
-        
+
         console.print(f"[bold]Reset to checkpoint:[/] {target}")
         if stats["files"] > 0:
             console.print(f"  Changes to discard: {stats['files']} files, "
                          f"+{stats['insertions']} -{stats['deletions']}")
-        
+
         # Confirm
         if not yes:
             from rich.prompt import Confirm
             if not Confirm.ask("Proceed with reset?", default=False):
                 console.print("[dim]Cancelled[/]")
                 return
-        
+
         # Perform reset
         use_hard = not soft
         metadata = manager.restore(checkpoint_id=target, hard=use_hard)
-        
+
         console.print(f"\n[green]✓[/] Reset to [cyan]{metadata.id}[/]")
         console.print(f"  Commit: {metadata.commit_sha[:8]}")
-        
+
         # Update state
         state_manager = get_state_manager(cwd)
         state_manager.state.loop.consecutive_failures = 0  # Reset doom loop counter
         state_manager.save()
-        
+
     except NotAGitRepoError:
         console.print("[red]Error:[/] Not a git repository")
         sys.exit(1)
@@ -216,18 +215,18 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
       up diff --reject             # Reject and reset to checkpoint
     """
     cwd = Path.cwd()
-    
+
     try:
         manager = get_checkpoint_manager(cwd)
-        
+
         # Get diff
         diff_output = manager.diff_from_checkpoint(checkpoint_id)
         stats = manager.diff_stats(checkpoint_id)
-        
+
         if not diff_output and stats["files"] == 0:
             console.print("[dim]No changes since checkpoint[/]")
             return
-        
+
         # Stats mode
         if stat:
             console.print(Panel.fit(
@@ -238,14 +237,14 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
                 border_style="blue"
             ))
             return
-        
+
         # Reject mode
         if reject:
             console.print("[yellow]Rejecting changes...[/]")
             manager.restore(checkpoint_id=checkpoint_id)
             console.print("[green]✓[/] Changes rejected, reset to checkpoint")
             return
-        
+
         # Accept mode
         if accept:
             # Commit the changes
@@ -260,7 +259,7 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
                 stderr = add_result.stderr.strip() if add_result.stderr else "git add failed"
                 console.print(f"[red]Error:[/] {escape(stderr)}")
                 sys.exit(1)
-            
+
             commit_msg = message or "Accept AI changes"
             result = subprocess.run(
                 ["git", "commit", "-m", commit_msg],
@@ -268,9 +267,9 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode == 0:
-                console.print(f"[green]✓[/] Changes accepted and committed")
+                console.print("[green]✓[/] Changes accepted and committed")
                 console.print(f"  Message: {commit_msg}")
             else:
                 combined = f"{result.stdout}\n{result.stderr}".lower()
@@ -281,7 +280,7 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
                     console.print(f"[red]Error:[/] {escape(stderr)}")
                     sys.exit(1)
             return
-        
+
         # Show diff
         console.print(Panel.fit(
             f"[bold]Changes since checkpoint[/] "
@@ -289,17 +288,17 @@ def diff_cmd(checkpoint_id: str, stat: bool, accept: bool, reject: bool, message
             border_style="blue"
         ))
         console.print()
-        
+
         # Syntax-highlighted diff
         syntax = Syntax(diff_output, "diff", theme="monokai", line_numbers=False)
         console.print(syntax)
-        
+
         # Interactive prompt
         console.print()
         console.print("[bold]Actions:[/]")
         console.print("  [cyan]up diff --accept[/]  Accept changes")
         console.print("  [cyan]up diff --reject[/]  Reject and reset")
-        
+
     except NotAGitRepoError:
         console.print("[red]Error:[/] Not a git repository")
         sys.exit(1)

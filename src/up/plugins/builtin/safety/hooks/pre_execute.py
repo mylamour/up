@@ -4,8 +4,8 @@ Reads event data from stdin, creates a checkpoint if workspace
 has a git repo. Exit 0 = allow, exit 1 = warn, exit 2 = block.
 """
 import json
-import sys
 import subprocess
+import sys
 
 
 def main():

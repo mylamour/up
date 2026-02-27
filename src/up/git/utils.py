@@ -6,7 +6,6 @@ eliminating duplication between worktree.py and agent.py.
 
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Tuple
 
 # Standard branch prefix for all agent/worktree operations
 BRANCH_PREFIX = "agent"
@@ -31,7 +30,7 @@ class GitNotInstalledError(GitError):
 
 class GitTimeoutError(GitError):
     """Git command timed out."""
-    
+
     def __init__(self, message: str, timeout: int):
         super().__init__(message)
         self.timeout = timeout
@@ -39,7 +38,7 @@ class GitTimeoutError(GitError):
 
 class GitCommandError(GitError):
     """Git command failed with non-zero exit code."""
-    
+
     def __init__(self, message: str, returncode: int, stderr: str = ""):
         super().__init__(message)
         self.returncode = returncode
@@ -51,7 +50,7 @@ class GitCommandError(GitError):
 # =============================================================================
 
 
-def is_git_repo(path: Optional[Path] = None) -> bool:
+def is_git_repo(path: Path | None = None) -> bool:
     """Check if path is inside a Git repository.
 
     Args:
@@ -72,7 +71,7 @@ def is_git_repo(path: Optional[Path] = None) -> bool:
         return False
 
 
-def get_current_branch(path: Optional[Path] = None) -> str:
+def get_current_branch(path: Path | None = None) -> str:
     """Get current Git branch name.
 
     Args:
@@ -106,7 +105,7 @@ def count_commits_since(path: Path, base: str = "main") -> int:
         return 0
 
 
-def get_repo_root(path: Optional[Path] = None) -> Optional[Path]:
+def get_repo_root(path: Path | None = None) -> Path | None:
     """Get the root directory of the Git repository.
 
     Args:
@@ -137,8 +136,8 @@ def make_branch_name(name: str) -> str:
 
 
 def run_git(
-    *args, 
-    cwd: Optional[Path] = None, 
+    *args,
+    cwd: Path | None = None,
     check: bool = False,
     timeout: int = DEFAULT_GIT_TIMEOUT
 ) -> subprocess.CompletedProcess:
@@ -160,7 +159,7 @@ def run_git(
     """
     cmd = ["git"] + list(args)
     cmd_str = " ".join(cmd)
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -192,7 +191,7 @@ def run_git(
 LEGACY_BRANCH_PREFIX = "worktree"
 
 
-def migrate_legacy_branch(name: str, cwd: Optional[Path] = None) -> bool:
+def migrate_legacy_branch(name: str, cwd: Path | None = None) -> bool:
     """Migrate a legacy worktree/ branch to agent/ prefix.
 
     Args:
@@ -223,8 +222,8 @@ def migrate_legacy_branch(name: str, cwd: Optional[Path] = None) -> bool:
 def preview_merge(
     source_branch: str,
     target_branch: str = "main",
-    cwd: Optional[Path] = None
-) -> Tuple[bool, List[str]]:
+    cwd: Path | None = None
+) -> tuple[bool, list[str]]:
     """Preview merge to check for conflicts before actual merge.
 
     Args:

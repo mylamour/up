@@ -11,10 +11,10 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
-from up.learn.utils import is_valid_path, display_profile, save_profile
 from up.learn.analyzer import analyze_project
-from up.learn.research import learn_from_topic, learn_from_file, learn_from_project
 from up.learn.plan import learn_analyze, learn_plan, learn_status
+from up.learn.research import learn_from_file, learn_from_project, learn_from_topic
+from up.learn.utils import display_profile, is_valid_path, save_profile
 
 console = Console()
 

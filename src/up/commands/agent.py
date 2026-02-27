@@ -18,9 +18,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from up.core.state import get_state_manager, AgentState
-from up.core.checkpoint import get_checkpoint_manager, NotAGitRepoError
-from up.git.utils import is_git_repo, get_current_branch, count_commits_since, make_branch_name, preview_merge
+from up.core.checkpoint import NotAGitRepoError, get_checkpoint_manager
+from up.core.state import AgentState, get_state_manager
+from up.git.utils import (
+    count_commits_since,
+    is_git_repo,
+    make_branch_name,
+    preview_merge,
+)
 
 console = Console()
 
@@ -47,27 +52,27 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
       up agent spawn api -b develop
     """
     cwd = Path.cwd()
-    
+
     if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     # Create worktree directory
     worktree_dir = cwd / ".worktrees"
     worktree_path = worktree_dir / name
     agent_branch = make_branch_name(name)
-    
+
     if worktree_path.exists():
         console.print(f"[yellow]Warning:[/] Agent '{name}' already exists")
         console.print(f"  Path: {worktree_path}")
         console.print(f"\nTo remove: [cyan]up agent cleanup {name}[/]")
         return
-    
+
     # Create worktree
     console.print(f"Creating agent worktree: [cyan]{name}[/]")
-    
+
     worktree_dir.mkdir(exist_ok=True)
-    
+
     # Create branch and worktree
     result = subprocess.run(
         ["git", "worktree", "add", "-b", agent_branch, str(worktree_path), branch],
@@ -75,7 +80,7 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
         capture_output=True,
         text=True
     )
-    
+
     if result.returncode != 0:
         # Branch might exist, try without -b
         result = subprocess.run(
@@ -85,10 +90,10 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
             text=True
         )
         if result.returncode != 0:
-            console.print(f"[red]Error:[/] Failed to create worktree")
+            console.print("[red]Error:[/] Failed to create worktree")
             console.print(f"[dim]{result.stderr}[/]")
             return
-    
+
     # Copy environment files
     env_files = [".env", ".env.local", ".env.development"]
     copied = []
@@ -97,7 +102,7 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
         if src.exists():
             shutil.copy(src, worktree_path / env_file)
             copied.append(env_file)
-    
+
     # Create agent state
     agent = AgentState(
         task_id=task or name,
@@ -107,11 +112,11 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
         status="created",
         phase="READY",
     )
-    
+
     # Save to unified state
     state_manager = get_state_manager(cwd)
     state_manager.add_agent(agent)
-    
+
     # Also save state in worktree for standalone access
     agent_state_file = worktree_path / ".agent_state.json"
     agent_state_file.write_text(json.dumps({
@@ -123,27 +128,27 @@ def spawn_cmd(name: str, task: str, branch: str, title: str):
         "started_at": agent.started_at,
         "parent_workspace": str(cwd),
     }, indent=2))
-    
+
     # Display success
     console.print(f"\n[green]✓[/] Agent '[cyan]{name}[/]' created")
     console.print()
-    
+
     table = Table(show_header=False, box=None)
     table.add_column("Key", style="dim")
     table.add_column("Value")
-    
+
     table.add_row("Path", str(worktree_path))
     table.add_row("Branch", agent_branch)
     if task:
         table.add_row("Task", task)
     if copied:
         table.add_row("Env files", ", ".join(copied))
-    
+
     console.print(table)
-    
-    console.print(f"\n[bold]To work in this agent:[/]")
+
+    console.print("\n[bold]To work in this agent:[/]")
     console.print(f"  cd {worktree_path}")
-    console.print(f"\n[bold]When done:[/]")
+    console.print("\n[bold]When done:[/]")
     console.print(f"  up agent merge {name}")
 
 
@@ -160,15 +165,15 @@ def status_cmd(as_json: bool):
     commits, and health indicators.
     """
     cwd = Path.cwd()
-    
+
     if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     # Get agents from state
     state_manager = get_state_manager(cwd)
     agents = state_manager.state.agents
-    
+
     # Also check for worktrees not in state
     worktree_dir = cwd / ".worktrees"
     if worktree_dir.exists():
@@ -191,12 +196,12 @@ def status_cmd(as_json: bool):
                             )
                         except json.JSONDecodeError:
                             pass
-    
+
     if not agents:
         console.print("[dim]No active agents[/]")
         console.print("\nCreate one with: [cyan]up agent spawn <name>[/]")
         return
-    
+
     # JSON output
     if as_json:
         output = {
@@ -212,7 +217,7 @@ def status_cmd(as_json: bool):
         }
         console.print(json.dumps(output, indent=2))
         return
-    
+
     # Table output
     table = Table(title="Active Agents")
     table.add_column("Name", style="cyan")
@@ -220,14 +225,14 @@ def status_cmd(as_json: bool):
     table.add_column("Status")
     table.add_column("Commits")
     table.add_column("Branch")
-    
+
     for task_id, agent in agents.items():
         # Count commits
         wt_path = Path(agent.worktree_path)
         commits = 0
         if wt_path.exists():
             commits = count_commits_since(wt_path, "main")
-        
+
         # Status icon
         status_icons = {
             "created": "🟡",
@@ -238,7 +243,7 @@ def status_cmd(as_json: bool):
             "merged": "✅",
         }
         icon = status_icons.get(agent.status, "⚪")
-        
+
         table.add_row(
             task_id,
             agent.task_title[:30] + "..." if len(agent.task_title) > 30 else agent.task_title,
@@ -246,9 +251,9 @@ def status_cmd(as_json: bool):
             str(commits),
             agent.branch,
         )
-    
+
     console.print(table)
-    
+
     console.print(f"\n[dim]Total agents: {len(agents)}[/]")
 
 
@@ -275,26 +280,26 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
       up agent merge api --no-squash       # Keep individual commits
     """
     cwd = Path.cwd()
-    
+
     if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     state_manager = get_state_manager(cwd)
     agents = state_manager.state.agents
-    
+
     # Find agent
     agent = agents.get(name)
     worktree_path = cwd / ".worktrees" / name
-    
+
     if not agent and not worktree_path.exists():
         console.print(f"[red]Error:[/] Agent '{name}' not found")
-        console.print(f"\nList agents: [cyan]up agent status[/]")
+        console.print("\nList agents: [cyan]up agent status[/]")
         return
-    
+
     # Get branch name
     agent_branch = agent.branch if agent else make_branch_name(name)
-    
+
     # Check branch hierarchy enforcement
     try:
         config = state_manager.config
@@ -307,10 +312,10 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
                 return
     except Exception:
         pass  # Don't block merge if hierarchy check fails
-    
+
     # Check for commits
     commits = count_commits_since(worktree_path, target)
-    
+
     console.print(f"[bold]Merging agent:[/] {name}")
     console.print(f"  Branch: {agent_branch}")
     console.print(f"  Commits: {commits}")
@@ -319,12 +324,12 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
     # Preview merge for conflicts
     can_merge, conflicts = preview_merge(agent_branch, target, cwd)
     if not can_merge:
-        console.print(f"\n[red]Merge conflicts detected![/]")
+        console.print("\n[red]Merge conflicts detected![/]")
         if conflicts:
             console.print("[yellow]Conflicting files:[/]")
             for f in conflicts:
                 console.print(f"  • {f}")
-        console.print(f"\nResolve conflicts manually or use:")
+        console.print("\nResolve conflicts manually or use:")
         console.print(f"  cd {worktree_path}")
         console.print(f"  git merge {target}")
         return
@@ -336,7 +341,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
             if Confirm.ask("Remove worktree anyway?", default=False):
                 _remove_worktree(cwd, name, agent_branch)
         return
-    
+
     # Create checkpoint before merge
     try:
         checkpoint_manager = get_checkpoint_manager(cwd)
@@ -344,7 +349,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
         console.print("[dim]Checkpoint created[/]")
     except NotAGitRepoError:
         pass
-    
+
     # Checkout target branch
     result = subprocess.run(
         ["git", "checkout", target],
@@ -356,10 +361,10 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
         console.print(f"[red]Error:[/] Failed to checkout {target}")
         console.print(f"[dim]{result.stderr}[/]")
         return
-    
+
     # Merge
     squash = not no_squash
-    
+
     if squash:
         # Squash merge
         result = subprocess.run(
@@ -369,10 +374,10 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
             text=True
         )
         if result.returncode != 0:
-            console.print(f"[red]Error:[/] Merge failed")
+            console.print("[red]Error:[/] Merge failed")
             console.print(f"[dim]{result.stderr}[/]")
             return
-        
+
         # Commit
         commit_msg = message or f"feat({name}): {agent.task_title if agent else 'Agent work'}"
         result = subprocess.run(
@@ -382,7 +387,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
             text=True
         )
         if result.returncode != 0:
-            console.print(f"[yellow]Warning:[/] Commit may have failed")
+            console.print("[yellow]Warning:[/] Commit may have failed")
             console.print(f"[dim]{result.stderr}[/]")
     else:
         # Regular merge
@@ -394,23 +399,23 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
             text=True
         )
         if result.returncode != 0:
-            console.print(f"[red]Error:[/] Merge failed")
+            console.print("[red]Error:[/] Merge failed")
             console.print(f"[dim]{result.stderr}[/]")
             return
-    
+
     console.print(f"\n[green]✓[/] Merged {commits} commit(s) to {target}")
-    
+
     # Update state
     if agent:
         agent.status = "merged"
         agent.completed_at = datetime.now().isoformat()
         state_manager.save()
-    
+
     # Cleanup
     if not keep:
         _remove_worktree(cwd, name, agent_branch)
-        console.print(f"[green]✓[/] Removed worktree and branch")
-        
+        console.print("[green]✓[/] Removed worktree and branch")
+
         # Remove from state
         state_manager.remove_agent(name)
 
@@ -418,7 +423,7 @@ def merge_cmd(name: str, target: str, no_squash: bool, message: str, keep: bool)
 def _remove_worktree(cwd: Path, name: str, branch: str):
     """Remove worktree and branch."""
     worktree_path = cwd / ".worktrees" / name
-    
+
     # Remove worktree
     if worktree_path.exists():
         subprocess.run(
@@ -426,7 +431,7 @@ def _remove_worktree(cwd: Path, name: str, branch: str):
             cwd=cwd,
             capture_output=True
         )
-    
+
     # Delete branch
     subprocess.run(
         ["git", "branch", "-D", branch],
@@ -456,45 +461,45 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
       up agent cleanup --merged   # Remove only merged agents
     """
     cwd = Path.cwd()
-    
+
     if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     state_manager = get_state_manager(cwd)
     agents = state_manager.state.agents.copy()
-    
+
     removed = []
-    
+
     if name:
         # Remove specific agent
         agent = agents.get(name)
         branch = agent.branch if agent else make_branch_name(name)
-        
+
         if not force:
             from rich.prompt import Confirm
             if not Confirm.ask(f"Remove agent '{name}'?", default=False):
                 return
-        
+
         _remove_worktree(cwd, name, branch)
         state_manager.remove_agent(name)
         removed.append(name)
-        
+
     elif cleanup_all:
         # Remove all agents
         if not force:
             from rich.prompt import Confirm
             if not Confirm.ask(f"Remove all {len(agents)} agents?", default=False):
                 return
-        
+
         for task_id, agent in agents.items():
             _remove_worktree(cwd, task_id, agent.branch)
             removed.append(task_id)
-        
+
         state_manager.state.agents.clear()
         state_manager.state.parallel.agents.clear()
         state_manager.save()
-        
+
     elif merged:
         # Remove only merged agents
         for task_id, agent in agents.items():
@@ -502,7 +507,7 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
                 _remove_worktree(cwd, task_id, agent.branch)
                 state_manager.remove_agent(task_id)
                 removed.append(task_id)
-    
+
     else:
         console.print("Specify an agent name or use --all/--merged")
         console.print("\nUsage:")
@@ -510,7 +515,7 @@ def cleanup_cmd(name: str, cleanup_all: bool, merged: bool, force: bool):
         console.print("  up agent cleanup --all")
         console.print("  up agent cleanup --merged")
         return
-    
+
     if removed:
         console.print(f"[green]✓[/] Removed {len(removed)} agent(s): {', '.join(removed)}")
     else:
@@ -559,13 +564,13 @@ def explore_cmd(problem: str, strategies: str, timeout: int):
       up agent explore "add caching layer" --strategies minimal,clean
       up agent explore "fix auth bug" --timeout 600
     """
+    from up.parallel.analyze import ExploreAnalyzer
     from up.parallel.explore import (
         ExploreExecutor,
+        cleanup_explorations,
         get_strategies,
         merge_exploration,
-        cleanup_explorations,
     )
-    from up.parallel.analyze import ExploreAnalyzer
     from up.ui.explore_display import display_comparison
 
     cwd = Path.cwd()

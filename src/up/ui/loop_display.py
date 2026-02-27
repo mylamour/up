@@ -12,26 +12,17 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Callable
 
 from rich.align import Align
 from rich.console import Console, Group, RenderableType
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import (
-    Progress,
-    BarColumn,
-    TextColumn,
-    TaskProgressColumn,
-    TimeElapsedColumn,
-    SpinnerColumn,
-)
 from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
-from up.ui.theme import CyberTheme, THEME, Symbols
+from up.ui.theme import THEME, CyberTheme, Symbols
 
 
 class TaskStatus(Enum):
@@ -81,13 +72,13 @@ class LoopStats:
 class DisplayState:
     """Current state of the display."""
     status: LoopStatus = LoopStatus.IDLE
-    current_task: Optional[TaskInfo] = None
+    current_task: TaskInfo | None = None
     current_phase: str = "INIT"
     tasks: list[TaskInfo] = field(default_factory=list)
     stats: LoopStats = field(default_factory=LoopStats)
     log_entries: deque = field(default_factory=lambda: deque(maxlen=30))
-    start_time: Optional[datetime] = None
-    phase_start_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    phase_start_time: datetime | None = None
 
 
 class ProductLoopDisplay:
@@ -110,12 +101,12 @@ class ProductLoopDisplay:
         
         display.stop()
     """
-    
+
     # Layout thresholds
     COMPACT_WIDTH = 80
     COMPACT_HEIGHT = 24
-    
-    def __init__(self, console: Optional[Console] = None):
+
+    def __init__(self, console: Console | None = None):
         """Initialize the display.
         
         Args:
@@ -123,20 +114,20 @@ class ProductLoopDisplay:
         """
         self.console = console or Console(theme=THEME)
         self.state = DisplayState()
-        self.live: Optional[Live] = None
+        self.live: Live | None = None
         self._running = False
         self._spinner_frame = 0
         self._last_update = time.time()
-        
+
     def start(self) -> None:
         """Start the live display."""
         if self._running:
             return
-            
+
         self.state.start_time = datetime.now()
         self.state.status = LoopStatus.RUNNING
         self._running = True
-        
+
         # Create live display with appropriate refresh rate
         self.live = Live(
             self._render(),
@@ -145,37 +136,37 @@ class ProductLoopDisplay:
             transient=False,
         )
         self.live.start()
-        
+
     def stop(self) -> None:
         """Stop the live display."""
         if not self._running:
             return
-            
+
         self._running = False
         if self.live:
             self.live.stop()
             self.live = None
-            
+
     def update(self) -> None:
         """Force update the display."""
         if self.live and self._running:
             self._update_elapsed()
             self._spinner_frame = (self._spinner_frame + 1) % len(Symbols.SPINNER)
             self.live.update(self._render())
-            
+
     def _update_elapsed(self) -> None:
         """Update elapsed time."""
         if self.state.start_time:
             delta = datetime.now() - self.state.start_time
             self.state.stats.elapsed_seconds = delta.total_seconds()
-    
+
     # ─── State Setters ───────────────────────────────────────────────────
-    
+
     def set_status(self, status: LoopStatus) -> None:
         """Set the overall loop status."""
         self.state.status = status
         self.update()
-        
+
     def set_tasks(self, tasks: list[dict]) -> None:
         """Set the task queue from PRD task dicts."""
         self.state.tasks = []
@@ -190,30 +181,30 @@ class ProductLoopDisplay:
                 status=TaskStatus.COMPLETE if t.get("passes") else TaskStatus.PENDING,
             )
             self.state.tasks.append(task_info)
-            
+
         self.state.stats.total = len(tasks)
         self.state.stats.completed = sum(1 for t in self.state.tasks if t.status == TaskStatus.COMPLETE)
         self.update()
-        
+
     def set_current_task(self, task_id: str, phase: str = "EXECUTE") -> None:
         """Set the current task being processed."""
         self.state.current_phase = phase
         self.state.phase_start_time = datetime.now()
-        
+
         for task in self.state.tasks:
             if task.id == task_id:
                 task.status = TaskStatus.IN_PROGRESS
                 self.state.current_task = task
                 break
-                
+
         self.update()
-        
+
     def update_task_status(self, task_id: str, status: TaskStatus) -> None:
         """Update a task's status."""
         for task in self.state.tasks:
             if task.id == task_id:
                 task.status = status
-                
+
                 if status == TaskStatus.COMPLETE:
                     self.state.stats.completed += 1
                 elif status == TaskStatus.FAILED:
@@ -221,14 +212,14 @@ class ProductLoopDisplay:
                 elif status == TaskStatus.ROLLED_BACK:
                     self.state.stats.rollbacks += 1
                 break
-                
+
         # Clear current task if it's the one being updated
         if self.state.current_task and self.state.current_task.id == task_id:
             if status in (TaskStatus.COMPLETE, TaskStatus.FAILED, TaskStatus.ROLLED_BACK):
                 self.state.current_task = None
-                
+
         self.update()
-        
+
     def set_phase(self, phase: str) -> None:
         """Set the current phase and reset the phase timer."""
         self.state.current_phase = phase
@@ -238,53 +229,53 @@ class ProductLoopDisplay:
         elif phase in ("EXECUTE", "RESEARCH", "PLAN", "IMPLEMENT"):
             self.state.status = LoopStatus.RUNNING
         self.update()
-        
+
     def increment_iteration(self) -> None:
         """Increment the iteration counter."""
         self.state.stats.current_iteration += 1
         self.update()
-        
+
     def log(self, message: str, style: str = "") -> None:
         """Add a log entry."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         entry = (timestamp, message, style)
         self.state.log_entries.append(entry)
         self.update()
-        
+
     def log_success(self, message: str) -> None:
         """Add a success log entry."""
         self.log(f"{Symbols.COMPLETE} {message}", "task.complete")
-        
+
     def log_error(self, message: str) -> None:
         """Add an error log entry."""
         self.log(f"{Symbols.FAILED} {message}", "task.failed")
-        
+
     def log_warning(self, message: str) -> None:
         """Add a warning log entry."""
         self.log(f"⚠ {message}", "task.skipped")
-    
+
     # ─── Rendering ───────────────────────────────────────────────────────
-    
+
     def _get_terminal_size(self) -> tuple[int, int]:
         """Get terminal dimensions."""
         size = shutil.get_terminal_size((80, 24))
         return size.columns, size.lines
-        
+
     def _is_compact(self) -> bool:
         """Check if we should use compact layout."""
         width, height = self._get_terminal_size()
         return width < self.COMPACT_WIDTH or height < self.COMPACT_HEIGHT
-        
+
     def _render(self) -> RenderableType:
         """Render the dashboard."""
         if self._is_compact():
             return self._render_compact()
         return self._render_full()
-        
+
     def _render_full(self) -> Panel:
         """Render full layout dashboard."""
         layout = Layout()
-        
+
         # Main structure
         layout.split_column(
             Layout(name="header", size=3),
@@ -294,13 +285,13 @@ class ProductLoopDisplay:
             Layout(name="stats", size=3),
             Layout(name="footer", size=1),
         )
-        
+
         # Split main into current task and queue
         layout["main"].split_row(
             Layout(name="current", ratio=1),
             Layout(name="queue", ratio=1),
         )
-        
+
         # Render components
         layout["header"].update(self._render_header())
         layout["progress"].update(self._render_progress_bar())
@@ -309,33 +300,33 @@ class ProductLoopDisplay:
         layout["log"].update(self._render_log())
         layout["stats"].update(self._render_stats())
         layout["footer"].update(self._render_footer())
-        
+
         return Panel(
             layout,
             border_style=Style(color=CyberTheme.BORDER),
             padding=0,
         )
-        
+
     def _render_compact(self) -> Panel:
         """Render compact layout for small terminals."""
         parts = []
-        
+
         # Header with status
         parts.append(self._render_compact_header())
         parts.append("")
-        
+
         # Progress
         parts.append(self._render_compact_progress())
         parts.append("")
-        
+
         # Current task with phase timer
         if self.state.current_task:
             task = self.state.current_task
             phase = self.state.current_phase
             spinner = Symbols.SPINNER[self._spinner_frame]
-            
+
             parts.append(Text(f"  Current: {task.id} {task.title[:30]}...", style="task.progress"))
-            
+
             phase_line = Text()
             phase_line.append(f"  Phase:   {spinner} {phase}", style="status.running")
             if self.state.phase_start_time:
@@ -344,9 +335,9 @@ class ProductLoopDisplay:
             parts.append(phase_line)
         else:
             parts.append(Text("  Current: None", style="text.dim"))
-            
+
         parts.append("")
-        
+
         # Compact task list
         parts.append(self._render_compact_tasks())
         parts.append("")
@@ -370,19 +361,19 @@ class ProductLoopDisplay:
             f"  ⏱ {elapsed}  {Symbols.FAILED} {stats.failures} fails  {Symbols.ROLLBACK} {stats.rollbacks} rollbacks",
             style="text.dim"
         ))
-        
+
         return Panel(
             Group(*parts),
-            title=f"[title]UP LOOP[/]",
+            title="[title]UP LOOP[/]",
             subtitle="[text.dim]Ctrl+C to pause[/]",
             border_style=Style(color=CyberTheme.BORDER),
         )
-        
+
     def _render_header(self) -> Panel:
         """Render the header with status badge."""
         status = self.state.status
         spinner = Symbols.SPINNER[self._spinner_frame] if status == LoopStatus.RUNNING else ""
-        
+
         status_styles = {
             LoopStatus.RUNNING: ("status.running", f"{spinner} RUNNING"),
             LoopStatus.VERIFYING: ("status.verifying", "◉ VERIFYING"),
@@ -391,27 +382,27 @@ class ProductLoopDisplay:
             LoopStatus.COMPLETE: ("status.complete", "◉ COMPLETE"),
             LoopStatus.IDLE: ("text.dim", "◉ IDLE"),
         }
-        
+
         style, label = status_styles.get(status, ("text.dim", "◉ UNKNOWN"))
-        
+
         title_text = Text()
         title_text.append("  UP ", style="title")
         title_text.append("PRODUCT LOOP", style="secondary")
         title_text.append(" " * 30)
         title_text.append(label, style=style)
         title_text.append("  ")
-        
+
         return Panel(
             Align.center(title_text),
             border_style=Style(color=CyberTheme.BORDER_DIM),
             padding=0,
         )
-        
+
     def _render_compact_header(self) -> Text:
         """Render compact header."""
         status = self.state.status
         spinner = Symbols.SPINNER[self._spinner_frame] if status == LoopStatus.RUNNING else "●"
-        
+
         status_colors = {
             LoopStatus.RUNNING: CyberTheme.STATUS_RUNNING,
             LoopStatus.VERIFYING: CyberTheme.STATUS_VERIFYING,
@@ -419,62 +410,62 @@ class ProductLoopDisplay:
             LoopStatus.FAILED: CyberTheme.STATUS_FAILED,
             LoopStatus.COMPLETE: CyberTheme.STATUS_COMPLETE,
         }
-        
+
         color = status_colors.get(status, CyberTheme.TEXT_DIM)
-        
+
         header = Text()
         header.append(f"  {spinner} ", style=Style(color=color))
         header.append("UP LOOP", style="title")
         header.append(f" │ {status.value.upper()}", style=Style(color=color))
-        
+
         return header
-        
+
     def _render_progress_bar(self) -> Panel:
         """Render the animated progress bar."""
         stats = self.state.stats
         total = stats.total or 1
         completed = stats.completed
         percentage = (completed / total) * 100
-        
+
         # Create progress bar
         width = 40
         filled = int(width * completed / total)
-        
+
         bar = Text()
         bar.append("  Progress  ", style="text.dim")
         bar.append(Symbols.BAR_FULL * filled, style="progress.complete")
         bar.append(Symbols.BAR_EMPTY * (width - filled), style="progress.remaining")
         bar.append(f"  {percentage:5.1f}%", style="primary")
         bar.append(f"  ({completed}/{total} tasks)", style="text.dim")
-        
+
         return Panel(
             Align.center(bar),
             border_style=Style(color=CyberTheme.BORDER_DIM),
             padding=0,
         )
-        
+
     def _render_compact_progress(self) -> Text:
         """Render compact progress bar."""
         stats = self.state.stats
         total = stats.total or 1
         completed = stats.completed
         percentage = (completed / total) * 100
-        
+
         width = 25
         filled = int(width * completed / total)
-        
+
         bar = Text()
         bar.append("  ", style="text")
         bar.append(Symbols.BAR_FULL * filled, style="progress.complete")
         bar.append(Symbols.BAR_EMPTY * (width - filled), style="progress.remaining")
         bar.append(f" {percentage:5.1f}% ({completed}/{total})", style="primary")
-        
+
         return bar
-        
+
     def _render_current_task(self) -> Panel:
         """Render current task panel with live phase timer."""
         task = self.state.current_task
-        
+
         if not task:
             content = Text("\n  No task in progress\n", style="text.dim")
             return Panel(
@@ -482,52 +473,52 @@ class ProductLoopDisplay:
                 title="[title]Current Task[/]",
                 border_style=Style(color=CyberTheme.BORDER_DIM),
             )
-            
+
         lines = []
         lines.append("")
         lines.append(Text(f"  {task.id}: {task.title}", style="task.progress"))
         lines.append("")
         lines.append(Text(f"  Priority: {task.priority}  │  Effort: {task.effort}  │  Phase: {task.phase}", style="text.dim"))
         lines.append("")
-        
+
         phase = self.state.current_phase
         spinner = Symbols.SPINNER[self._spinner_frame]
-        
+
         phase_icons = {
             "INIT": "○", "CHECKPOINT": "◐", "RESEARCH": spinner,
             "PLAN": spinner, "IMPLEMENT": spinner, "EXECUTE": spinner,
             "VERIFY": "◑", "COMMIT": "◒",
         }
         phase_icon = phase_icons.get(phase, "○")
-        
+
         phase_elapsed = ""
         if self.state.phase_start_time:
             delta = (datetime.now() - self.state.phase_start_time).total_seconds()
             phase_elapsed = f"  ({self._format_duration(delta)})"
-        
+
         status_line = Text()
         status_line.append(f"  Status: {phase_icon} {phase}", style="status.running")
         status_line.append(phase_elapsed, style="primary")
         lines.append(status_line)
         lines.append("")
-        
+
         # Phase pipeline showing progression
         all_phases = ["CHECKPOINT", "RESEARCH", "PLAN", "IMPLEMENT", "VERIFY", "COMMIT"]
         pipeline = Text("  ")
         current_idx = all_phases.index(phase) if phase in all_phases else -1
         for i, p in enumerate(all_phases):
             if i < current_idx:
-                pipeline.append(f"✓", style="task.complete")
+                pipeline.append("✓", style="task.complete")
             elif i == current_idx:
                 pipeline.append(f"{spinner}", style="status.running")
             else:
-                pipeline.append(f"○", style="text.dim")
+                pipeline.append("○", style="text.dim")
             if i < len(all_phases) - 1:
                 style = "task.complete" if i < current_idx else "text.dim"
                 pipeline.append("─", style=style)
         pipeline.append("  ", style="text")
         lines.append(pipeline)
-        
+
         # Phase labels
         labels = Text("  ")
         for i, p in enumerate(all_phases):
@@ -542,17 +533,17 @@ class ProductLoopDisplay:
                 labels.append(" ", style="text")
         lines.append(labels)
         lines.append("")
-        
+
         if task.description:
             desc = task.description[:80] + "..." if len(task.description) > 80 else task.description
             lines.append(Text(f"  {desc}", style="text.dim"))
-            
+
         return Panel(
             Group(*lines),
             title="[title]Current Task[/]",
             border_style=Style(color=CyberTheme.PRIMARY),
         )
-        
+
     def _get_visible_tasks(self, max_visible: int = 8) -> tuple[list[TaskInfo], int, int]:
         """Get a window of tasks centered around the current task.
         
@@ -561,29 +552,29 @@ class ProductLoopDisplay:
         tasks = self.state.tasks
         if len(tasks) <= max_visible:
             return tasks, 0, 0
-        
+
         current_idx = -1
         if self.state.current_task:
             for i, t in enumerate(tasks):
                 if t.id == self.state.current_task.id:
                     current_idx = i
                     break
-        
+
         if current_idx == -1:
             first_pending = next(
                 (i for i, t in enumerate(tasks) if t.status == TaskStatus.PENDING),
                 0,
             )
             current_idx = first_pending
-        
+
         # Center the window: show 2 completed before current, rest after
         before_count = min(2, current_idx)
         window_start = max(0, current_idx - before_count)
         window_end = min(len(tasks), window_start + max_visible)
-        
+
         if window_end - window_start < max_visible:
             window_start = max(0, window_end - max_visible)
-        
+
         visible = tasks[window_start:window_end]
         skipped_before = window_start
         skipped_after = len(tasks) - window_end
@@ -597,12 +588,12 @@ class ProductLoopDisplay:
             padding=(0, 1),
             expand=True,
         )
-        
+
         table.add_column("Status", width=3)
         table.add_column("ID", width=8)
         table.add_column("Title", ratio=1)
         table.add_column("State", width=12, justify="right")
-        
+
         status_symbols = {
             TaskStatus.COMPLETE: (Symbols.COMPLETE, "task.complete"),
             TaskStatus.IN_PROGRESS: (Symbols.IN_PROGRESS, "task.progress"),
@@ -611,9 +602,9 @@ class ProductLoopDisplay:
             TaskStatus.SKIPPED: (Symbols.SKIPPED, "task.skipped"),
             TaskStatus.ROLLED_BACK: (Symbols.ROLLBACK, "task.skipped"),
         }
-        
+
         visible, skipped_before, skipped_after = self._get_visible_tasks()
-        
+
         if skipped_before > 0:
             table.add_row(
                 Text("", style="text.dim"),
@@ -621,20 +612,20 @@ class ProductLoopDisplay:
                 Text(f"... {skipped_before} completed above", style="text.dim"),
                 Text("", style="text.dim"),
             )
-        
+
         for task in visible:
             symbol, style = status_symbols.get(task.status, (Symbols.PENDING, "task.pending"))
-            
+
             title = task.title[:30] + "..." if len(task.title) > 30 else task.title
             state_label = task.status.value.replace("_", " ")
-            
+
             table.add_row(
                 Text(symbol, style=style),
                 Text(task.id, style=style),
                 Text(title, style=style if task.status == TaskStatus.IN_PROGRESS else "text"),
                 Text(state_label, style=style),
             )
-        
+
         if skipped_after > 0:
             table.add_row(
                 Text("", style="text.dim"),
@@ -642,13 +633,13 @@ class ProductLoopDisplay:
                 Text(f"... +{skipped_after} more tasks", style="text.dim"),
                 Text("", style="text.dim"),
             )
-            
+
         return Panel(
             table,
             title=f"[title]Task Queue[/] [text.dim]({self.state.stats.completed}/{self.state.stats.total})[/]",
             border_style=Style(color=CyberTheme.BORDER_DIM),
         )
-        
+
     def _render_compact_tasks(self) -> Text:
         """Render compact task indicators centered around current task."""
         status_symbols = {
@@ -659,20 +650,20 @@ class ProductLoopDisplay:
             TaskStatus.SKIPPED: (Symbols.SKIPPED, CyberTheme.TASK_SKIPPED),
             TaskStatus.ROLLED_BACK: (Symbols.ROLLBACK, CyberTheme.TASK_SKIPPED),
         }
-        
+
         visible, skipped_before, skipped_after = self._get_visible_tasks(max_visible=12)
-        
+
         text = Text("  ")
         if skipped_before > 0:
-            text.append(f"…  ", style=Style(color=CyberTheme.TEXT_DIM))
+            text.append("…  ", style=Style(color=CyberTheme.TEXT_DIM))
         for task in visible:
             symbol, color = status_symbols.get(task.status, (Symbols.PENDING, CyberTheme.TASK_PENDING))
             text.append(f"{symbol} {task.id}  ", style=Style(color=color))
         if skipped_after > 0:
             text.append(f"… +{skipped_after}", style=Style(color=CyberTheme.TEXT_DIM))
-            
+
         return text
-        
+
     def _render_log(self) -> Panel:
         """Render activity log panel with terminal-width-aware truncation."""
         width, _ = self._get_terminal_size()
@@ -696,12 +687,12 @@ class ProductLoopDisplay:
             title="[title]Activity Log[/]",
             border_style=Style(color=CyberTheme.BORDER_DIM),
         )
-        
+
     def _render_stats(self) -> Panel:
         """Render stats panel."""
         stats = self.state.stats
         elapsed = self._format_duration(stats.elapsed_seconds)
-        
+
         text = Text()
         text.append("  ⏱  ", style="text.dim")
         text.append(f"Elapsed: {elapsed}", style="primary")
@@ -713,17 +704,17 @@ class ProductLoopDisplay:
         text.append(f"Rollbacks: {stats.rollbacks}", style="text")
         text.append("    │    ", style="text.dim")
         text.append(f"Iteration: {stats.current_iteration}", style="secondary")
-        
+
         return Panel(
             Align.center(text),
             border_style=Style(color=CyberTheme.BORDER_DIM),
             padding=0,
         )
-        
+
     def _render_footer(self) -> Text:
         """Render footer."""
         return Text("  Press Ctrl+C to pause  │  q to quit", style="text.dim", justify="center")
-        
+
     def _format_duration(self, seconds: float) -> str:
         """Format duration as human readable string."""
         if seconds < 60:
@@ -742,20 +733,20 @@ class ProductLoopDisplay:
 
 class ProductLoopDisplayContext:
     """Context manager for the display."""
-    
+
     def __init__(self, display: ProductLoopDisplay):
         self.display = display
-        
+
     def __enter__(self) -> ProductLoopDisplay:
         self.display.start()
         return self.display
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.display.stop()
         return False
 
 
-def create_display(console: Optional[Console] = None) -> ProductLoopDisplayContext:
+def create_display(console: Console | None = None) -> ProductLoopDisplayContext:
     """Create a display context manager.
     
     Usage:

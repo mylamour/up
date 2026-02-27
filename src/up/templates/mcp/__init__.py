@@ -1,7 +1,7 @@
 """MCP (Model Context Protocol) server templates."""
 
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 
 def create_mcp_config(target_dir: Path, ai_target: str, force: bool = False) -> None:
@@ -13,7 +13,7 @@ def create_mcp_config(target_dir: Path, ai_target: str, force: bool = False) -> 
     """
     mcp_dir = target_dir / ".mcp"
     mcp_dir.mkdir(parents=True, exist_ok=True)
-    
+
     _create_mcp_config_json(mcp_dir, force)
     _create_mcp_tools_dir(mcp_dir, force)
     _create_mcp_readme(mcp_dir, force)
@@ -71,7 +71,7 @@ def _create_mcp_tools_dir(mcp_dir: Path, force: bool) -> None:
     """Create MCP tools directory with sample tools."""
     tools_dir = mcp_dir / "tools"
     tools_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Project status tool
     status_tool = """{
   "name": "project_status",
@@ -89,7 +89,7 @@ def _create_mcp_tools_dir(mcp_dir: Path, force: bool) -> None:
 }
 """
     _write_file(tools_dir / "project_status.json", status_tool, force)
-    
+
     # Run tests tool
     tests_tool = """{
   "name": "run_tests",
@@ -114,7 +114,7 @@ def _create_mcp_tools_dir(mcp_dir: Path, force: bool) -> None:
 }
 """
     _write_file(tools_dir / "run_tests.json", tests_tool, force)
-    
+
     # Lint code tool
     lint_tool = """{
   "name": "lint_code",
@@ -136,7 +136,7 @@ def _create_mcp_tools_dir(mcp_dir: Path, force: bool) -> None:
 }
 """
     _write_file(tools_dir / "lint_code.json", lint_tool, force)
-    
+
     # Search code tool
     search_tool = """{
   "name": "search_code",

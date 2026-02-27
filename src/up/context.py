@@ -4,12 +4,9 @@ Tracks estimated token usage and provides warnings when approaching limits.
 """
 
 import json
-import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-
 
 # Token estimation constants (rough estimates)
 CHARS_PER_TOKEN = 4  # Average characters per token
@@ -20,12 +17,12 @@ DEFAULT_BUDGET = 100_000  # Default context budget in tokens
 @dataclass
 class ContextEntry:
     """A single context entry (file read, message, etc.)."""
-    
+
     timestamp: str
     entry_type: str  # 'file', 'message', 'tool_output'
     source: str  # File path or description
     estimated_tokens: int
-    
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -33,24 +30,24 @@ class ContextEntry:
 @dataclass
 class ContextBudget:
     """Tracks context window usage."""
-    
+
     budget: int = DEFAULT_BUDGET
     warning_threshold: float = 0.8  # Warn at 80%
     critical_threshold: float = 0.9  # Critical at 90%
     entries: list[ContextEntry] = field(default_factory=list)
     total_tokens: int = 0
     session_start: str = field(default_factory=lambda: datetime.now().isoformat())
-    
+
     @property
     def usage_percent(self) -> float:
         """Get usage as percentage."""
         return (self.total_tokens / self.budget) * 100 if self.budget > 0 else 0
-    
+
     @property
     def remaining_tokens(self) -> int:
         """Get remaining token budget."""
         return max(0, self.budget - self.total_tokens)
-    
+
     @property
     def status(self) -> str:
         """Get status: OK, WARNING, or CRITICAL."""
@@ -60,7 +57,7 @@ class ContextBudget:
         elif ratio >= self.warning_threshold:
             return "WARNING"
         return "OK"
-    
+
     def to_dict(self) -> dict:
         return {
             "budget": self.budget,
@@ -88,14 +85,14 @@ def estimate_tokens(text: str, is_code: bool = False) -> int:
     """
     if not text:
         return 0
-    
+
     # Basic character-based estimation
     base_tokens = len(text) / CHARS_PER_TOKEN
-    
+
     # Apply code multiplier if needed
     if is_code:
         base_tokens *= CODE_MULTIPLIER
-    
+
     return int(base_tokens)
 
 
@@ -110,19 +107,19 @@ def estimate_file_tokens(path: Path) -> int:
     """
     if not path.exists():
         return 0
-    
+
     try:
         content = path.read_text()
     except (UnicodeDecodeError, PermissionError):
         return 0
-    
+
     # Detect if it's code
     code_extensions = {
         '.py', '.js', '.ts', '.tsx', '.jsx', '.go', '.rs', '.java',
         '.c', '.cpp', '.h', '.hpp', '.rb', '.sh', '.bash', '.zsh'
     }
     is_code = path.suffix.lower() in code_extensions
-    
+
     return estimate_tokens(content, is_code)
 
 
@@ -132,10 +129,10 @@ class ContextManager:
     Now uses the unified StateManager for storage while maintaining
     backwards compatibility with the existing API.
     """
-    
+
     def __init__(
         self,
-        workspace: Optional[Path] = None,
+        workspace: Path | None = None,
         budget: int = DEFAULT_BUDGET
     ):
         self.workspace = workspace or Path.cwd()
@@ -145,32 +142,32 @@ class ContextManager:
         self._use_unified_state = True
         self.budget = ContextBudget(budget=budget)
         self._load_state()
-    
+
     def _load_state(self) -> None:
         """Load state from unified state manager or migrate from old file."""
         try:
             from up.core.state import get_state_manager
             manager = get_state_manager(self.workspace)
             ctx = manager.state.context
-            
+
             # Sync from unified state
             self.budget.budget = ctx.budget
             self.budget.total_tokens = ctx.total_tokens
             self.budget.warning_threshold = ctx.warning_threshold
             self.budget.critical_threshold = ctx.critical_threshold
             self.budget.session_start = ctx.session_start
-            
+
             # Convert entries
             self.budget.entries = [
                 ContextEntry(**e) if isinstance(e, dict) else e
                 for e in ctx.entries
             ]
-            
+
         except ImportError:
             # Fallback to old file-based storage
             self._use_unified_state = False
             self._load_state_legacy()
-    
+
     def _load_state_legacy(self) -> None:
         """Load state from old file location (for backwards compatibility)."""
         if self._old_state_file.exists():
@@ -185,14 +182,14 @@ class ContextManager:
                 ]
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
-    
+
     def _save_state(self) -> None:
         """Save state to unified state manager."""
         if self._use_unified_state:
             try:
                 from up.core.state import get_state_manager
                 manager = get_state_manager(self.workspace)
-                
+
                 # Sync to unified state
                 manager.state.context.budget = self.budget.budget
                 manager.state.context.total_tokens = self.budget.total_tokens
@@ -203,16 +200,16 @@ class ContextManager:
                     e.to_dict() if hasattr(e, 'to_dict') else e
                     for e in self.budget.entries[-50:]  # Keep last 50
                 ]
-                
+
                 manager.save()
                 return
             except ImportError:
                 pass
-        
+
         # Fallback to old file-based storage
         self._old_state_file.parent.mkdir(parents=True, exist_ok=True)
         self._old_state_file.write_text(json.dumps(self.budget.to_dict(), indent=2))
-    
+
     def record_file_read(self, path: Path) -> ContextEntry:
         """Record a file being read into context.
         
@@ -233,7 +230,7 @@ class ContextManager:
         self.budget.total_tokens += tokens
         self._save_state()
         return entry
-    
+
     def record_message(self, message: str, role: str = "user") -> ContextEntry:
         """Record a message in context.
         
@@ -255,7 +252,7 @@ class ContextManager:
         self.budget.total_tokens += tokens
         self._save_state()
         return entry
-    
+
     def record_tool_output(self, tool: str, output_size: int) -> ContextEntry:
         """Record tool output in context.
         
@@ -277,7 +274,7 @@ class ContextManager:
         self.budget.total_tokens += tokens
         self._save_state()
         return entry
-    
+
     def get_status(self) -> dict:
         """Get current context budget status.
         
@@ -285,7 +282,7 @@ class ContextManager:
             Status dictionary with usage info
         """
         return self.budget.to_dict()
-    
+
     def check_budget(self) -> tuple[str, str]:
         """Check budget and return status with message.
         
@@ -295,7 +292,7 @@ class ContextManager:
         status = self.budget.status
         usage = self.budget.usage_percent
         remaining = self.budget.remaining_tokens
-        
+
         if status == "CRITICAL":
             msg = (
                 f"⚠️ CRITICAL: Context at {usage:.1f}% ({remaining:,} tokens remaining). "
@@ -308,14 +305,14 @@ class ContextManager:
             )
         else:
             msg = f"✅ OK: Context at {usage:.1f}% ({remaining:,} tokens remaining)."
-        
+
         return status, msg
-    
+
     def reset(self) -> None:
         """Reset context budget for new session."""
         self.budget = ContextBudget(budget=self.budget.budget)
         self._save_state()
-    
+
     def estimate_file_impact(self, path: Path) -> dict:
         """Estimate impact of reading a file on budget.
         
@@ -328,7 +325,7 @@ class ContextManager:
         tokens = estimate_file_tokens(path)
         new_total = self.budget.total_tokens + tokens
         new_percent = (new_total / self.budget.budget) * 100 if self.budget.budget > 0 else 0
-        
+
         return {
             "file": str(path),
             "estimated_tokens": tokens,
@@ -339,7 +336,7 @@ class ContextManager:
             "will_exceed_warning": new_percent >= self.budget.warning_threshold * 100,
             "will_exceed_critical": new_percent >= self.budget.critical_threshold * 100,
         }
-    
+
     def suggest_files_to_drop(self, target_reduction: int) -> list[str]:
         """Suggest files that could be dropped to reduce context.
         
@@ -355,16 +352,16 @@ class ContextManager:
             if e.entry_type == "file"
         ]
         file_entries.sort(key=lambda e: e.estimated_tokens, reverse=True)
-        
+
         suggestions = []
         reduction = 0
-        
+
         for entry in file_entries:
             if reduction >= target_reduction:
                 break
             suggestions.append(entry.source)
             reduction += entry.estimated_tokens
-        
+
         return suggestions
 
 
@@ -387,33 +384,33 @@ def create_context_budget_file(target_dir: Path, budget: int = DEFAULT_BUDGET) -
 # CLI integration
 if __name__ == "__main__":
     import sys
-    
+
     manager = ContextManager()
-    
+
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
-        
+
         if cmd == "status":
             status, msg = manager.check_budget()
             print(msg)
             print(json.dumps(manager.get_status(), indent=2))
-            
+
         elif cmd == "reset":
             manager.reset()
             print("Context budget reset for new session.")
-            
+
         elif cmd == "estimate" and len(sys.argv) > 2:
             path = Path(sys.argv[2])
             impact = manager.estimate_file_impact(path)
             print(json.dumps(impact, indent=2))
-            
+
         elif cmd == "record" and len(sys.argv) > 2:
             path = Path(sys.argv[2])
             entry = manager.record_file_read(path)
             print(f"Recorded: {entry.source} ({entry.estimated_tokens} tokens)")
             status, msg = manager.check_budget()
             print(msg)
-            
+
         else:
             print("Usage: python context.py [status|reset|estimate <file>|record <file>]")
     else:

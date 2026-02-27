@@ -13,9 +13,8 @@ import json
 import logging
 import re
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +25,8 @@ class HookSpec:
     type: str  # "command" or "prompt"
     command: str
     timeout: int = 10
-    matcher: Optional[str] = None  # UP event matcher regex
-    tool_matcher: Optional[str] = None  # Claude Code tool name matcher (e.g. "Write|Edit")
+    matcher: str | None = None  # UP event matcher regex
+    tool_matcher: str | None = None  # Claude Code tool name matcher (e.g. "Write|Edit")
 
     def matches(self, event_data: dict) -> bool:
         """Check if this hook matches the given event data."""
@@ -63,7 +62,7 @@ class HookRunner:
     results via exit codes and stderr messages.
     """
 
-    def __init__(self, workspace: Optional[Path] = None):
+    def __init__(self, workspace: Path | None = None):
         self.workspace = workspace or Path.cwd()
 
     def run_hook(self, spec: HookSpec, event_data: dict) -> HookResult:

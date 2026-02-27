@@ -4,13 +4,11 @@ Connects the PluginRegistry's hooks to the EventBridge so that
 plugin hooks fire automatically when matching events are emitted.
 """
 
-import json
 import logging
 from pathlib import Path
-from typing import Optional
 
-from up.events import EventBridge, EventType, Event
-from up.plugins.hooks import HookRunner, HookSpec, HookResult, load_hooks_from_json
+from up.events import Event, EventBridge, EventType
+from up.plugins.hooks import HookResult, HookRunner, HookSpec, load_hooks_from_json
 from up.plugins.registry import PluginRegistry
 
 logger = logging.getLogger(__name__)
@@ -40,7 +38,7 @@ class PluginEventBridge:
         self._registry = PluginRegistry(workspace)
         self._runner = HookRunner(workspace)
         self._hook_map: dict[str, list[HookSpec]] = {}
-        self._bridge: Optional[EventBridge] = None
+        self._bridge: EventBridge | None = None
 
     def initialize(self) -> None:
         """Load plugins and register hooks with EventBridge."""

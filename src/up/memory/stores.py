@@ -8,7 +8,6 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional, List, Dict
 
 from up.memory.entry import MemoryEntry
 
@@ -38,10 +37,10 @@ class MemoryStore:
     def add(self, entry: MemoryEntry) -> None:
         raise NotImplementedError
 
-    def search(self, query: str, limit: int = 5) -> List[MemoryEntry]:
+    def search(self, query: str, limit: int = 5) -> list[MemoryEntry]:
         raise NotImplementedError
 
-    def get_by_type(self, entry_type: str, limit: int = 10) -> List[MemoryEntry]:
+    def get_by_type(self, entry_type: str, limit: int = 10) -> list[MemoryEntry]:
         raise NotImplementedError
 
     def delete(self, entry_id: str) -> bool:
@@ -113,8 +112,8 @@ class ChromaMemoryStore(MemoryStore):
         )
 
     def search(
-        self, query: str, limit: int = 5, entry_type: Optional[str] = None
-    ) -> List[MemoryEntry]:
+        self, query: str, limit: int = 5, entry_type: str | None = None
+    ) -> list[MemoryEntry]:
         """Semantic search for relevant memories."""
         where = {"type": entry_type} if entry_type else None
 
@@ -142,7 +141,7 @@ class ChromaMemoryStore(MemoryStore):
 
         return entries
 
-    def get_by_type(self, entry_type: str, limit: int = 10) -> List[MemoryEntry]:
+    def get_by_type(self, entry_type: str, limit: int = 10) -> list[MemoryEntry]:
         """Get entries by type."""
         results = self.collection.get(
             where={"type": entry_type},
@@ -196,7 +195,7 @@ class JSONMemoryStore(MemoryStore):
         self.db_path = workspace / ".up" / "memory"
         self.db_path.mkdir(parents=True, exist_ok=True)
         self.index_file = self.db_path / "index.json"
-        self.entries: Dict[str, MemoryEntry] = {}
+        self.entries: dict[str, MemoryEntry] = {}
         self._load()
 
     def _load(self) -> None:
@@ -239,8 +238,8 @@ class JSONMemoryStore(MemoryStore):
         self._save()
 
     def search(
-        self, query: str, limit: int = 5, entry_type: Optional[str] = None
-    ) -> List[MemoryEntry]:
+        self, query: str, limit: int = 5, entry_type: str | None = None
+    ) -> list[MemoryEntry]:
         """Keyword-based search."""
         query_lower = query.lower()
         query_words = set(query_lower.split())
@@ -258,7 +257,7 @@ class JSONMemoryStore(MemoryStore):
         scored.sort(key=lambda x: x[0], reverse=True)
         return [entry for _, entry in scored[:limit]]
 
-    def get_by_type(self, entry_type: str, limit: int = 10) -> List[MemoryEntry]:
+    def get_by_type(self, entry_type: str, limit: int = 10) -> list[MemoryEntry]:
         """Get entries by type."""
         entries = [e for e in self.entries.values() if e.type == entry_type]
         entries.sort(key=lambda e: e.timestamp, reverse=True)

@@ -7,7 +7,7 @@ Maps UP event types to Claude Code's native hook format.
 import json
 from pathlib import Path
 
-from up.sync.renderer import ConfigRenderer, TemplateContext, HookSummary
+from up.sync.renderer import ConfigRenderer, TemplateContext
 
 # Map UP event types to Claude Code hook types.
 # Only map events that have direct Claude Code equivalents.

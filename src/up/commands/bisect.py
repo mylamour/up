@@ -7,19 +7,18 @@ Runs in O(log n) steps regardless of history length.
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from up.git.utils import is_git_repo, run_git
+from up.git.utils import is_git_repo
 
 console = Console()
 
 
-def _get_last_tag(path: Path) -> Optional[str]:
+def _get_last_tag(path: Path) -> str | None:
     """Get most recent tag."""
     result = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0"],
@@ -41,14 +40,14 @@ def _get_commit_info(path: Path, commit: str) -> dict:
         capture_output=True,
         text=True
     )
-    
+
     if result.returncode != 0:
         return {}
-    
+
     lines = result.stdout.strip().split("\n")
     if len(lines) < 5:
         return {}
-    
+
     return {
         "sha": lines[0],
         "author": lines[1],
@@ -97,11 +96,11 @@ def bisect_cmd(test_cmd: str, good: str, bad: str, script: str, start: bool, res
       - Exit 125: Skip this commit (can't test)
     """
     cwd = Path.cwd()
-    
+
     if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         sys.exit(1)
-    
+
     # Reset mode
     if reset:
         result = subprocess.run(
@@ -115,12 +114,12 @@ def bisect_cmd(test_cmd: str, good: str, bad: str, script: str, start: bool, res
         else:
             console.print("[yellow]No bisect session active[/]")
         return
-    
+
     # Interactive start mode
     if start:
         _start_interactive_bisect(cwd, good, bad)
         return
-    
+
     # Need test command or script
     if not test_cmd and not script:
         console.print("[yellow]Provide a test command or script[/]")
@@ -129,7 +128,7 @@ def bisect_cmd(test_cmd: str, good: str, bad: str, script: str, start: bool, res
         console.print("  up bisect --script ./test_regression.sh")
         console.print("  up bisect --start  # Interactive mode")
         return
-    
+
     # Determine good commit
     if not good:
         # Try last tag
@@ -138,7 +137,7 @@ def bisect_cmd(test_cmd: str, good: str, bad: str, script: str, start: bool, res
             # Fall back to N commits ago
             good = "HEAD~50"
         console.print(f"[dim]Using good commit: {good}[/]")
-    
+
     # Build test script
     if script:
         test_script = Path(script).read_text()
@@ -150,12 +149,12 @@ def bisect_cmd(test_cmd: str, good: str, bad: str, script: str, start: bool, res
 {test_cmd}
 exit $?
 """
-    
+
     # Write test script
     script_path = cwd / ".bisect_test.sh"
     script_path.write_text(test_script)
     script_path.chmod(0o755)
-    
+
     console.print(Panel.fit(
         f"[bold]Git Bisect - Bug Hunter[/]\n\n"
         f"Good: {good}\n"
@@ -163,41 +162,41 @@ exit $?
         f"Test: {test_cmd or script}",
         border_style="blue"
     ))
-    
+
     try:
         # Start bisect
         console.print("\n[dim]Starting bisect...[/]")
-        
+
         subprocess.run(["git", "bisect", "start"], cwd=cwd, capture_output=True)
         subprocess.run(["git", "bisect", "bad", bad], cwd=cwd, capture_output=True)
-        
+
         result = subprocess.run(
             ["git", "bisect", "good", good],
             cwd=cwd,
             capture_output=True,
             text=True
         )
-        
+
         if result.returncode != 0:
-            console.print(f"[red]Error:[/] Failed to set good commit")
+            console.print("[red]Error:[/] Failed to set good commit")
             console.print(f"[dim]{result.stderr}[/]")
             subprocess.run(["git", "bisect", "reset"], cwd=cwd, capture_output=True)
             return
-        
+
         # Run automated bisect
         console.print("[dim]Running automated bisect (this may take a while)...[/]")
         console.print()
-        
+
         result = subprocess.run(
             ["git", "bisect", "run", str(script_path)],
             cwd=cwd,
             capture_output=True,
             text=True
         )
-        
+
         # Parse result to find culprit
         output = result.stdout + result.stderr
-        
+
         # Look for the culprit commit
         culprit = None
         for line in output.split("\n"):
@@ -207,17 +206,17 @@ exit $?
                 if parts:
                     culprit = parts[0]
                 break
-        
+
         if culprit:
             _display_culprit(cwd, culprit)
         else:
             console.print("[yellow]Could not determine culprit commit[/]")
             console.print("[dim]Bisect output:[/]")
             console.print(output[-500:] if len(output) > 500 else output)
-        
+
         # Reset bisect
         subprocess.run(["git", "bisect", "reset"], cwd=cwd, capture_output=True)
-        
+
     finally:
         # Cleanup
         if script_path.exists():
@@ -226,17 +225,17 @@ exit $?
 
 def _start_interactive_bisect(cwd: Path, good: str, bad: str):
     """Start an interactive bisect session."""
-    
+
     if not good:
         good = _get_last_tag(cwd) or "HEAD~20"
-    
+
     console.print(Panel.fit(
         "[bold]Interactive Bisect Session[/]\n\n"
         "You'll be guided through testing commits.\n"
         "For each commit, run your test and mark as good/bad.",
         border_style="blue"
     ))
-    
+
     # Start bisect
     subprocess.run(["git", "bisect", "start"], cwd=cwd, capture_output=True)
     subprocess.run(["git", "bisect", "bad", bad], cwd=cwd, capture_output=True)
@@ -246,7 +245,7 @@ def _start_interactive_bisect(cwd: Path, good: str, bad: str):
         capture_output=True,
         text=True
     )
-    
+
     console.print(f"\n[dim]Bisect started: good={good}, bad={bad}[/]")
     console.print("\n[bold]Commands:[/]")
     console.print("  [cyan]git bisect good[/]  - Mark current commit as good")
@@ -259,24 +258,24 @@ def _start_interactive_bisect(cwd: Path, good: str, bad: str):
 def _display_culprit(cwd: Path, commit: str):
     """Display information about the culprit commit."""
     info = _get_commit_info(cwd, commit)
-    
+
     console.print(Panel.fit(
-        f"[bold red]🐛 Bug-Introducing Commit Found![/]",
+        "[bold red]🐛 Bug-Introducing Commit Found![/]",
         border_style="red"
     ))
     console.print()
-    
+
     table = Table(show_header=False, box=None)
     table.add_column("Key", style="dim")
     table.add_column("Value")
-    
+
     table.add_row("Commit", f"[cyan]{info.get('sha', commit)[:12]}[/]")
     table.add_row("Author", info.get('author', 'Unknown'))
     table.add_row("Date", info.get('date', 'Unknown'))
     table.add_row("Message", info.get('message', 'No message'))
-    
+
     console.print(table)
-    
+
     # Show diff stats
     diff = _get_diff(cwd, commit)
     if diff:
@@ -286,7 +285,7 @@ def _display_culprit(cwd: Path, commit: str):
         for line in lines:
             if line.startswith(" ") and ("|" in line or "changed" in line):
                 console.print(f"  {line}")
-    
+
     console.print("\n[bold]Next steps:[/]")
     console.print(f"  1. View full diff: [cyan]git show {commit[:8]}[/]")
     console.print(f"  2. Check this commit: [cyan]git checkout {commit[:8]}[/]")
@@ -307,37 +306,37 @@ def history_cmd(limit: int, since: str, author: str, grep_pattern: str):
     Useful for finding commits to bisect from.
     """
     cwd = Path.cwd()
-    
+
     if not is_git_repo(cwd):
         console.print("[red]Error:[/] Not a git repository")
         return
-    
+
     # Build git log command
     cmd = ["git", "log", f"-{limit}", "--pretty=format:%h|%an|%ar|%s"]
-    
+
     if since:
         cmd.append(f"--since={since}")
     if author:
         cmd.append(f"--author={author}")
     if grep_pattern:
         cmd.append(f"--grep={grep_pattern}")
-    
+
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    
+
     if result.returncode != 0:
         console.print("[red]Error:[/] Failed to get history")
         return
-    
+
     table = Table(title=f"Recent Commits (last {limit})")
     table.add_column("SHA", style="cyan")
     table.add_column("Author")
     table.add_column("When")
     table.add_column("Message")
-    
+
     for line in result.stdout.strip().split("\n"):
         if "|" in line:
             parts = line.split("|", 3)
             if len(parts) >= 4:
                 table.add_row(parts[0], parts[1], parts[2], parts[3][:50])
-    
+
     console.print(table)

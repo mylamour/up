@@ -10,10 +10,10 @@ Exit codes:
   1 = warn (learning triggered)
 """
 
-import json
-import sys
-import os
 import hashlib
+import json
+import os
+import sys
 from pathlib import Path
 
 

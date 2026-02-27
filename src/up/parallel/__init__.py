@@ -8,6 +8,11 @@ Usage:
     from up.parallel import get_pending_tasks, TaskResult
 """
 
+from up.parallel.analyze import (
+    ExploreAnalyzer,
+    ExploreComparison,
+    ExploreResultSummary,
+)
 from up.parallel.executor import (
     ParallelExecutionManager,
     TaskResult,
@@ -15,6 +20,16 @@ from up.parallel.executor import (
     get_pending_tasks,
     mark_task_complete_in_prd,
     verify_worktree,
+)
+from up.parallel.explore import (
+    ExploreExecutor,
+    ExploreResult,
+    ExploreStrategy,
+    cleanup_explorations,
+    get_default_strategies,
+    get_strategies,
+    load_custom_strategies,
+    merge_exploration,
 )
 from up.parallel.scheduler import (
     AgentProgress,
@@ -25,21 +40,6 @@ from up.parallel.scheduler import (
     get_execution_waves,
     partial_merge,
     run_enhanced_parallel_loop,
-)
-from up.parallel.explore import (
-    ExploreStrategy,
-    ExploreResult,
-    ExploreExecutor,
-    get_default_strategies,
-    get_strategies,
-    load_custom_strategies,
-    merge_exploration,
-    cleanup_explorations,
-)
-from up.parallel.analyze import (
-    ExploreAnalyzer,
-    ExploreComparison,
-    ExploreResultSummary,
 )
 
 __all__ = [

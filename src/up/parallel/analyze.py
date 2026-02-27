@@ -89,7 +89,6 @@ class ExploreAnalyzer:
             results: List of ExploreResult from ExploreExecutor.
             workspace: Optional override for workspace path.
         """
-        from up.parallel.explore import ExploreResult
 
         summaries: list[ExploreResultSummary] = []
 

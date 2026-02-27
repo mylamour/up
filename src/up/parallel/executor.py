@@ -20,11 +20,9 @@ from rich.console import Console
 
 from up.ai_cli import run_ai_task
 from up.core.state import get_state_manager
-from up.git.worktree import (
-    WorktreeState,
-    count_commits_since,
-    create_checkpoint,
-)
+from up.core.checkpoint import get_checkpoint_manager
+from up.git.utils import count_commits_since
+from up.git.worktree import WorktreeState
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -210,8 +208,9 @@ def execute_task_in_worktree(
         state.phase = "CHECKPOINT"
         state.save(worktree_path)
 
-        checkpoint = create_checkpoint(worktree_path, f"{task_id}-start")
-        state.checkpoints.append({"name": checkpoint, "time": datetime.now().isoformat()})
+        cp_manager = get_checkpoint_manager(worktree_path)
+        checkpoint_meta = cp_manager.save(message=f"{task_id}-start", task_id=task_id)
+        state.checkpoints.append({"name": checkpoint_meta.id, "time": datetime.now().isoformat()})
         state.save(worktree_path)
 
         prompt = _build_task_prompt(task)

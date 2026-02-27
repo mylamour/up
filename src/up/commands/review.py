@@ -10,12 +10,11 @@ Provides adversarial review of AI-generated code to catch:
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
-from rich.panel import Panel
 from rich.markdown import Markdown
+from rich.panel import Panel
 
 from up.ai_cli import check_ai_cli, run_ai_prompt
 from up.core.checkpoint import get_checkpoint_manager
@@ -26,7 +25,7 @@ console = Console()
 @click.command("review")
 @click.option("--checkpoint", "-c", help="Review changes since checkpoint")
 @click.option("--files", "-f", multiple=True, help="Specific files to review")
-@click.option("--focus", type=click.Choice(["security", "performance", "logic", "style", "all"]), 
+@click.option("--focus", type=click.Choice(["security", "performance", "logic", "style", "all"]),
               default="all", help="Focus area for review")
 @click.option("--strict", is_flag=True, help="Strict mode - fail on any issue")
 @click.option("--model", "-m", help="AI model to use (claude, cursor)")
@@ -44,7 +43,7 @@ def review_cmd(checkpoint: str, files: tuple, focus: str, strict: bool, model: s
       up review --files src/auth.py --strict
     """
     cwd = Path.cwd()
-    
+
     # Get diff to review
     if files:
         # Review specific files
@@ -58,22 +57,22 @@ def review_cmd(checkpoint: str, files: tuple, focus: str, strict: bool, model: s
         # Review all uncommitted changes
         diff_content = _get_uncommitted_diff(cwd)
         files_reviewed = _get_uncommitted_files(cwd)
-    
+
     if not diff_content or diff_content.strip() == "":
         console.print("[dim]No changes to review[/]")
         return
-    
+
     console.print(Panel.fit(
         "[bold blue]AI Code Review[/]",
         border_style="blue"
     ))
-    
+
     console.print(f"Files to review: [cyan]{len(files_reviewed)}[/]")
     for f in files_reviewed[:5]:
         console.print(f"  • {f}")
     if len(files_reviewed) > 5:
         console.print(f"  ... and {len(files_reviewed) - 5} more")
-    
+
     # Check AI availability
     cli_name = model
     if not cli_name:
@@ -82,27 +81,27 @@ def review_cmd(checkpoint: str, files: tuple, focus: str, strict: bool, model: s
             console.print("\n[red]Error:[/] No AI CLI available")
             console.print("Install Claude CLI or Cursor Agent for AI review")
             return
-    
+
     console.print(f"\n[yellow]Running review with {cli_name}...[/]")
-    
+
     # Build review prompt
     prompt = _build_review_prompt(diff_content, focus, strict)
-    
+
     # Run AI review
     result = run_ai_prompt(cwd, prompt, cli_name, timeout=180)
-    
+
     if not result:
         console.print("[red]Review failed - no response from AI[/]")
         return
-    
+
     # Display results
     console.print("\n")
-    
+
     # Detect issues using patterns that avoid false positives
     # e.g. "No issues found" should NOT trigger, but "Found 3 issues" should
     import re
     result_lower = result.lower()
-    
+
     # Negative patterns that indicate NO issues
     no_issue_patterns = [
         r"no\s+issues?\s+found",
@@ -116,7 +115,7 @@ def review_cmd(checkpoint: str, files: tuple, focus: str, strict: bool, model: s
         r"clean\s+review",
     ]
     is_clean = any(re.search(p, result_lower) for p in no_issue_patterns)
-    
+
     # Positive patterns that indicate real issues (word-boundary matching)
     issue_patterns = [
         r"\bissues?\b.*\bfound\b",
@@ -129,14 +128,14 @@ def review_cmd(checkpoint: str, files: tuple, focus: str, strict: bool, model: s
         r"\bproblem\b.*\b(with|in|at)\b",
     ]
     has_issues = not is_clean and any(re.search(p, result_lower) for p in issue_patterns)
-    
+
     panel_style = "yellow" if has_issues else "green"
     console.print(Panel(
         Markdown(result),
         title="Review Results",
         border_style=panel_style,
     ))
-    
+
     # Check for issues in strict mode
     if strict:
         if has_issues:
@@ -208,7 +207,7 @@ def _build_review_prompt(diff: str, focus: str, strict: bool) -> str:
     max_chars = 15000
     if len(diff) > max_chars:
         diff = diff[:max_chars] + "\n\n[... diff truncated ...]"
-    
+
     focus_instructions = {
         "security": """Focus on security issues:
 - SQL injection, XSS, CSRF vulnerabilities
@@ -216,39 +215,39 @@ def _build_review_prompt(diff: str, focus: str, strict: bool) -> str:
 - Insecure data handling
 - Authentication/authorization flaws
 - Input validation issues""",
-        
+
         "performance": """Focus on performance issues:
 - O(n²) or worse algorithms
 - Memory leaks or inefficient memory use
 - Missing caching opportunities
 - Unnecessary database queries
 - Blocking operations in async code""",
-        
+
         "logic": """Focus on logic issues:
 - Off-by-one errors
 - Race conditions
 - Null/undefined handling
 - Edge cases not covered
 - Incorrect state management""",
-        
+
         "style": """Focus on code style:
 - Naming conventions
 - Function/class organization
 - Code duplication
 - Missing documentation
 - Type annotations""",
-        
+
         "all": """Review comprehensively for:
 1. Security vulnerabilities
 2. Logic errors and bugs
 3. Performance issues
 4. Code style and best practices"""
     }
-    
+
     severity_note = ""
     if strict:
         severity_note = "\n\nIMPORTANT: This is a strict review. Flag ALL potential issues, even minor ones."
-    
+
     return f"""You are a senior code reviewer conducting an adversarial review of AI-generated code.
 
 {focus_instructions.get(focus, focus_instructions["all"])}
