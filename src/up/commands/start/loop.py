@@ -19,25 +19,19 @@ from rich.panel import Panel
 from tqdm import tqdm
 
 from up.ai_cli import run_ai_task
-from up.core.state import get_state_manager, StateManager
-from up.core.provenance import get_provenance_manager, ProvenanceEntry
 from up.core.prd_schema import load_prd, PRDValidationError
+from up.core.loop import LoopOrchestrator, TaskInfo
 from up.ui import ProductLoopDisplay, TaskStatus
 from up.ui.loop_display import LoopStatus
 
 from up.commands.start.helpers import (
     save_loop_state,
     get_next_task_from_prd,
-    create_checkpoint,
-    rollback_checkpoint,
-    mark_task_complete,
-    build_implementation_prompt,
     build_research_prompt,
     build_plan_prompt,
     build_implement_prompt,
 )
 from up.commands.start.verification import (
-    run_full_verification,
     get_modified_files,
     get_diff_summary,
     commit_changes,
@@ -104,10 +98,8 @@ def _restore_terminal():
 
 
 # Global state for interrupt handling
-_state_manager: StateManager = None
-_checkpoint_manager = None
+_orchestrator: Optional[LoopOrchestrator] = None
 _current_workspace = None
-_current_provenance_entry: ProvenanceEntry = None
 _current_display: Optional[ProductLoopDisplay] = None
 
 
@@ -126,27 +118,11 @@ def handle_interrupt(signum, frame):
     _restore_terminal()
     console.print("\n\n[yellow]Interrupted! Saving state...[/]")
 
-    if _state_manager and _current_workspace:
-        _state_manager.update_loop(
-            phase="INTERRUPTED",
-            interrupted_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-        )
+    if _orchestrator and _current_workspace:
+        _orchestrator.mark_interrupted()
         console.print("[green]✓[/] State saved to .up/state.json")
-        last_cp = _state_manager.state.loop.last_checkpoint
+        last_cp = _orchestrator.state_manager.state.loop.last_checkpoint
         console.print(f"[dim]Checkpoint: {last_cp or 'none'}[/]")
-
-        # Mark any in-progress provenance entry as rejected
-        if _current_provenance_entry and _current_workspace:
-            try:
-                prov_mgr = get_provenance_manager(_current_workspace)
-                prov_mgr.reject_operation(
-                    _current_provenance_entry.id,
-                    reason="User interrupted operation",
-                )
-                console.print("[dim]Provenance entry marked as interrupted[/]")
-            except Exception as exc:
-                logger.debug("Failed to mark interrupted provenance entry: %s", exc)
-
         console.print("\nTo resume: [cyan]up start --resume[/]")
         console.print("To rollback: [cyan]up reset[/]")
 
@@ -296,48 +272,35 @@ def run_ai_product_loop(
     By default runs autonomously (no prompts). When ``interactive=True``,
     pauses for human review after the plan phase and on verification failure.
     """
-    global _state_manager, _checkpoint_manager, _current_workspace
-    global _current_provenance_entry, _current_display
-
-    from up.core.checkpoint import get_checkpoint_manager
+    global _orchestrator, _current_workspace, _current_display
 
     _current_workspace = workspace
-    _state_manager = get_state_manager(workspace)
-    _checkpoint_manager = get_checkpoint_manager(workspace)
-    provenance_manager = get_provenance_manager(workspace)
+    orch = LoopOrchestrator(workspace)
+    _orchestrator = orch
     signal.signal(signal.SIGINT, handle_interrupt)
 
-    # Get all tasks
-    all_tasks = []
-    tasks_to_run = []
-
-    if specific_task:
-        tasks_to_run = [{"id": specific_task, "title": specific_task, "description": specific_task}]
-        all_tasks = tasks_to_run
-    elif task_source and task_source.endswith(".json"):
-        prd_path = workspace / task_source
-        try:
-            prd = load_prd(prd_path)
-        except PRDValidationError as exc:
-            console.print(f"\n[red]PRD Error:[/] {exc}")
-            console.print("[dim]Fix the PRD file and retry: up start[/]")
-            return
-
-        if not prd.userStories:
-            console.print("\n[yellow]PRD has no user stories.[/]")
-            console.print(f"[dim]Add stories to {task_source} and retry.[/]")
-            return
-
-        all_tasks = [asdict(s) for s in prd.userStories]
-        for story in prd.userStories:
-            if not story.passes:
-                tasks_to_run.append(asdict(story))
-                if not run_all:
-                    break
+    # Use orchestrator for task selection
+    tasks_to_run = orch.get_tasks(
+        task_source=task_source,
+        specific_task=specific_task,
+        run_all=run_all,
+    )
 
     if not tasks_to_run:
         console.print("\n[green]✓[/] All tasks completed!")
         return
+
+    # Build all_tasks for display (need full PRD list)
+    all_tasks = []
+    if task_source and task_source.endswith(".json"):
+        prd_path = workspace / task_source
+        try:
+            prd = load_prd(prd_path)
+            all_tasks = [asdict(s) for s in prd.userStories]
+        except PRDValidationError:
+            pass
+    if not all_tasks:
+        all_tasks = [{"id": t.id, "title": t.title} for t in tasks_to_run]
 
     # Initialize display
     display = ProductLoopDisplay(console)
@@ -352,51 +315,38 @@ def run_ai_product_loop(
 
     try:
         for task in tasks_to_run:
-            task_id = task.get("id", "unknown")
-            task_title = task.get("title", "No title")
+            task_id = task.id
+            task_title = task.title
 
             display.set_current_task(task_id, "CHECKPOINT")
             display.increment_iteration()
             display.log(f"Starting task {task_id}: {task_title[:40]}...")
 
-            new_iteration = _state_manager.state.loop.iteration + 1
-            _state_manager.update_loop(
-                iteration=new_iteration,
-                phase="EXECUTE",
-                current_task=task_id,
-            )
-
-            # Checkpoint
-            display.log(f"Creating checkpoint for {task_id}...")
-            checkpoint_name = f"cp-{task_id}-{_state_manager.state.loop.iteration}"
-            cp_ok = create_checkpoint(workspace, checkpoint_name, task_id=task_id)
-            if not cp_ok:
-                display.log_error(f"Checkpoint failed for {task_id} — skipping (no safety net)")
+            # Begin task via orchestrator (state + checkpoint + provenance)
+            begin_result = orch.begin_task(task, task_source=task_source)
+            if not begin_result.success:
+                display.log_error(f"Checkpoint failed for {task_id} — {begin_result.error}")
                 failed += 1
                 display.update_task_status(task_id, TaskStatus.FAILED)
-                _state_manager.record_task_failed(task_id)
+                orch.state_manager.record_task_failed(task_id)
                 continue
-            display.log_success(f"Checkpoint: {checkpoint_name}")
+            display.log_success(f"Checkpoint: {begin_result.checkpoint_id}")
+            if begin_result.provenance_id:
+                display.log(f"Provenance: {begin_result.provenance_id[:8]}...")
+
+            # Build task dict for prompt helpers
+            task_dict = {
+                "id": task.id, "title": task.title,
+                "description": task.description, "priority": task.priority,
+                "acceptanceCriteria": task.acceptance_criteria,
+                "files": task.files, "depends_on": task.depends_on,
+            }
 
             # Phase 1: Research
             display.set_phase("RESEARCH")
             display.log(f"Phase 1/3: Researching {task_id}...")
             display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
-            prompt = build_research_prompt(workspace, task, task_source)
-
-            # Start provenance tracking
-            try:
-                _current_provenance_entry = provenance_manager.start_operation(
-                    task_id=task_id,
-                    task_title=f"{task_title} (Research/Plan/Impl)",
-                    prompt=prompt,
-                    ai_model=cli_name,
-                    context_files=[task_source] if task_source else [],
-                )
-                display.log(f"Provenance: {_current_provenance_entry.id[:8]}...")
-            except Exception as exc:
-                _current_provenance_entry = None
-                logger.debug("Failed to start provenance tracking: %s", exc)
+            prompt = build_research_prompt(workspace, task_dict, task_source)
 
             # Run Phase 1
             def _on_ai_output(line: str):
@@ -416,7 +366,7 @@ def run_ai_product_loop(
                 display.set_phase("PLAN")
                 display.log(f"Phase 2/3: Planning implementation...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
-                prompt = build_plan_prompt(workspace, task, task_source)
+                prompt = build_plan_prompt(workspace, task_dict, task_source)
                 success, output = run_ai_task(
                     workspace, prompt, cli_name, timeout=timeout,
                     continue_session=True, on_output=_on_ai_output,
@@ -434,20 +384,10 @@ def run_ai_product_loop(
                 from rich.prompt import Confirm
                 if not Confirm.ask("Proceed with implementation?", default=True):
                     console.print("[yellow]Rolling back...[/]")
-                    rollback_checkpoint(workspace)
+                    orch.record_failure(task, error="Human review rejected plan")
                     failed += 1
-                    _state_manager.record_task_failed(task_id)
                     display.start()
                     display.update_task_status(task_id, TaskStatus.ROLLED_BACK)
-                    
-                    if _current_provenance_entry:
-                        try:
-                            provenance_manager.reject_operation(
-                                _current_provenance_entry.id, reason="Human review rejected plan"
-                            )
-                        except Exception as e:
-                            logger.debug("Failed to reject provenance: %s", e)
-                        _current_provenance_entry = None
                     continue
                 display.start()
 
@@ -456,10 +396,10 @@ def run_ai_product_loop(
                 display.set_phase("IMPLEMENT")
                 display.log(f"Phase 3/3: Implementing code changes...")
                 display.log(f"  AI running: {cli_name} (timeout {timeout}s)")
-                prompt = build_implement_prompt(workspace, task, task_source)
+                prompt = build_implement_prompt(workspace, task_dict, task_source)
 
-                # Memory hint injection (US-005)
-                memory_hint = _get_memory_hint(workspace, task)
+                # Memory hint injection via orchestrator
+                memory_hint = orch.get_memory_hint(task)
                 if memory_hint:
                     prompt = f"{memory_hint}\n\n{prompt}"
                     display.log("Memory recall: applied hint from past solution")
@@ -487,13 +427,12 @@ def run_ai_product_loop(
                     display.set_phase("VERIFY")
                     display.set_status(LoopStatus.VERIFYING)
                     display.log("Running verification (tests + lint + types)...")
-                    vresult = run_full_verification(workspace)
+                    vresult = orch.run_verification()
                     tests_passed = vresult.tests_passed
                     lint_passed = vresult.lint_passed
                     type_check_passed = vresult.type_check_passed
 
-                    required = _state_manager.config.verify_required_checks
-                    verification_passed = vresult.all_required_passed(required)
+                    verification_passed = orch.check_verification(vresult)
 
                     if verification_passed:
                         parts = vresult.summary_parts()
@@ -501,58 +440,38 @@ def run_ai_product_loop(
 
                     if not verification_passed:
                         display.log_warning(f"Verification failed for {task_id}")
-                        if _current_provenance_entry:
-                            try:
-                                provenance_manager.reject_operation(
-                                    _current_provenance_entry.id, reason="Verification failed"
-                                )
-                            except Exception as exc:
-                                logger.debug("Failed to reject provenance after verification failure: %s", exc)
-                            _current_provenance_entry = None
 
                         if interactive:
                             display.stop()
                             from rich.prompt import Confirm
                             if not Confirm.ask("Continue anyway?", default=False):
                                 console.print("[yellow]Rolling back...[/]")
-                                rollback_checkpoint(workspace)
+                                orch.record_failure(task, error="Verification failed")
                                 failed += 1
-                                _state_manager.record_task_failed(task_id)
                                 display.start()
                                 display.update_task_status(task_id, TaskStatus.ROLLED_BACK)
                                 continue
                             display.start()
                         else:
                             display.log("Rolling back changes...")
-                            rollback_checkpoint(workspace)
+                            orch.record_failure(task, error="Verification failed")
                             failed += 1
-                            _state_manager.record_task_failed(task_id)
                             display.update_task_status(task_id, TaskStatus.ROLLED_BACK)
                             continue
 
                 completed += 1
 
-                # Complete provenance
-                if _current_provenance_entry:
-                    try:
-                        modified_files = get_modified_files(workspace)
-                        provenance_manager.complete_operation(
-                            entry_id=_current_provenance_entry.id,
-                            files_modified=modified_files,
-                            tests_passed=tests_passed,
-                            lint_passed=lint_passed,
-                            type_check_passed=type_check_passed,
-                            status="accepted",
-                        )
-                    except Exception as exc:
-                        logger.debug("Failed to complete provenance entry: %s", exc)
-                    _current_provenance_entry = None
-
-                mark_task_complete(workspace, task_source, task_id)
-                _state_manager.record_task_complete(task_id)
+                # Record success via orchestrator (state + PRD + provenance)
+                modified_files = get_modified_files(workspace)
+                success_result = orch.record_success(
+                    task, task_source=task_source,
+                    tests_passed=tests_passed,
+                    lint_passed=lint_passed,
+                    type_check_passed=type_check_passed,
+                    files_modified=modified_files,
+                )
                 display.update_task_status(task_id, TaskStatus.COMPLETE)
                 display.set_status(LoopStatus.RUNNING)
-                _state_manager.update_loop(phase="COMMIT", current_task=task_id)
 
                 # Intentional Compaction (V1-020)
                 from up.context import ContextManager
@@ -583,7 +502,7 @@ def run_ai_product_loop(
                         display.start()
 
                     if should_commit:
-                        commit_msg = f"feat({task_id}): {task_title}"
+                        commit_msg = success_result.commit_message
                         commit_changes(workspace, commit_msg)
                         display.log_success(f"Committed: {commit_msg[:40]}...")
                 else:
@@ -602,37 +521,21 @@ def run_ai_product_loop(
                 else:
                     display.log_error("No output from AI CLI (timeout or crash)")
 
-                if _current_provenance_entry:
-                    try:
-                        provenance_manager.reject_operation(
-                            _current_provenance_entry.id,
-                            reason=output[:500] if output else "AI implementation failed",
-                        )
-                    except Exception as exc:
-                        logger.debug("Failed to reject provenance entry: %s", exc)
-                    _current_provenance_entry = None
-
                 display.log("Rolling back changes...")
-                rollback_checkpoint(workspace)
+                fail_result = orch.record_failure(
+                    task,
+                    error=output[:500] if output else "AI implementation failed",
+                )
                 display.update_task_status(task_id, TaskStatus.FAILED)
 
-                _state_manager.record_task_failed(task_id)
+                if fail_result.doom_loop:
+                    display.log_error(fail_result.message[:50])
 
-                is_doom, doom_msg = _state_manager.check_doom_loop()
-                if is_doom:
-                    display.log_error(doom_msg[:50])
-
-                cb = _state_manager.get_circuit_breaker("task")
-                cb.record_failure()
-                _state_manager.save()
-
-                if not cb.can_execute():
-                    cooldown = _state_manager.config.circuit_breaker_cooldown_minutes
+                if fail_result.circuit_open:
+                    cooldown = orch.state_manager.config.circuit_breaker_cooldown_minutes
                     display.log_error(f"Circuit breaker OPEN - cooldown {cooldown}m")
                     display.set_status(LoopStatus.FAILED)
                     break
-
-                # Circuit breaker state is persisted via _state_manager.save() above
 
     finally:
         display.set_status(LoopStatus.COMPLETE if failed == 0 else LoopStatus.FAILED)
