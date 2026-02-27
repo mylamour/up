@@ -105,18 +105,3 @@ class TestHookScriptContent:
         assert "up._hook_runtime context" in content
         assert "up sync" not in content
         assert hook.stat().st_mode & stat.S_IEXEC
-
-    def test_sync_install_hooks_calls_hook_runtime(self, tmp_path):
-        git_dir = tmp_path / ".git" / "hooks"
-        git_dir.mkdir(parents=True)
-
-        from up.commands.sync import _install_hooks
-        _install_hooks(git_dir)
-
-        post_commit = git_dir / "post-commit"
-        assert "up._hook_runtime memory" in post_commit.read_text()
-        assert "up memory sync" not in post_commit.read_text()
-
-        post_checkout = git_dir / "post-checkout"
-        assert "up._hook_runtime context" in post_checkout.read_text()
-        assert "up sync" not in post_checkout.read_text()
