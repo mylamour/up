@@ -16,6 +16,7 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
@@ -767,14 +768,16 @@ class StateManager:
 # =============================================================================
 
 _default_manager: Optional[StateManager] = None
+_default_manager_lock = threading.Lock()
 
 
 def get_state_manager(workspace: Optional[Path] = None) -> StateManager:
-    """Get or create the default state manager."""
+    """Get or create the default state manager (thread-safe)."""
     global _default_manager
-    if _default_manager is None or (workspace and _default_manager.workspace != workspace):
-        _default_manager = StateManager(workspace)
-    return _default_manager
+    with _default_manager_lock:
+        if _default_manager is None or (workspace and _default_manager.workspace != workspace):
+            _default_manager = StateManager(workspace)
+        return _default_manager
 
 
 def get_state(workspace: Optional[Path] = None) -> UnifiedState:

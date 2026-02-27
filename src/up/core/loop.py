@@ -235,12 +235,29 @@ class LoopOrchestrator:
         return tasks
 
     def _next_from_prd(self, task_source: str) -> Optional[dict]:
-        """Get next incomplete task dict from PRD file."""
-        from up.commands.start.helpers import get_next_task_from_prd
+        """Get next incomplete task dict from PRD file.
+
+        Reads the PRD directly to avoid circular imports
+        (core must not import from commands layer).
+        """
+        from up.core.prd_schema import load_prd, PRDValidationError
+        from dataclasses import asdict
+
         prd_path = self.workspace / task_source
         if not prd_path.exists():
             return None
-        return get_next_task_from_prd(prd_path, workspace=self.workspace, auto_sync=True)
+
+        try:
+            prd = load_prd(prd_path)
+        except PRDValidationError:
+            return None
+
+        completed = set(self.state_manager.state.loop.tasks_completed)
+        for story in prd.userStories:
+            if story.passes or story.id in completed:
+                continue
+            return asdict(story)
+        return None
 
     # -----------------------------------------------------------------
     # Circuit breaker

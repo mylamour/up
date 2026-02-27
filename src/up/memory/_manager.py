@@ -129,8 +129,12 @@ class MemoryManager:
         self.config_file.write_text(json.dumps(self.config, indent=2))
     
     def _generate_id(self, prefix: str, content: str) -> str:
-        """Generate unique ID for entry."""
-        hash_input = f"{prefix}:{content}:{datetime.now().isoformat()}"
+        """Generate content-addressed ID for entry.
+
+        Uses only prefix + content so identical entries produce the same
+        ID, enabling deduplication.
+        """
+        hash_input = f"{prefix}:{content}"
         return f"{prefix}_{hashlib.md5(hash_input.encode()).hexdigest()[:12]}"
     
     def _get_git_context(self, force_refresh: bool = False) -> Dict[str, str]:
@@ -144,7 +148,7 @@ class MemoryManager:
         if (not force_refresh 
             and self._git_context_cache 
             and self._git_context_time
-            and (now - self._git_context_time).seconds < 60):
+            and (now - self._git_context_time).total_seconds() < 60):
             return self._git_context_cache
         
         # Refresh cache

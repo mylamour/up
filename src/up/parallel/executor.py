@@ -245,11 +245,12 @@ def execute_task_in_worktree(
                 error=state.error,
             )
 
-        subprocess.run(["git", "add", "-A"], cwd=worktree_path, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=worktree_path, capture_output=True, timeout=30)
         subprocess.run(
             ["git", "commit", "-m", f"feat({task_id}): {task.get('title', 'Implement task')}"],
             cwd=worktree_path,
             capture_output=True,
+            timeout=30,
         )
 
         state.status = "executed"
@@ -297,12 +298,12 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
     test_results = {"tests": None, "lint": None, "type_check": None}
 
     result = subprocess.run(
-        ["pytest", "-q", "--tb=no"], cwd=worktree_path, capture_output=True, text=True
+        ["pytest", "-q", "--tb=no"], cwd=worktree_path, capture_output=True, text=True, timeout=300
     )
     test_results["tests"] = result.returncode == 0
 
     result = subprocess.run(
-        ["ruff", "check", "src/", "--quiet"], cwd=worktree_path, capture_output=True, text=True
+        ["ruff", "check", "src/", "--quiet"], cwd=worktree_path, capture_output=True, text=True, timeout=60
     )
     test_results["lint"] = result.returncode == 0
 
@@ -311,6 +312,7 @@ def verify_worktree(worktree_path: Path) -> TaskResult:
         cwd=worktree_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     test_results["type_check"] = result.returncode == 0
 

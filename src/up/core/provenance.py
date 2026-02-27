@@ -13,6 +13,7 @@ Stored in .up/provenance/ with content-addressed storage.
 import hashlib
 import json
 import subprocess
+import threading
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
@@ -328,7 +329,8 @@ class ProvenanceManager:
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 cwd=self.workspace,
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=10,
             )
             return result.stdout.strip() if result.returncode == 0 else ""
         except Exception:
@@ -341,7 +343,8 @@ class ProvenanceManager:
                 ["git", "rev-parse", "HEAD"],
                 cwd=self.workspace,
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=10,
             )
             return result.stdout.strip()[:12] if result.returncode == 0 else ""
         except Exception:
@@ -353,14 +356,16 @@ class ProvenanceManager:
 # =============================================================================
 
 _default_manager: Optional[ProvenanceManager] = None
+_default_manager_lock = threading.Lock()
 
 
 def get_provenance_manager(workspace: Optional[Path] = None) -> ProvenanceManager:
-    """Get or create the default provenance manager."""
+    """Get or create the default provenance manager (thread-safe)."""
     global _default_manager
-    if _default_manager is None or (workspace and _default_manager.workspace != workspace):
-        _default_manager = ProvenanceManager(workspace)
-    return _default_manager
+    with _default_manager_lock:
+        if _default_manager is None or (workspace and _default_manager.workspace != workspace):
+            _default_manager = ProvenanceManager(workspace)
+        return _default_manager
 
 
 def track_ai_operation(

@@ -12,6 +12,7 @@ Exit code semantics:
 import json
 import logging
 import re
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,8 +90,8 @@ class HookRunner:
 
         try:
             result = subprocess.run(
-                spec.command,
-                shell=True,
+                shlex.split(spec.command),
+                shell=False,
                 input=input_json,
                 capture_output=True,
                 text=True,
