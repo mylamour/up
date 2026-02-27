@@ -10,8 +10,9 @@
 
 | Topic | File | Description |
 |-------|------|-------------|
+| **Target (North Star)** | **TARGET.md** | Vision, success metrics, current focus |
 | Project State | CONTEXT.md | Current status, architecture, key files |
-| Recent Work | handoff/LATEST.md | Last session summary |
+| Recent Work | handoff/LATEST.md | Last session summary + next steps |
 | Vision | roadmap/vision/PRODUCT_VISION.md | Product goals and target users |
 | Improvement Plan | roadmap/IMPROVEMENT_PLAN.md | Development roadmap |
 
@@ -54,6 +55,7 @@
 ### Guides
 | Topic | File |
 |-------|------|
+| **Target & Self-Evolution** | **guides/TARGET_AND_SELF_EVOLUTION.md** |
 | Cursor + Claude Integration | guides/CURSOR_CLAUDE_INTEGRATION.md |
 | Concurrency & Thread Safety | guides/CONCURRENCY_AND_THREAD_SAFETY.md |
 

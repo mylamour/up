@@ -1,8 +1,14 @@
 # Project Context
 
-**Updated**: 2026-02-26
+**Updated**: 2026-02-27
 **Status**: ✅ Production Ready
 **Version**: 1.0.0
+
+---
+
+## Target (North Star)
+
+Work is aligned to the **final target** and **self-evolution** loop. See [docs/TARGET.md](TARGET.md) for vision, success metrics, and current focus.
 
 ---
 
@@ -116,8 +122,9 @@ src/up/
 
 | File | Purpose |
 |------|---------|
+| docs/TARGET.md | North star: vision, success metrics, current focus |
 | CLAUDE.md | AI instructions (skills, rules, handoff protocol) |
-| docs/handoff/LATEST.md | Session continuity |
+| docs/handoff/LATEST.md | Session continuity + suggested next steps |
 | docs/CONTEXT.md | This file — current project state |
 | docs/INDEX.md | Documentation quick reference |
 | .up/state.json | Unified state (loop, context, agents, metrics) |
