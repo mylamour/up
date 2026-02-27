@@ -238,10 +238,7 @@ up watch start
 
 ```bash
 # Git hooks for commit events (always)
-up hooks install
-
-# Manual sync for comprehensive update
-up sync  # Runs all systems
+up init --hooks
 
 # Optional watcher for active development
 up watch start
@@ -253,9 +250,6 @@ up watch start
 
 | Command | Description |
 |---------|-------------|
-| `up sync` | Sync all systems (memory, docs, context) |
-| `up hooks install` | Install git hooks for auto-trigger |
-| `up hooks uninstall` | Remove git hooks |
 | `up watch start` | Start background watcher |
 | `up watch stop` | Stop background watcher |
 | `up watch status` | Show watcher status |

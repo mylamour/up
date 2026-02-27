@@ -13,7 +13,7 @@ The `up` system can work with your existing Cursor IDE and Claude CLI workflows 
 
 ### With Git Hooks Installed
 
-If you've run `up init` or `up hooks`, these are automatically tracked:
+If you've run `up init`, these are automatically tracked:
 
 | Action | Auto-Tracked? | How |
 |--------|---------------|-----|
@@ -254,7 +254,6 @@ up memory branch feature-x --compare main
 ```bash
 # One-time setup
 up init                     # Initialize with hooks
-up hooks                    # Or install hooks separately
 
 # Daily workflow
 up memory sync              # Sync changes
@@ -266,7 +265,6 @@ up memory branch            # See branch knowledge
 
 # Status
 up status                   # Full system status
-up hooks --check            # Verify hooks installed
 ```
 
 ---

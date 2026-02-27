@@ -458,6 +458,11 @@ class LoopOrchestrator:
                     type_check_passed=type_check_passed,
                     status="accepted",
                 )
+                
+                # Emit event so docs update
+                from up.events import emit_task_complete
+                emit_task_complete(task.title, files_modified or [])
+                
             except Exception as exc:
                 logger.debug("Failed to complete provenance: %s", exc)
             self._current_provenance = None
